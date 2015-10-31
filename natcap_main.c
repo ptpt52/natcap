@@ -335,7 +335,7 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, int is_server)
 	offlen = ntohs(iph->tot_len) - iph->ihl * 4 - tcph->doff * 4;
 	crc = crc16(0, (void *)tcph + tcph->doff * 4, offlen);
 
-	if (0) {
+	if (1) {
 		unsigned char *encode_buf = (void *)tcph + tcph->doff * 4;
 
 		for (i = 0; i < offlen; i++) {
@@ -467,7 +467,7 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 		*server_ip = ed->server_ip;
 	}
 
-	if (0) {
+	if (1) {
 		unsigned char *decode_buf = (void *)tcph + tcph->doff * 4;
 
 		for (i = 0; i < offlen - edsz * segs; i++) {
@@ -494,8 +494,28 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 
 static inline void natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, __be16 port)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)
 	struct nf_nat_range range;
-
+	memset(&range.min_ip, 0, sizeof(range.min_ip));
+	memset(&range.max_ip, 0, sizeof(range.max_ip));
+	range.flags = IP_NAT_RANGE_MAP_IPS;
+	range.min_ip = ip;
+	range.max_ip = ip;
+	range.min.tcp.port = port;
+	range.max.tcp.port = port;
+	nf_nat_setup_info(ct, &range, IP_NAT_MANIP_DST);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
+	struct nf_nat_ipv4_range range;
+	memset(&range.min_ip, 0, sizeof(range.min_ip));
+	memset(&range.max_ip, 0, sizeof(range.max_ip));
+	range.flags = NF_NAT_RANGE_MAP_IPS;
+	range.min_ip = ip;
+	range.max_ip = ip;
+	range.min.tcp.port = port;
+	range.max.tcp.port = port;
+	nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
+#else
+	struct nf_nat_range range;
 	memset(&range.min_addr, 0, sizeof(range.min_addr));
 	memset(&range.max_addr, 0, sizeof(range.max_addr));
 	range.flags = NF_NAT_RANGE_MAP_IPS;
@@ -503,14 +523,28 @@ static inline void natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, __be16 p
 	range.max_addr.ip = ip;
 	range.min_proto.tcp.port = port;
 	range.max_proto.tcp.port = port;
-
 	nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
+#endif
 }
 
 //*PREROUTING*->POSTROUTING
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned int natcap_pre_in_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+#else
 static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
+#endif
 {
 	unsigned int ret;
 	enum ip_conntrack_info ctinfo;
@@ -572,9 +606,23 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 }
 
 //PREROUTING->*POSTROUTING*
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned int natcap_post_out_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+#else
 static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
+#endif
 {
 	struct natcap_session *ns;
 	int ret = 0;
@@ -644,9 +692,23 @@ static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
 }
 
 //*OUTPUT*->POSTROUTING
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned natcap_local_out_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+#else
 static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
+#endif
 {
 	struct natcap_session *ns;
 	int ret = 0;
@@ -673,8 +735,8 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		//matched
-	} else if (tcph->dest == htons(80) && iph->daddr == htonl((192<<24)|(168<<16)|(56<<8)|(200<<0))) {
-		__be32 server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
+	} else if (tcph->dest == htons(80) || tcph->dest == htons(443)) {
+		__be32 server_ip = htonl((192<<24)|(168<<16)|(56<<8)|(200<<0));
 
 		NATCAP_INFO("[OUTPUT][%pI4->%pI4]: new natcaped connection out, before natcap\n",
 				&iph->saddr, &iph->daddr);
@@ -727,9 +789,23 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 }
 
 //PREROUTING->*INPUT*
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned natcap_local_in_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+#else
 static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
+#endif
 {
 	struct natcap_session *ns;
 	int ret = 0;
