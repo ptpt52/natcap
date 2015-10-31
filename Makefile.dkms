@@ -1,0 +1,26 @@
+modname := ecap
+DKMS := dkms
+modver := $(shell awk -F'"' '/define *ECAP_VERSION/{print $$2}' < ecap.c)
+
+# directory in which generated files are stored
+DKMS_DEST := /usr/src/$(modname)-$(modver)
+
+all: install
+
+src_install:
+	mkdir -p '$(DKMS_DEST)'
+	cp ecap.c ecap.h '$(DKMS_DEST)'
+	cp Makefile '$(DKMS_DEST)/Makefile'
+	sed 's/#MODULE_VERSION#/$(modver)/' dkms.conf > '$(DKMS_DEST)/dkms.conf'
+
+build: src_install
+	$(DKMS) add -m ecap -v $(modver) 2>/dev/null || true
+	$(DKMS) build -m ecap -v $(modver)
+
+install: build
+	$(DKMS) install -m ecap -v $(modver)
+
+uninstall:
+	$(DKMS) remove -m ecap -v $(modver) --all
+
+.PHONY: all src_install build install uninstall
