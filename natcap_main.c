@@ -594,6 +594,12 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 
+	if (ret != 0) {
+		NATCAP_WARN("[PREROUTING][%pI4->%pI4]: natcap failed, natcap_tcp_decode ret = %d\n",
+			&iph->saddr, &iph->daddr, ret);
+		return NF_DROP;
+	}
+
 	if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time */
 		NATCAP_INFO("[PREROUTING][%pI4->%pI4]: new natcaped connection in, after decode\n",
 				&iph->saddr, &iph->daddr);
@@ -606,6 +612,18 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 		}
 		ns->server_ip = server_ip;
 		natcap_tcp_dnat_setup(ct, ns->server_ip, tcph->dest);
+	}
+
+	ns = natcap_session_get(ct);
+	if (!ns) {
+		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+		return NF_ACCEPT;
+	}
+
+	if (ns->server_ip != server_ip) {
+		NATCAP_WARN("[PREROUTING][%pI4->%pI4]: natcap failed, local server_ip=%pI4, incomming server_ip=%pI4\n",
+			&iph->saddr, &iph->daddr, &ns->server_ip, &server_ip);
+		return NF_DROP;
 	}
 
 	return NF_ACCEPT;
@@ -744,6 +762,7 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 	} else if (tcph->dest == htons(80) || tcph->dest == htons(443)) {
 		//108.61.201.222
 		__be32 server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
+		//__be32 server_ip = htonl((192<<24)|(168<<16)|(56<<8)|(200<<0));
 
 		NATCAP_INFO("[OUTPUT][%pI4->%pI4]: new natcaped connection out, before natcap\n",
 				&iph->saddr, &iph->daddr);
