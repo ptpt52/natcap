@@ -319,16 +319,20 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, int is_server)
 	__be32 saddr, daddr;
 	u16 crc;
 
+	iph = ip_hdr(skb);
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+
 	if (skb_linearize(skb)) {
-		NATCAP_ERROR("encode: skb_linearize failed\n");
+		NATCAP_ERROR("[%s][%pI4->%pI4]: skb_linearize failed\n", __FUNCTION__, &iph->saddr, &iph->daddr);
 		return -1;
 	} else if (skb_tailroom(skb) < edsz * segs &&
 	           pskb_expand_head(skb, 0, edsz * segs, GFP_ATOMIC)) {
 		/* no memory */
-		NATCAP_ERROR("encode: pskb_expand_head failed\n");
-		return -1;
+		NATCAP_ERROR("[%s][%pI4->%pI4]: pskb_expand_head failed\n", __FUNCTION__, &iph->saddr, &iph->daddr);
+		return -ENOMEM;
 	}
 
+	//reload
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
@@ -352,10 +356,11 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, int is_server)
 			if (skb_tailroom(skb) < edsz * segs &&
 			        pskb_expand_head(skb, 0, edsz * (segs - 1), GFP_ATOMIC)) {
 				/* no memory */
-				NATCAP_ERROR("encode: pskb_expand_head failed\n");
-				return -1;
+				NATCAP_ERROR("[%s][%pI4->%pI4]: pskb_expand_head failed\n", __FUNCTION__, &iph->saddr, &iph->daddr);
+				return -ENOMEM;
 			}
 
+			//reload
 			iph = ip_hdr(skb);
 			tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 			from = (void *)iph + ntohs(iph->tot_len) - (offlen - mss * (segs - 1));
@@ -369,7 +374,7 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, int is_server)
 			skb_shinfo(skb)->gso_size += edsz;
 			ed = from;
 		} else {
-			NATCAP_ERROR("encode: bad gso_type=%x, \n", skb_shinfo(skb)->gso_type);
+			NATCAP_DEBUG("[%s][%pI4->%pI4]: bad gso_type=0x%x\n", __FUNCTION__, &iph->saddr, &iph->daddr, skb_shinfo(skb)->gso_type);
 			return -1;
 		}
 	}
@@ -402,7 +407,7 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, int is_server)
 
 	if (skb_rcsum_tcpudp(skb) != 0)
 	{
-		return -1;
+		return -EINVAL;
 	}
 
 	return 0;
@@ -434,6 +439,7 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	}
 	else
 	{
+		NATCAP_DEBUG("[%s][%pI4->%pI4]: not natcap packet\n", __FUNCTION__, &iph->saddr, &iph->daddr);
 		return -1;
 	}
 
@@ -476,15 +482,15 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	}
 
 	if (mss > 0 && offlen <= mss) {
-		NATCAP_DEBUG("payload crc ignored\n");
+		NATCAP_INFO("[%s][%pI4->%pI4]: payload crc ignored\n", __FUNCTION__, &iph->saddr, &iph->daddr);
 	} else if (crc != crc16(0, (void *)tcph + tcph->doff * 4, offlen - edsz * segs)) {
-		NATCAP_DEBUG("payload crc check failed\n");
+		NATCAP_INFO("[%s][%pI4->%pI4]: payload crc checking failed\n", __FUNCTION__, &iph->saddr, &iph->daddr);
 		return -1;
 	}
 
 	if (skb_rcsum_tcpudp(skb) != 0)
 	{
-		return -1;
+		return -EINVAL;
 	}
 	natcap_adjust_tcp_mss(tcph, -edsz);
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -599,7 +605,7 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 			return NF_ACCEPT;
 		}
 		ns->server_ip = server_ip;
-		natcap_tcp_dnat_setup(ct, server_ip, tcph->dest);
+		natcap_tcp_dnat_setup(ct, ns->server_ip, tcph->dest);
 	}
 
 	return NF_ACCEPT;
@@ -736,7 +742,8 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		//matched
 	} else if (tcph->dest == htons(80) || tcph->dest == htons(443)) {
-		__be32 server_ip = htonl((192<<24)|(168<<16)|(56<<8)|(200<<0));
+		//108.61.201.222
+		__be32 server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
 
 		NATCAP_INFO("[OUTPUT][%pI4->%pI4]: new natcaped connection out, before natcap\n",
 				&iph->saddr, &iph->daddr);
