@@ -13,7 +13,6 @@
 #pragma pack(push)
 #pragma pack(1)
 struct natcap_data {
-	__be32 seq;
 #if defined(__LITTLE_ENDIAN_BITFIELD)
 	__u16 res1:4,
 		  doff:4,
@@ -39,10 +38,17 @@ struct natcap_data {
 #else
 #error  "Adjust your <asm/byteorder.h> defines"
 #endif
-	__u16 gso_size;
-	u16 payload_crc;
+	__be16 server_port;
 	__be32 server_ip;
-	unsigned int type;
+	u16 payload_crc;
+	u16 payload_crc_valid;
+};
+
+struct natcap_tcp_option {
+	u8 opcode;
+#define TCPOPT_NATCAP 153
+	u8 opsize;
+	struct natcap_data data;
 };
 #pragma pack(pop)
 

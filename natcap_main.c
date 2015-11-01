@@ -276,12 +276,9 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_data *ed = NULL;
-	int edsz = sizeof(struct natcap_data);
-	int mss = skb_shinfo(skb)->gso_size;
+	struct natcap_tcp_option *nto = NULL;
+	int ntosz = ALIGN(sizeof(struct natcap_tcp_option), sizeof(unsigned int));
 	int i, offlen;
-	int segs = 1;
-	__be32 seq;
 	u16 crc;
 
 	iph = ip_hdr(skb);
@@ -290,8 +287,7 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	if (skb_linearize(skb)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb_linearize failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
 		return -1;
-	} else if (skb_tailroom(skb) < edsz * segs &&
-	           pskb_expand_head(skb, 0, edsz * segs, GFP_ATOMIC)) {
+	} else if (skb_tailroom(skb) < ntosz && pskb_expand_head(skb, 0, ntosz, GFP_ATOMIC)) {
 		/* no memory */
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": pskb_expand_head failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
 		return -ENOMEM;
@@ -312,81 +308,43 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 		}
 	}
 
-	ed = (struct natcap_data *)((void *)iph + ntohs(iph->tot_len));
-	if (mss && offlen > mss) {
-		if (likely(skb_shinfo(skb)->gso_type & (SKB_GSO_TCPV4 | SKB_GSO_TCP_ECN | 0))) {
-			void *from, *to;
+	nto = (struct natcap_tcp_option *)((void *)tcph + 20);
+	memmove((void *)nto + ntosz, (void *)nto, offlen);
 
-			segs = DIV_ROUND_UP(offlen, mss);
-			if (skb_tailroom(skb) < edsz * segs &&
-			        pskb_expand_head(skb, 0, edsz * (segs - 1), GFP_ATOMIC)) {
-				/* no memory */
-				NATCAP_ERROR("(%s)" DEBUG_FMT ": pskb_expand_head failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
-				return -ENOMEM;
-			}
+	tcph->doff = (tcph->doff * 4 + ntosz) / 4;
 
-			//reload
-			iph = ip_hdr(skb);
-			tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-			from = (void *)iph + ntohs(iph->tot_len) - (offlen - mss * (segs - 1));
-			to = from + edsz * (segs - 1);
-			memmove(to, from, offlen - mss * (segs - 1));
-			for (i = 0; i < segs - 2; i++) {
-				from -= mss;
-				to -= mss + edsz;
-				memmove(to, from, mss);
-			}
-			skb_shinfo(skb)->gso_size += edsz;
-			ed = from;
-		} else {
-			NATCAP_ERROR("(%s)" DEBUG_FMT ": bad gso_type=0x%x\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb_shinfo(skb)->gso_type);
-			return -1;
+	nto->opcode = TCPOPT_NATCAP;
+	nto->opsize = ntosz;
+
+	nto->data.server_port = 0;
+	nto->data.server_ip = server_ip;
+	nto->data.payload_crc = crc;
+	nto->data.payload_crc_valid = 1;
+
+	nto->data.doff = tcph->doff;
+	nto->data.res1 = tcph->res1;
+	nto->data.cwr = tcph->cwr;
+	nto->data.ece = tcph->ece;
+	nto->data.urg = tcph->urg;
+	nto->data.ack = tcph->ack;
+	nto->data.psh = tcph->psh;
+	nto->data.rst = tcph->rst;
+	nto->data.syn = tcph->syn;
+	nto->data.fin = tcph->fin;
+
+	if (skb_shinfo(skb)->gso_size > 0) {
+		if (skb_shinfo(skb)->gso_size > ntosz) {
+			skb_shinfo(skb)->gso_size -= ntosz;
 		}
+		if (offlen > skb_shinfo(skb)->gso_size) //disable crc check, cause of gso
+			nto->data.payload_crc_valid = 0;
 	}
 
-	seq = tcph->seq;
-	for (i = 0; i < segs; i++) {
-		ed->type = htonl(0xdeaddead);
-		ed->server_ip = server_ip;
-		ed->gso_size = skb_shinfo(skb)->gso_size;
-		ed->payload_crc = crc;
+	skb_put(skb, ntosz);
 
-		ed->seq = seq;
-		// ed->doff = tcph->doff;
-		ed->res1 = tcph->res1;
-		ed->cwr = tcph->cwr;
-		ed->ece = tcph->ece;
-		ed->urg = tcph->urg;
-		ed->ack = tcph->ack;
-		ed->psh = tcph->psh;
-		ed->rst = tcph->rst;
-		ed->syn = tcph->syn;
-		ed->fin = tcph->fin;
-
-		ed = (void *)ed + (mss + edsz);
-		if (i == segs - 2) {
-			ed = (void *)ed - (mss * segs - offlen);
-		}
-		seq = htonl(ntohl(seq) + mss);
-	}
-
-	if (i > 1) {
-		ed = (void *)ed - (mss + edsz);
-		ed->cwr = 0;
-		ed = (void *)ed + (mss * segs - offlen);
-		do {
-			ed = (void *)ed - (mss + edsz);
-			ed->fin = ed->psh = 0;
-		} while (--i != 1);
-	}
-
-	skb_put(skb, edsz * segs);
-
-	iph->tot_len = htons(ntohs(iph->tot_len) + edsz * segs);
+	iph->tot_len = htons(ntohs(iph->tot_len) + ntosz);
 
 	if (tcph->syn && !tcph->ack) {
-		// tcph->seq = htonl(0xdeaddead);
-		// tcph->ack_seq ^= NATCAP_MAGIC;
 		// tcph->doff = 0;
 		// tcph->res1 = 0;
 		tcph->cwr = 0;
@@ -398,8 +356,6 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 		tcph->syn = 1;
 		tcph->fin = 0;
 	} else if (to_server) {
-		// tcph->seq = htonl(0xdeaddead);
-		// tcph->ack_seq ^= NATCAP_MAGIC;
 		// tcph->doff = 0;
 		// tcph->res1 = 0;
 		tcph->cwr = 0;
@@ -411,8 +367,6 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 		tcph->syn = 0;
 		tcph->fin = 0;
 	} else {
-		// tcph->seq = htonl(0xdeaddead);
-		// tcph->ack_seq ^= NATCAP_MAGIC;
 		// tcph->doff = 0;
 		// tcph->res1 = 0;
 		tcph->cwr = 0;
@@ -437,71 +391,59 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_data *ed = NULL;
+	struct natcap_tcp_option *nto = NULL;
+	int ntosz = ALIGN(sizeof(struct natcap_tcp_option), sizeof(unsigned int));
 	int i, offlen;
-	int segs = 1;
-	int mss = 0;
-	int edsz = sizeof(struct natcap_data);
 	__sum16 crc;
+	u16 crc_valid = 0;
 
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	ed = (struct natcap_data *)((void *)iph + ntohs(iph->tot_len) - edsz);
-	if (ed->type != htonl(0xdeaddead))
-	{
+	nto = (struct natcap_tcp_option *)((void *)tcph + 20);
+	if (nto->opcode != TCPOPT_NATCAP ||
+			nto->opsize != ntosz) {
 		return -EINVAL;
 	}
 
-	tcph->seq = ed->seq;
-	//tcph->doff = ed->doff;
-	tcph->res1 = ed->res1;
-	tcph->cwr = ed->cwr;
-	tcph->ece = ed->ece;
-	tcph->urg = ed->urg;
-	tcph->ack = ed->ack;
-	tcph->psh = ed->psh;
-	tcph->rst = ed->rst;
-	tcph->syn = ed->syn;
-	tcph->fin = ed->fin;
-
-	mss = ed->gso_size;
-	crc = ed->payload_crc;
+	if (tcph->doff * 4 < 20 + ntosz) {
+		return -EINVAL;
+	}
 
 	offlen = ntohs(iph->tot_len) - iph->ihl * 4 - tcph->doff * 4;
 
-	if (mss > 0 && offlen > mss) {
-		void *from = (void *)tcph + tcph->doff * 4 + mss;
-		void *to = from - edsz;
+	tcph->doff = (tcph->doff * 4 - ntosz) / 4;
+	tcph->res1 = nto->data.res1;
+	tcph->cwr = nto->data.cwr;
+	tcph->ece = nto->data.ece;
+	tcph->urg = nto->data.urg;
+	tcph->ack = nto->data.ack;
+	tcph->psh = nto->data.psh;
+	tcph->rst = nto->data.rst;
+	tcph->syn = nto->data.syn;
+	tcph->fin = nto->data.fin;
 
-		ed = to;
-		tcph->seq = ed->seq;
-		segs = DIV_ROUND_UP(offlen, mss);
-		for (i = 0; i < segs - 2; i++) {
-			memmove(to, from, mss - edsz);
-			from += mss;
-			to += mss - edsz;
-		}
-		memmove(to, from, offlen - mss * (segs - 1) - edsz);
-	}
+	crc = nto->data.payload_crc;
+	crc_valid = nto->data.payload_crc_valid;
+	*server_ip = nto->data.server_ip;
 
-	//tcph->ack_seq ^= NATCAP_MAGIC;
-	iph->tot_len = htons(ntohs(iph->tot_len) - edsz * segs);
-	skb->len -= edsz * segs;
-	skb->tail -= edsz *segs;
-	*server_ip = ed->server_ip;
+	memmove((void *)nto, (void *)nto + ntosz, offlen);
+
+	iph->tot_len = htons(ntohs(iph->tot_len) - ntosz);
+	skb->len -= ntosz;
+	skb->tail -= ntosz;
 
 	if (1) {
 		unsigned char *decode_buf = (void *)tcph + tcph->doff * 4;
 
-		for (i = 0; i < offlen - edsz * segs; i++) {
+		for (i = 0; i < offlen; i++) {
 			decode_buf[i] = dnatcap_map[decode_buf[i]];
 		}
 	}
 
-	if (mss > 0 && offlen <= mss) {
+	if (!crc_valid) {
 		NATCAP_INFO("(%s)" DEBUG_FMT ": payload crc ignored\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
-	} else if (crc != crc16(0, (void *)tcph + tcph->doff * 4, offlen - edsz * segs)) {
+	} else if (crc != crc16(0, (void *)tcph + tcph->doff * 4, offlen)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": payload crc checking failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
 		return -1;
 	}
@@ -510,7 +452,7 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	{
 		return -EINVAL;
 	}
-	natcap_adjust_tcp_mss(tcph, -edsz);
+	natcap_adjust_tcp_mss(tcph, -ntosz);
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 
 	return 0;
@@ -776,8 +718,8 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 	//} else if (tcph->dest == htons(80) || tcph->dest == htons(443)) {
 	} else if (iph->daddr == htonl((103<<24)|(235<<16)|(46<<8)|(39<<0))) {
 		//108.61.201.222
-		//server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
-		server_ip = htonl((192<<24)|(168<<16)|(56<<8)|(200<<0));
+		server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
+		//server_ip = htonl((192<<24)|(168<<16)|(56<<8)|(200<<0));
 
 		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, before encode\n",
 				DEBUG_ARG(iph,tcph));
