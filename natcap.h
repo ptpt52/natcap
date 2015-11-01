@@ -13,10 +13,36 @@
 #pragma pack(push)
 #pragma pack(1)
 struct natcap_data {
-	unsigned int type;
-	__be32 server_ip;
+	__be32 seq;
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+	__u16 res1:4,
+		  doff:4,
+		  fin:1,
+		  syn:1,
+		  rst:1,
+		  psh:1,
+		  ack:1,
+		  urg:1,
+		  ece:1,
+		  cwr:1;
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	__u16 doff:4,
+		  res1:4,
+		  cwr:1,
+		  ece:1,
+		  urg:1,
+		  ack:1,
+		  psh:1,
+		  rst:1,
+		  syn:1,
+		  fin:1;
+#else
+#error  "Adjust your <asm/byteorder.h> defines"
+#endif
 	__u16 gso_size;
 	u16 payload_crc;
+	__be32 server_ip;
+	unsigned int type;
 };
 #pragma pack(pop)
 
