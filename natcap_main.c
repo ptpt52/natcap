@@ -117,6 +117,21 @@ static void dnatcap_map_init(void)
 		} \
 	} while (0)
 
+#define IP_TCP_FMT	"%pI4:%u->%pI4:%u"
+#define IP_TCP_ARG(i,t)	&(i)->saddr, ntohs((t)->source), &(i)->daddr, ntohs((t)->dest)
+#define TCP_ST_FMT	"%c%c%c%c%c%c%c%c"
+#define TCP_ST_ARG(t) \
+	(t)->cwr ? 'C' : '.', \
+	(t)->ece ? 'E' : '.', \
+	(t)->urg ? 'U' : '.', \
+	(t)->ack ? 'A' : '.', \
+	(t)->psh ? 'P' : '.', \
+	(t)->rst ? 'R' : '.', \
+	(t)->syn ? 'S' : '.', \
+	(t)->fin ? 'F' : '.'
+
+#define DEBUG_FMT "[" IP_TCP_FMT "][ID=0x%x,TL=%u][" TCP_ST_FMT "]"
+#define DEBUG_ARG(i, t) IP_TCP_ARG(i,t), ntohs((i)->id), ntohs((i)->tot_len), TCP_ST_ARG(t)
 
 static ssize_t natcap_read(struct file *file, char __user *buf, size_t buf_len, loff_t *offset)
 {
@@ -257,57 +272,7 @@ static inline void natcap_adjust_tcp_mss(struct tcphdr *tcph, int delta)
 	}
 }
 
-//use before NF_CT_EXT_NAT exist!!
-static struct natcap_session * natcap_session_init(struct nf_conn *ct, gfp_t gfp) {
-	struct natcap_session *ns;
-	struct nf_conn_nat *nat = NULL;
-	size_t var_alloc_len = ALIGN(sizeof(struct natcap_session), sizeof(unsigned long));
-
-	BUG_ON(ct == NULL);
-
-	if (nf_ct_is_confirmed(ct)) {
-		return NULL;
-	}
-	if (nf_ct_ext_exist(ct, NF_CT_EXT_NAT)) {
-		return NULL;
-	}
-
-	nat = nf_ct_ext_add_length(ct, NF_CT_EXT_NAT, var_alloc_len, gfp);
-
-	if (!nat) {
-		return NULL;
-	}
-
-	ct->ext->offset[NF_CT_EXT_NAT] = ct->ext->offset[NF_CT_EXT_NAT] + var_alloc_len;
-
-	//reload nat
-	nat = nfct_nat(ct);
-
-	ns = (struct natcap_session *)((void *)nat - var_alloc_len);
-	memset(ns, 0, sizeof(struct natcap_session));
-	set_bit(IPS_NATCAP_SESSION_BIT, &ct->status);
-
-	return ns;
-}
-
-static struct natcap_session *natcap_session_get(struct nf_conn *ct)
-{
-	struct nf_conn_nat *nat;
-	size_t var_alloc_len = ALIGN(sizeof(struct natcap_session), sizeof(unsigned long));
-
-	if (!test_bit(IPS_NATCAP_SESSION_BIT, &ct->status)) {
-		return NULL;
-	}
-
-	nat  = nfct_nat(ct);
-	if (!nat) {
-		return NULL;
-	}
-
-	return (struct natcap_session *)((void *)nat - var_alloc_len);
-}
-
-static inline int natcap_tcp_encode(struct sk_buff *skb, int is_server)
+static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
@@ -316,19 +281,18 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, int is_server)
 	int mss = skb_shinfo(skb)->gso_size;
 	int i, offlen;
 	int segs = 1;
-	__be32 saddr, daddr;
 	u16 crc;
 
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	if (skb_linearize(skb)) {
-		NATCAP_ERROR("[%s][%pI4->%pI4]: skb_linearize failed\n", __FUNCTION__, &iph->saddr, &iph->daddr);
+		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb_linearize failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
 		return -1;
 	} else if (skb_tailroom(skb) < edsz * segs &&
 	           pskb_expand_head(skb, 0, edsz * segs, GFP_ATOMIC)) {
 		/* no memory */
-		NATCAP_ERROR("[%s][%pI4->%pI4]: pskb_expand_head failed\n", __FUNCTION__, &iph->saddr, &iph->daddr);
+		NATCAP_ERROR("(%s)" DEBUG_FMT ": pskb_expand_head failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
 		return -ENOMEM;
 	}
 
@@ -356,7 +320,7 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, int is_server)
 			if (skb_tailroom(skb) < edsz * segs &&
 			        pskb_expand_head(skb, 0, edsz * (segs - 1), GFP_ATOMIC)) {
 				/* no memory */
-				NATCAP_ERROR("[%s][%pI4->%pI4]: pskb_expand_head failed\n", __FUNCTION__, &iph->saddr, &iph->daddr);
+				NATCAP_ERROR("(%s)" DEBUG_FMT ": pskb_expand_head failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
 				return -ENOMEM;
 			}
 
@@ -374,24 +338,14 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, int is_server)
 			skb_shinfo(skb)->gso_size += edsz;
 			ed = from;
 		} else {
-			NATCAP_DEBUG("[%s][%pI4->%pI4]: bad gso_type=0x%x\n", __FUNCTION__, &iph->saddr, &iph->daddr, skb_shinfo(skb)->gso_type);
+			NATCAP_ERROR("(%s)" DEBUG_FMT ": bad gso_type=0x%x\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb_shinfo(skb)->gso_type);
 			return -1;
 		}
 	}
 
-	saddr = iph->saddr;
-	daddr = iph->daddr;
 	for (i = 0; i < segs; i++) {
-		if (!is_server)
-		{
-			ed->type = 0xdeadffff; //client side
-			ed->server_ip = daddr;
-		}
-		else
-		{
-			ed->type = 0xffffdead; //server side
-			ed->server_ip = saddr;
-		}
+		ed->type = htonl(0xdeaddead);
+		ed->server_ip = server_ip;
 		ed->gso_size = skb_shinfo(skb)->gso_size;
 		ed->payload_crc = crc;
 
@@ -423,24 +377,14 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	int mss = 0;
 	int edsz = sizeof(struct natcap_data);
 	__sum16 crc;
-	int is_server = 0;
 
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	ed = (struct natcap_data *)((void *)iph + ntohs(iph->tot_len) - edsz);
-	if (ed->type == 0xdeadffff)
+	if (ed->type != htonl(0xdeaddead))
 	{
-		is_server = 1;
-	}
-	else if (ed->type == 0xffffdead)
-	{
-		is_server = 0;
-	}
-	else
-	{
-		NATCAP_DEBUG("[%s][%pI4->%pI4]: not natcap packet\n", __FUNCTION__, &iph->saddr, &iph->daddr);
-		return -1;
+		return -EINVAL;
 	}
 
 	mss = ed->gso_size;
@@ -464,14 +408,7 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	iph->tot_len = htons(ntohs(iph->tot_len) - edsz * segs);
 	skb->len -= edsz * segs;
 	skb->tail -= edsz *segs;
-	if (!is_server)
-	{
-		*server_ip = ed->server_ip;
-	}
-	else
-	{
-		*server_ip = ed->server_ip;
-	}
+	*server_ip = ed->server_ip;
 
 	if (1) {
 		unsigned char *decode_buf = (void *)tcph + tcph->doff * 4;
@@ -482,9 +419,9 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	}
 
 	if (mss > 0 && offlen <= mss) {
-		NATCAP_INFO("[%s][%pI4->%pI4]: payload crc ignored\n", __FUNCTION__, &iph->saddr, &iph->daddr);
+		NATCAP_INFO("(%s)" DEBUG_FMT ": payload crc ignored\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
 	} else if (crc != crc16(0, (void *)tcph + tcph->doff * 4, offlen - edsz * segs)) {
-		NATCAP_INFO("[%s][%pI4->%pI4]: payload crc checking failed\n", __FUNCTION__, &iph->saddr, &iph->daddr);
+		NATCAP_ERROR("(%s)" DEBUG_FMT ": payload crc checking failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
 		return -1;
 	}
 
@@ -554,7 +491,6 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 {
 	unsigned int ret;
 	enum ip_conntrack_info ctinfo;
-	struct natcap_session *ns;
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
@@ -582,49 +518,31 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		ret = natcap_tcp_decode(skb, &server_ip);
+		iph = ip_hdr(skb);
+		tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 	} else {
 		ret = natcap_tcp_decode(skb, &server_ip);
+		iph = ip_hdr(skb);
+		tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 		if (ret != 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
+		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time */
+			NATCAP_INFO("(PREROUTING)" DEBUG_FMT ": new natcaped connection in, after decode\n",
+					DEBUG_ARG(iph,tcph));
+			natcap_tcp_dnat_setup(ct, server_ip, tcph->dest);
+		}
 	}
-
-	//reload
-	iph = ip_hdr(skb);
-	tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 
 	if (ret != 0) {
-		NATCAP_WARN("[PREROUTING][%pI4->%pI4]: natcap failed, natcap_tcp_decode ret = %d\n",
-			&iph->saddr, &iph->daddr, ret);
+		NATCAP_WARN("(PREROUTING)" DEBUG_FMT ": natcap_tcp_decode ret = %d\n",
+			DEBUG_ARG(iph,tcph), ret);
 		return NF_DROP;
 	}
 
-	if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time */
-		NATCAP_INFO("[PREROUTING][%pI4->%pI4]: new natcaped connection in, after decode\n",
-				&iph->saddr, &iph->daddr);
-		ns = natcap_session_init(ct, GFP_ATOMIC);
-		if (!ns) {
-			NATCAP_ERROR("[PREROUTING][%pI4->%pI4]: natcap_session_init failed\n",
-					&iph->saddr, &iph->daddr);
-			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-			return NF_ACCEPT;
-		}
-		ns->server_ip = server_ip;
-		natcap_tcp_dnat_setup(ct, ns->server_ip, tcph->dest);
-	}
-
-	ns = natcap_session_get(ct);
-	if (!ns) {
-		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		return NF_ACCEPT;
-	}
-
-	if (ns->server_ip != server_ip) {
-		NATCAP_WARN("[PREROUTING][%pI4->%pI4]: natcap failed, local server_ip=%pI4, incomming server_ip=%pI4\n",
-			&iph->saddr, &iph->daddr, &ns->server_ip, &server_ip);
-		return NF_DROP;
-	}
+	NATCAP_DEBUG("(PREROUTING)" DEBUG_FMT ": incomming server_ip=%pI4\n",
+			DEBUG_ARG(iph,tcph), &server_ip);
 
 	return NF_ACCEPT;
 }
@@ -648,7 +566,6 @@ static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
 		const struct nf_hook_state *state)
 #endif
 {
-	struct natcap_session *ns;
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
@@ -683,8 +600,8 @@ static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
 	}
 
 	if (skb->len != ntohs(iph->tot_len)) {
-		NATCAP_ERROR("[POSTROUTING][%pI4->%pI4]: natcap failed, bad skb, skb_len=%u ip_tot_len=%u\n",
-				&iph->saddr, &iph->daddr, skb->len, ntohs(iph->tot_len));
+		NATCAP_ERROR("(POSTROUTING)" DEBUG_FMT ": natcap failed, bad skb, SL=%u\n",
+				DEBUG_ARG(iph,tcph), skb->len);
 		return NF_ACCEPT;
 	}
 
@@ -698,19 +615,16 @@ static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	ns = natcap_session_get(ct);
-	if (!ns) {
+	ret = natcap_tcp_encode(skb, iph->saddr);
+	if (ret != 0) {
+		NATCAP_ERROR("(POSTROUTING)" DEBUG_FMT ": natcap_tcp_encode@server ret=%d\n",
+				DEBUG_ARG(iph,tcph), ret);
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
 
-	ret = natcap_tcp_encode(skb, 1);
-	if (ret != 0) {
-		NATCAP_ERROR("[POSTROUTING][%pI4->%pI4]: natcap failed, natcap_tcp_encode@server ret=%d\n",
-				&iph->saddr, &iph->daddr, ret);
-		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		return NF_ACCEPT;
-	}
+	NATCAP_DEBUG("(POSTROUTING)" DEBUG_FMT ": natcap_tcp_encode@server ret=%d\n",
+			DEBUG_ARG(iph,tcph), ret);
 
 	return NF_ACCEPT;
 }
@@ -734,8 +648,8 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 		const struct nf_hook_state *state)
 #endif
 {
-	struct natcap_session *ns;
 	int ret = 0;
+	__be32 server_ip = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
@@ -753,63 +667,57 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 		return NF_ACCEPT;
 	}
 
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) { /* in client side */
+		return NF_ACCEPT;
+	}
+
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		//matched
-	} else if (tcph->dest == htons(80) || tcph->dest == htons(443)) {
+	//} else if (tcph->dest == htons(80) || tcph->dest == htons(443)) {
+	} else if (iph->daddr == htonl((103<<24)|(235<<16)|(46<<8)|(39<<0))) {
 		//108.61.201.222
-		__be32 server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
-		//__be32 server_ip = htonl((192<<24)|(168<<16)|(56<<8)|(200<<0));
+		//server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
+		server_ip = htonl((192<<24)|(168<<16)|(56<<8)|(200<<0));
 
-		NATCAP_INFO("[OUTPUT][%pI4->%pI4]: new natcaped connection out, before natcap\n",
-				&iph->saddr, &iph->daddr);
-
-		ns = natcap_session_init(ct, GFP_ATOMIC);
-		if (ns) {
-			ns->server_ip = server_ip;
-		} else {
-			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-			return NF_ACCEPT;
-		}
+		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, before natcap\n",
+				DEBUG_ARG(iph,tcph));
 	}  else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
 
 	if (skb->len != ntohs(iph->tot_len)) {
-		NATCAP_WARN("[OUTPUT][%pI4->%pI4]: natcap failed, bad skb, skb_len=%u ip_tot_len=%u\n",
-				&iph->saddr, &iph->daddr, skb->len, ntohs(iph->tot_len));
+		NATCAP_WARN("(OUTPUT)" DEBUG_FMT ": natcap failed, bad skb, SL=%u\n",
+				DEBUG_ARG(iph,tcph), skb->len);
 		return NF_ACCEPT;
 	}
 
-	ns = natcap_session_get(ct);
-	if (!ns) {
-		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		return NF_ACCEPT;
-	}
-
-	ret = natcap_tcp_encode(skb, 0);
+	ret = natcap_tcp_encode(skb, iph->daddr);
 
 	//reload
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	if (ret != 0) {
-		NATCAP_ERROR("[OUTPUT][%pI4->%pI4]: natcap failed, natcap_tcp_encode@client ret=%d\n",
-			&iph->saddr, &iph->daddr, ret);
+		NATCAP_ERROR("(OUTPUT)" DEBUG_FMT ": natcap_tcp_encode@client ret=%d\n",
+			DEBUG_ARG(iph,tcph), ret);
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
 
 	if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
-		NATCAP_INFO("[OUTPUT][%pI4->%pI4]: new natcaped connection out, after natcap\n",
-				&iph->saddr, &iph->daddr);
+		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, after natcap\n",
+				DEBUG_ARG(iph,tcph));
 		//setup DNAT
-		natcap_tcp_dnat_setup(ct, ns->server_ip, tcph->dest);
+		natcap_tcp_dnat_setup(ct, server_ip, tcph->dest);
 	}
+
+	NATCAP_DEBUG("(OUTPUT)" DEBUG_FMT ": natcap_tcp_encode@client ret=%d\n",
+			DEBUG_ARG(iph,tcph), ret);
 
 	return NF_ACCEPT;
 }
@@ -833,7 +741,6 @@ static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
 		const struct nf_hook_state *state)
 #endif
 {
-	struct natcap_session *ns;
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
@@ -853,6 +760,10 @@ static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
 		return NF_ACCEPT;
 	}
 
+	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) { /* in client side */
+		return NF_ACCEPT;
+	}
+
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
@@ -864,12 +775,6 @@ static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
 		return NF_ACCEPT;
 	}
 
-	ns = natcap_session_get(ct);
-	if (!ns) {
-		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		return NF_ACCEPT;
-	}
-
 	ret = natcap_tcp_decode(skb, &server_ip);
 
 	//reload
@@ -877,16 +782,13 @@ static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	if (ret != 0) {
-		NATCAP_WARN("[INPUT][%pI4->%pI4]: natcap failed, natcap_tcp_decode ret = %d\n",
-			&iph->saddr, &iph->daddr, ret);
+		NATCAP_WARN("(INPUT)" DEBUG_FMT ": natcap_tcp_decode ret = %d\n",
+			DEBUG_ARG(iph,tcph), ret);
 		return NF_DROP;
 	}
 
-	if (ns->server_ip != server_ip) {
-		NATCAP_WARN("[INPUT][%pI4->%pI4]: natcap failed, local server_ip=%pI4, incomming server_ip=%pI4\n",
-			&iph->saddr, &iph->daddr, &ns->server_ip, &server_ip);
-		return NF_DROP;
-	}
+	NATCAP_DEBUG("(INPUT)" DEBUG_FMT ": incomming server_ip=%pI4\n",
+			DEBUG_ARG(iph,tcph), &server_ip);
 
 	return NF_ACCEPT;
 }
