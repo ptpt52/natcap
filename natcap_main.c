@@ -38,6 +38,7 @@
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_conntrack_extend.h>
 #include <net/netfilter/nf_nat.h>
+#include <net/netfilter/nf_nat_core.h>
 
 #define NATCAP_VERSION "1.0.0"
 
@@ -543,6 +544,9 @@ static inline unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, 
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)
 	struct nf_nat_range range;
+	if (nf_nat_initialized(ct, IP_NAT_MANIP_DST)) {
+		return NF_ACCEPT;
+	}
 	memset(&range.min_ip, 0, sizeof(range.min_ip));
 	memset(&range.max_ip, 0, sizeof(range.max_ip));
 	range.flags = IP_NAT_RANGE_MAP_IPS;
@@ -553,6 +557,9 @@ static inline unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, 
 	return nf_nat_setup_info(ct, &range, IP_NAT_MANIP_DST);
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
 	struct nf_nat_ipv4_range range;
+	if (nf_nat_initialized(ct, NF_NAT_MANIP_DST)) {
+		return NF_ACCEPT;
+	}
 	memset(&range.min_ip, 0, sizeof(range.min_ip));
 	memset(&range.max_ip, 0, sizeof(range.max_ip));
 	range.flags = NF_NAT_RANGE_MAP_IPS;
@@ -563,6 +570,9 @@ static inline unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, 
 	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
 #else
 	struct nf_nat_range range;
+	if (nf_nat_initialized(ct, NF_NAT_MANIP_DST)) {
+		return NF_ACCEPT;
+	}
 	memset(&range.min_addr, 0, sizeof(range.min_addr));
 	memset(&range.max_addr, 0, sizeof(range.max_addr));
 	range.flags = NF_NAT_RANGE_MAP_IPS;
