@@ -325,7 +325,6 @@ static inline void natcap_adjust_tcp_mss(struct tcphdr *tcph, int delta)
 	op = (unsigned char *)tcph + sizeof(struct tcphdr);
 
 	for (i = 0; i < optlen; ) {
-		printk("op=%d\n", op[i]);
 		if (op[i] == TCPOPT_MSS && (optlen - i) >= TCPOLEN_MSS &&
 		        op[i+1] == TCPOLEN_MSS) {
 			__be32 diff[2];
@@ -795,9 +794,9 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 	} else if (iph->daddr == htonl((103<<24)|(235<<16)|(46<<8)|(39<<0))) {
 		//108.61.201.222
 		//198.199.118.35
-		//server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
+		server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
 		//server_ip = htonl((192<<24)|(168<<16)|(56<<8)|(200<<0));
-		server_ip = htonl((198<<24)|(199<<16)|(118<<8)|(35<<0));
+		//server_ip = htonl((198<<24)|(199<<16)|(118<<8)|(35<<0));
 
 		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, before encode\n",
 				DEBUG_ARG(iph,tcph));
