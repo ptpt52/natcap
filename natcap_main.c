@@ -365,6 +365,11 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
+	if (skb->len != ntohs(iph->tot_len)) {
+		NATCAP_ERROR("(%s)" DEBUG_FMT ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb->len, ntohs(iph->tot_len));
+		return -EINVAL;
+	}
+
 	//XXX do use skb_tailroom here!!
 	if (skb->end - skb->tail < ntosz && pskb_expand_head(skb, 0, ntosz, GFP_ATOMIC)) {
 		/* no memory */
@@ -377,13 +382,14 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	if (skb->data_len == 0) {
-		offlen = ntohs(iph->tot_len) - iph->ihl * 4 - tcph->doff * 4;
+		offlen = skb->len - iph->ihl * 4 - tcph->doff * 4;
 		crc = crc16(0, (void *)tcph + tcph->doff * 4, offlen);
 		crc_valid = 1;
 	} else {
 		offlen = skb_tail_pointer(skb) - (unsigned char *)tcph - tcph->doff * 4;
 		crc = 0;
 		crc_valid = 0;
+		NATCAP_INFO("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
 	}
 	if (offlen < 0) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
@@ -476,6 +482,11 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
+	if (skb->len != ntohs(iph->tot_len)) {
+		NATCAP_ERROR("(%s)" DEBUG_FMT ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb->len, ntohs(iph->tot_len));
+		return -EINVAL;
+	}
+
 	nto = (struct natcap_tcp_option *)((void *)tcph + sizeof(struct tcphdr));
 	if (nto->opcode != TCPOPT_NATCAP ||
 			nto->opsize != ntosz) {
@@ -512,11 +523,11 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	skb->len -= ntosz;
 	skb->tail -= ntosz;
 
-	skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_decode);
+	skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, natcap_data_decode);
 
 	if (!crc_valid) {
 		NATCAP_INFO("(%s)" DEBUG_FMT ": payload crc ignored\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
-	} else if (crc != crc16(0, (void *)tcph + tcph->doff * 4, offlen)) {
+	} else if (crc != crc16(0, (void *)tcph + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": payload crc checking failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
 		return -1;
 	}
@@ -707,12 +718,6 @@ static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
 		return NF_ACCEPT;
 	}
 
-	if (skb->len != ntohs(iph->tot_len)) {
-		NATCAP_ERROR("(POSTROUTING)" DEBUG_FMT ": natcap failed, bad skb, SL=%u\n",
-				DEBUG_ARG(iph,tcph), skb->len);
-		return NF_ACCEPT;
-	}
-
 	/* XXX I just confirm it first  */
 	ret = nf_conntrack_confirm(skb);
 	if (ret != NF_ACCEPT) {
@@ -793,19 +798,13 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 		//108.61.201.222
 		//198.199.118.35
 		//server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
-		server_ip = htonl((192<<24)|(168<<16)|(56<<8)|(200<<0));
-		//server_ip = htonl((198<<24)|(199<<16)|(118<<8)|(35<<0));
+		//server_ip = htonl((192<<24)|(168<<16)|(56<<8)|(200<<0));
+		server_ip = htonl((198<<24)|(199<<16)|(118<<8)|(35<<0));
 
 		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, before encode\n",
 				DEBUG_ARG(iph,tcph));
 	}  else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		return NF_ACCEPT;
-	}
-
-	if (skb->len != ntohs(iph->tot_len)) {
-		NATCAP_WARN("(OUTPUT)" DEBUG_FMT ": natcap failed, bad skb, SL=%u\n",
-				DEBUG_ARG(iph,tcph), skb->len);
 		return NF_ACCEPT;
 	}
 
