@@ -67,9 +67,4 @@ struct natcap_session {
 #define IPS_NATCAP_BYPASS_BIT 20
 #define IPS_NATCAP_BYPASS (1 << IPS_NATCAP_BYPASS_BIT)
 
-static inline u16 crc16_sum(const void *buff, int len)
-{
-	return csum_fold(csum_partial(buff, len, 0));
-}
-
 #endif /* _NATCAP_H_ */
