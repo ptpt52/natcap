@@ -29,7 +29,6 @@
 #include <linux/mman.h>
 #include <linux/spinlock.h>
 #include <linux/rcupdate.h>
-#include <linux/crc16.h>
 #include <linux/highmem.h>
 #include <net/ip.h>
 #include <net/tcp.h>
@@ -383,13 +382,13 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 
 	if (skb->data_len == 0) {
 		offlen = skb->len - iph->ihl * 4 - tcph->doff * 4;
-		crc = crc16(0, (void *)tcph + tcph->doff * 4, offlen);
+		crc = crc16_sum((void *)tcph + tcph->doff * 4, offlen);
 		crc_valid = 1;
+		printk("crc=%x, offlen=%d\n", crc, offlen);
 	} else {
 		offlen = skb_tail_pointer(skb) - (unsigned char *)tcph - tcph->doff * 4;
 		crc = 0;
 		crc_valid = 0;
-		NATCAP_INFO("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
 	}
 	if (offlen < 0) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
@@ -527,7 +526,7 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 
 	if (!crc_valid) {
 		NATCAP_INFO("(%s)" DEBUG_FMT ": payload crc ignored\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
-	} else if (crc != crc16(0, (void *)tcph + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4)) {
+	} else if (crc != crc16_sum((void *)tcph + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": payload crc checking failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
 		return -1;
 	}
