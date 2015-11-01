@@ -164,35 +164,35 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 #define NATCAP_FIXME(fmt, ...) \
 	do { \
 		if (debug & 0x1) { \
-			printk("fixme: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_ALERT "fixme: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_DEBUG(fmt, ...) \
 	do { \
 		if (debug & 0x2) { \
-			printk("debug: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_ALERT "debug: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_INFO(fmt, ...) \
 	do { \
 		if (debug & 0x4) { \
-			printk("info: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_ALERT "info: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_WARN(fmt, ...) \
 	do { \
 		if (debug & 0x8) { \
-			printk("warning: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_ALERT "warning: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_ERROR(fmt, ...) \
 	do { \
 		if (debug & 0x16) { \
-			printk("error: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_ALERT "error: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
@@ -523,7 +523,7 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, natcap_data_decode);
 
 	if (!crc_valid) {
-		NATCAP_INFO("(%s)" DEBUG_FMT ": payload crc ignored\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
+		NATCAP_FIXME("(%s)" DEBUG_FMT ": payload crc ignored\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
 	} else if (crc != csum_fold(skb_checksum(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, 0))) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": payload crc checking failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
 		return -1;
@@ -790,8 +790,8 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		//matched
 		NATCAP_DEBUG("(OUTPUT)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
-	//} else if (tcph->dest == htons(80) || tcph->dest == htons(443)) {
-	} else if (iph->daddr == htonl((103<<24)|(235<<16)|(46<<8)|(39<<0))) {
+	} else if (tcph->dest == htons(80) || tcph->dest == htons(443)) {
+	//} else if (iph->daddr == htonl((103<<24)|(235<<16)|(46<<8)|(39<<0))) {
 		//108.61.201.222
 		//198.199.118.35
 		server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
