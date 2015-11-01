@@ -365,14 +365,14 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 
 	if (skb->len != ntohs(iph->tot_len)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb->len, ntohs(iph->tot_len));
-		return -EINVAL;
+		return -1;
 	}
 
 	//XXX do use skb_tailroom here!!
 	if (skb->end - skb->tail < ntosz && pskb_expand_head(skb, 0, ntosz, GFP_ATOMIC)) {
 		/* no memory */
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": pskb_expand_head failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
-		return -ENOMEM;
+		return -2;
 	}
 
 	//reload
@@ -392,7 +392,7 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	}
 	if (offlen < 0) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
-		return -EINVAL;
+		return -4;
 	}
 
 	nto = (struct natcap_tcp_option *)((void *)tcph + sizeof(struct tcphdr));
@@ -459,7 +459,7 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 
 	if (skb_rcsum_tcpudp(skb) != 0)
 	{
-		return -EINVAL;
+		return -8;
 	}
 
 	return 0;
@@ -480,22 +480,22 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 
 	if (skb->len != ntohs(iph->tot_len)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb->len, ntohs(iph->tot_len));
-		return -EINVAL;
+		return -1;
 	}
 
 	nto = (struct natcap_tcp_option *)((void *)tcph + sizeof(struct tcphdr));
 	if (nto->opcode != TCPOPT_NATCAP ||
 			nto->opsize != ntosz) {
-		return -EINVAL;
+		return -2;
 	}
 	if (tcph->doff * 4 < sizeof(struct tcphdr) + ntosz) {
-		return -EINVAL;
+		return -4;
 	}
 
 	offlen = skb_tail_pointer(skb) - (unsigned char *)nto - ntosz;
 	if (offlen < 0) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
-		return -EINVAL;
+		return -8;
 	}
 
 	// *server_port = nto->data.server_port;
@@ -526,12 +526,12 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 		NATCAP_FIXME("(%s)" DEBUG_FMT ": payload crc ignored\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
 	} else if (crc != csum_fold(skb_checksum(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, 0))) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": payload crc checking failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
-		return -1;
+		return -16;
 	}
 
 	if (skb_rcsum_tcpudp(skb) != 0)
 	{
-		return -EINVAL;
+		return -32;
 	}
 	natcap_adjust_tcp_mss(tcph, -ntosz);
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
