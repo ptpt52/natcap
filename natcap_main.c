@@ -30,6 +30,7 @@
 #include <linux/spinlock.h>
 #include <linux/rcupdate.h>
 #include <linux/crc16.h>
+#include <linux/highmem.h>
 #include <net/ip.h>
 #include <net/tcp.h>
 #include <net/udp.h>
@@ -80,6 +81,85 @@ static void dnatcap_map_init(void)
 	for (i = 0; i < 256; i++) {
 		dnatcap_map[natcap_map[i]] = i;
 	}
+}
+
+static void natcap_data_encode(unsigned char *buf, int len)
+{
+	int i;
+	for (i = 0; i < len; i++) {
+		buf[i] = natcap_map[buf[i]];
+	}
+}
+
+static void natcap_data_decode(unsigned char *buf, int len)
+{
+	int i;
+	for (i = 0; i < len; i++) {
+		buf[i] = dnatcap_map[buf[i]];
+	}
+}
+
+static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*update)(unsigned char *, int))
+{
+	int start = skb_headlen(skb);
+	int i, copy = start - offset;
+	struct sk_buff *frag_iter;
+	int pos = 0;
+
+	/* Checksum header. */
+	if (copy > 0) {
+		if (copy > len)
+			copy = len;
+		update(skb->data + offset, copy);
+		if ((len -= copy) == 0)
+			return;
+		offset += copy;
+		pos	= copy;
+	}
+
+	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
+		int end;
+		skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
+
+		WARN_ON(start > offset + len);
+
+		end = start + skb_frag_size(frag);
+		if ((copy = end - offset) > 0) {
+			u8 *vaddr;
+
+			if (copy > len)
+				copy = len;
+			vaddr = kmap_atomic(skb_frag_page(frag));
+			update(vaddr + frag->page_offset + offset - start, copy);
+			kunmap_atomic(vaddr);
+			if (!(len -= copy))
+				return;
+			offset += copy;
+			pos    += copy;
+		}
+		start = end;
+	}
+
+	skb_walk_frags(skb, frag_iter) {
+		int end;
+
+		WARN_ON(start > offset + len);
+
+		end = start + frag_iter->len;
+		if ((copy = end - offset) > 0) {
+			if (copy > len)
+				copy = len;
+			skb_tcp_data_hook(frag_iter, offset - start, copy, update);
+			if ((len -= copy) == 0)
+				return;
+			offset += copy;
+			pos    += copy;
+		}
+		start = end;
+	}
+	BUG_ON(len);
+
+	return;
 }
 
 #define NATCAP_FIXME(fmt, ...) \
@@ -279,7 +359,7 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	struct tcphdr *tcph;
 	struct natcap_tcp_option *nto = NULL;
 	int ntosz = ALIGN(sizeof(struct natcap_tcp_option), sizeof(unsigned int));
-	int i, offlen;
+	int offlen;
 	u16 crc = 0, crc_valid = 0;
 
 	iph = ip_hdr(skb);
@@ -310,14 +390,6 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 		return -EINVAL;
 	}
 
-	if (0) {
-		unsigned char *encode_buf = (void *)tcph + tcph->doff * 4;
-
-		for (i = 0; i < offlen; i++) {
-			encode_buf[i] = natcap_map[encode_buf[i]];
-		}
-	}
-
 	nto = (struct natcap_tcp_option *)((void *)tcph + sizeof(struct tcphdr));
 	memmove((void *)nto + ntosz, (void *)nto, offlen);
 
@@ -345,6 +417,8 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	iph->tot_len = htons(ntohs(iph->tot_len) + ntosz);
 	skb->len += ntosz;
 	skb->tail += ntosz;
+
+	skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
 
 	if (tcph->syn && !tcph->ack) {
 		// tcph->doff = 0;
@@ -395,7 +469,7 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	struct tcphdr *tcph;
 	struct natcap_tcp_option *nto = NULL;
 	int ntosz = ALIGN(sizeof(struct natcap_tcp_option), sizeof(unsigned int));
-	int i, offlen;
+	int offlen;
 	__sum16 crc;
 	u16 crc_valid = 0;
 
@@ -438,13 +512,7 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	skb->len -= ntosz;
 	skb->tail -= ntosz;
 
-	if (0) {
-		unsigned char *decode_buf = (void *)tcph + tcph->doff * 4;
-
-		for (i = 0; i < offlen; i++) {
-			decode_buf[i] = dnatcap_map[decode_buf[i]];
-		}
-	}
+	skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_decode);
 
 	if (!crc_valid) {
 		NATCAP_INFO("(%s)" DEBUG_FMT ": payload crc ignored\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
