@@ -340,7 +340,7 @@ static inline void natcap_adjust_tcp_mss(struct tcphdr *tcph, int delta)
 			tcph->check = csum_fold(csum_partial(diff, sizeof(diff),
 			                                     ~csum_unfold(tcph->check)));
 
-			NATCAP_DEBUG("Change TCP MSS %d to %d\n", ntohs(oldmss), ntohs(newmss));
+			NATCAP_INFO("Change TCP MSS %d to %d\n", ntohs(oldmss), ntohs(newmss));
 		}
 
 		if (op[i] < 2) {
@@ -380,11 +380,13 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	if (skb->data_len == 0) {
-		offlen = skb->len - iph->ihl * 4 - tcph->doff * 4;
-		crc = csum_fold(skb_checksum(skb, iph->ihl * 4 + tcph->doff * 4, offlen, 0));
+		// [iphdr][tcphdr][tcp_option][payload]
+		// offlen =       [-------------------]
+		offlen = skb->len - iph->ihl * 4 - sizeof(struct tcphdr);
+		crc = csum_fold(skb_checksum(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, 0));
 		crc_valid = 1;
 	} else {
-		offlen = skb_tail_pointer(skb) - (unsigned char *)tcph - tcph->doff * 4;
+		offlen = skb_tail_pointer(skb) - (unsigned char *)tcph - sizeof(struct tcphdr);
 		crc = 0;
 		crc_valid = 0;
 	}
@@ -493,7 +495,7 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 		return -EINVAL;
 	}
 
-	offlen = skb_tail_pointer(skb) - (unsigned char *)tcph - tcph->doff * 4;
+	offlen = skb_tail_pointer(skb) - (unsigned char *)nto - ntosz;
 	if (offlen < 0) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
 		return -EINVAL;
