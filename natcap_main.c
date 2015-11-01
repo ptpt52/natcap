@@ -398,16 +398,12 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	nto = (struct natcap_tcp_option *)((void *)tcph + sizeof(struct tcphdr));
 	memmove((void *)nto + ntosz, (void *)nto, offlen);
 
-	tcph->doff = (tcph->doff * 4 + ntosz) / 4;
-
 	nto->opcode = TCPOPT_NATCAP;
 	nto->opsize = ntosz;
-
 	nto->data.server_port = 0;
 	nto->data.server_ip = server_ip;
 	nto->data.payload_crc = crc;
 	nto->data.payload_crc_valid = crc_valid;
-
 	nto->data.doff = tcph->doff;
 	nto->data.res1 = tcph->res1;
 	nto->data.cwr = tcph->cwr;
@@ -419,6 +415,7 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	nto->data.syn = tcph->syn;
 	nto->data.fin = tcph->fin;
 
+	tcph->doff = (tcph->doff * 4 + ntosz) / 4;
 	iph->tot_len = htons(ntohs(iph->tot_len) + ntosz);
 	skb->len += ntosz;
 	skb->tail += ntosz;
@@ -501,7 +498,11 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 		return -EINVAL;
 	}
 
-	tcph->doff = (tcph->doff * 4 - ntosz) / 4;
+	// *server_port = nto->data.server_port;
+	*server_ip = nto->data.server_ip;
+	crc = nto->data.payload_crc;
+	crc_valid = nto->data.payload_crc_valid;
+	// tcph->doff = nto->data.doff;
 	tcph->res1 = nto->data.res1;
 	tcph->cwr = nto->data.cwr;
 	tcph->ece = nto->data.ece;
@@ -512,12 +513,9 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	tcph->syn = nto->data.syn;
 	tcph->fin = nto->data.fin;
 
-	crc = nto->data.payload_crc;
-	crc_valid = nto->data.payload_crc_valid;
-	*server_ip = nto->data.server_ip;
-
 	memmove((void *)nto, (void *)nto + ntosz, offlen);
 
+	tcph->doff = (tcph->doff * 4 - ntosz) / 4;
 	iph->tot_len = htons(ntohs(iph->tot_len) - ntosz);
 	skb->len -= ntosz;
 	skb->tail -= ntosz;
