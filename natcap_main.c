@@ -426,36 +426,36 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	if (tcph->syn && !tcph->ack) {
 		// tcph->doff = 0;
 		// tcph->res1 = 0;
-		tcph->cwr = 0;
-		tcph->ece = 0;
-		tcph->urg = 0;
-		tcph->ack = 0;
-		tcph->psh = 0;
-		tcph->rst = 0;
-		tcph->syn = 1;
-		tcph->fin = 0;
+		// tcph->cwr = 0;
+		// tcph->ece = 0;
+		// tcph->urg = 0;
+		// tcph->ack = 0;
+		// tcph->psh = 0;
+		// tcph->rst = 0;
+		// tcph->syn = 1;
+		// tcph->fin = 0;
 	} else if (to_server) {
 		// tcph->doff = 0;
 		// tcph->res1 = 0;
-		tcph->cwr = 0;
-		tcph->ece = 0;
-		tcph->urg = 0;
-		tcph->ack = 1;
-		tcph->psh = 0;
-		tcph->rst = 0;
-		tcph->syn = 0;
-		tcph->fin = 0;
+		// tcph->cwr = 0;
+		// tcph->ece = 0;
+		// tcph->urg = 0;
+		// tcph->ack = 0;
+		// tcph->psh = 0;
+		// tcph->rst = 0;
+		// tcph->syn = 1;
+		// tcph->fin = 0;
 	} else {
 		// tcph->doff = 0;
 		// tcph->res1 = 0;
-		tcph->cwr = 0;
-		tcph->ece = 0;
-		tcph->urg = 0;
-		tcph->ack = 1;
-		tcph->psh = 0;
-		tcph->rst = 0;
-		tcph->syn = 1;
-		tcph->fin = 0;
+		// tcph->cwr = 0;
+		// tcph->ece = 0;
+		// tcph->urg = 0;
+		// tcph->ack = 1;
+		// tcph->psh = 0;
+		// tcph->rst = 0;
+		// tcph->syn = 1;
+		// tcph->fin = 0;
 	}
 
 	if (skb_rcsum_tcpudp(skb) != 0)
@@ -504,15 +504,15 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	crc = nto->data.payload_crc;
 	crc_valid = nto->data.payload_crc_valid;
 	// tcph->doff = nto->data.doff;
-	tcph->res1 = nto->data.res1;
-	tcph->cwr = nto->data.cwr;
-	tcph->ece = nto->data.ece;
-	tcph->urg = nto->data.urg;
-	tcph->ack = nto->data.ack;
-	tcph->psh = nto->data.psh;
-	tcph->rst = nto->data.rst;
-	tcph->syn = nto->data.syn;
-	tcph->fin = nto->data.fin;
+	// tcph->res1 = nto->data.res1;
+	// tcph->cwr = nto->data.cwr;
+	// tcph->ece = nto->data.ece;
+	// tcph->urg = nto->data.urg;
+	// tcph->ack = nto->data.ack;
+	// tcph->psh = nto->data.psh;
+	// tcph->rst = nto->data.rst;
+	// tcph->syn = nto->data.syn;
+	// tcph->fin = nto->data.fin;
 
 	memmove((void *)nto, (void *)nto + ntosz, offlen);
 
