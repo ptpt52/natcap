@@ -628,6 +628,7 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) { /* in client side */
 		if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+			skb->mark = XT_MARK_NATCAP;
 			NATCAP_DEBUG("(PREROUTING)" DEBUG_FMT ": found\n", DEBUG_ARG(iph,tcph));
 		}
 		return NF_ACCEPT;
@@ -649,7 +650,8 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time */
 			NATCAP_INFO("(PREROUTING)" DEBUG_FMT ": new natcaped connection in, after decode server_ip=%pI4\n",
 					DEBUG_ARG(iph,tcph), &server_ip);
-			if (natcap_tcp_dnat_setup(ct, server_ip, tcph->dest) != NF_ACCEPT) {
+			if (iph->daddr != server_ip &&
+					natcap_tcp_dnat_setup(ct, server_ip, tcph->dest) != NF_ACCEPT) {
 				NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, server_ip=%pI4\n",
 						DEBUG_ARG(iph,tcph), &server_ip);
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -663,6 +665,8 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 			DEBUG_ARG(iph,tcph), ret);
 		return NF_DROP;
 	}
+
+	skb->mark = XT_MARK_NATCAP;
 
 	NATCAP_DEBUG("(PREROUTING)" DEBUG_FMT ": after decode incomming server_ip=%pI4\n", DEBUG_ARG(iph,tcph), &server_ip);
 

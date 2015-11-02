@@ -46,11 +46,13 @@ struct natcap_data {
 
 struct natcap_tcp_option {
 	u8 opcode;
-#define TCPOPT_NATCAP 153
+#define TCPOPT_NATCAP 0x99
 	u8 opsize;
 	struct natcap_data data;
 };
 #pragma pack(pop)
+
+#define XT_MARK_NATCAP 0x99
 
 struct natcap_session {
 	__be32 server_ip;
