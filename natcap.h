@@ -29,6 +29,7 @@ struct natcap_tcp_option {
 #pragma pack(pop)
 
 #define XT_MARK_NATCAP 0x99
+#define NATCAP_WHITELIST_TID 0x99
 
 struct natcap_session {
 	__be32 server_ip;

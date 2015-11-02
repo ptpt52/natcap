@@ -39,6 +39,7 @@
 #include <net/netfilter/nf_conntrack_extend.h>
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_core.h>
+#include <net/ip_fib.h>
 
 static int natcap_major = 0;
 static int natcap_minor = 0;
@@ -210,6 +211,73 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 
 #define DEBUG_FMT "[" IP_TCP_FMT "][ID=0x%x,TL=%u][" TCP_ST_FMT "]"
 #define DEBUG_ARG(i, t) IP_TCP_ARG(i,t), ntohs((i)->id), ntohs((i)->tot_len), TCP_ST_ARG(t)
+
+#ifdef CONFIG_IP_MULTIPLE_TABLES
+static struct fib_table *natcap_fib_get_table(struct net *net, u32 id)
+{
+	struct fib_table *tb;
+	struct hlist_head *head;
+	unsigned int h;
+
+	if (id == 0)
+		id = RT_TABLE_MAIN;
+	h = id & (FIB_TABLE_HASHSZ - 1);
+
+	head = &net->ipv4.fib_table_hash[h];
+	hlist_for_each_entry_rcu(tb, head, tb_hlist) {
+		if (tb->tb_id == id)
+			return tb;
+	}
+	return NULL;
+}
+#else
+#define natcap_fib_get_table fib_get_table
+#endif /* CONFIG_IP_MULTIPLE_TABLES */
+
+__be32 natcap_get_gateway_from_table(struct net *net, __be32 saddr, __be32 daddr, u32 tid)
+{
+	struct flowi4 fl4;
+	struct fib_result res;
+	struct fib_table *tb;
+
+	if (!net)
+		net = &init_net;
+
+	memset(&fl4, 0, sizeof(fl4));
+	fl4.daddr = daddr;
+	fl4.saddr = saddr;
+	fl4.flowi4_scope = RT_SCOPE_UNIVERSE;
+
+	res.tclassid = 0;
+	res.fi = NULL;
+	res.table = NULL;
+
+	rcu_read_lock();
+
+	tb = natcap_fib_get_table(net, tid);
+	if (!tb || fib_table_lookup(tb, &fl4, &res, 0)) {
+		rcu_read_unlock();
+		return 0;
+	}
+
+	rcu_read_unlock();
+
+#if 0
+	if (!res.prefixlen &&
+			res.table->tb_num_default > 1 &&
+			res.type == RTN_UNICAST && !fl4->flowi4_oif)
+		fib_select_default(fl4, &res);
+#endif
+
+	if (res.fi) {
+		struct fib_nh *nh = &FIB_RES_NH(res);
+		if (nh->nh_gw && nh->nh_scope == RT_SCOPE_LINK) {
+			return nh->nh_gw;
+		}
+	}
+
+	return 0;
+}
 
 static ssize_t natcap_read(struct file *file, char __user *buf, size_t buf_len, loff_t *offset)
 {
@@ -743,17 +811,12 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		//matched
 		NATCAP_DEBUG("(OUTPUT)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
-	} else if (tcph->dest == htons(80) || tcph->dest == htons(443)) {
-	//} else if (iph->daddr == htonl((103<<24)|(235<<16)|(46<<8)|(39<<0))) {
-		//108.61.201.222
-		//198.199.118.35
+	} else if (natcap_get_gateway_from_table(&init_net, 0, iph->daddr, NATCAP_WHITELIST_TID) == 0) {
 		server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
-		//server_ip = htonl((192<<24)|(168<<16)|(56<<8)|(200<<0));
 		//server_ip = htonl((198<<24)|(199<<16)|(118<<8)|(35<<0));
-
-		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, before encode\n",
-				DEBUG_ARG(iph,tcph));
-	}  else {
+		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, before encode, server_ip=%pI4\n",
+				DEBUG_ARG(iph,tcph), &server_ip);
+	} else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
