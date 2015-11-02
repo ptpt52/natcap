@@ -40,7 +40,7 @@
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_core.h>
 
-#define NATCAP_VERSION "1.0.0"
+#define NATCAP_VERSION "2.0.0"
 
 static int natcap_major = 0;
 static int natcap_minor = 0;
@@ -359,7 +359,6 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	struct natcap_tcp_option *nto = NULL;
 	int ntosz = ALIGN(sizeof(struct natcap_tcp_option), sizeof(unsigned int));
 	int offlen;
-	u16 crc = 0, crc_valid = 0;
 
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
@@ -367,6 +366,11 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	if (skb->len != ntohs(iph->tot_len)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb->len, ntohs(iph->tot_len));
 		return -1;
+	}
+
+	if (!tcph->syn || tcph->ack) {
+		//not syn packet
+		goto do_encode;
 	}
 
 	//XXX do use skb_tailroom here!!
@@ -380,17 +384,7 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	if (skb->data_len == 0) {
-		// [iphdr][tcphdr][tcp_option][payload]
-		// offlen =       [-------------------]
-		offlen = skb->len - iph->ihl * 4 - sizeof(struct tcphdr);
-		crc = csum_fold(skb_checksum(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, 0));
-		crc_valid = 1;
-	} else {
-		offlen = skb_tail_pointer(skb) - (unsigned char *)tcph - sizeof(struct tcphdr);
-		crc = 0;
-		crc_valid = 0;
-	}
+	offlen = skb_tail_pointer(skb) - (unsigned char *)tcph - sizeof(struct tcphdr);
 	if (offlen < 0) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
 		return -4;
@@ -403,60 +397,14 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	nto->opsize = ntosz;
 	nto->data.server_port = 0;
 	nto->data.server_ip = server_ip;
-	nto->data.payload_crc = crc;
-	nto->data.payload_crc_valid = crc_valid;
-	nto->data.doff = tcph->doff;
-	nto->data.res1 = tcph->res1;
-	nto->data.cwr = tcph->cwr;
-	nto->data.ece = tcph->ece;
-	nto->data.urg = tcph->urg;
-	nto->data.ack = tcph->ack;
-	nto->data.psh = tcph->psh;
-	nto->data.rst = tcph->rst;
-	nto->data.syn = tcph->syn;
-	nto->data.fin = tcph->fin;
 
 	tcph->doff = (tcph->doff * 4 + ntosz) / 4;
 	iph->tot_len = htons(ntohs(iph->tot_len) + ntosz);
 	skb->len += ntosz;
 	skb->tail += ntosz;
 
+do_encode:
 	skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
-
-	if (tcph->syn && !tcph->ack) {
-		// tcph->doff = 0;
-		// tcph->res1 = 0;
-		// tcph->cwr = 0;
-		// tcph->ece = 0;
-		// tcph->urg = 0;
-		// tcph->ack = 0;
-		// tcph->psh = 0;
-		// tcph->rst = 0;
-		// tcph->syn = 1;
-		// tcph->fin = 0;
-	} else if (to_server) {
-		// tcph->doff = 0;
-		// tcph->res1 = 0;
-		// tcph->cwr = 0;
-		// tcph->ece = 0;
-		// tcph->urg = 0;
-		// tcph->ack = 0;
-		// tcph->psh = 0;
-		// tcph->rst = 0;
-		// tcph->syn = 1;
-		// tcph->fin = 0;
-	} else {
-		// tcph->doff = 0;
-		// tcph->res1 = 0;
-		// tcph->cwr = 0;
-		// tcph->ece = 0;
-		// tcph->urg = 0;
-		// tcph->ack = 1;
-		// tcph->psh = 0;
-		// tcph->rst = 0;
-		// tcph->syn = 1;
-		// tcph->fin = 0;
-	}
 
 	if (skb_rcsum_tcpudp(skb) != 0)
 	{
@@ -473,8 +421,6 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	struct natcap_tcp_option *nto = NULL;
 	int ntosz = ALIGN(sizeof(struct natcap_tcp_option), sizeof(unsigned int));
 	int offlen;
-	__sum16 crc;
-	u16 crc_valid = 0;
 
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
@@ -482,6 +428,11 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	if (skb->len != ntohs(iph->tot_len)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb->len, ntohs(iph->tot_len));
 		return -1;
+	}
+
+	if (!tcph->syn || tcph->ack) {
+		//not syn packet
+		goto do_decode;
 	}
 
 	nto = (struct natcap_tcp_option *)((void *)tcph + sizeof(struct tcphdr));
@@ -501,18 +452,6 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 
 	// *server_port = nto->data.server_port;
 	*server_ip = nto->data.server_ip;
-	crc = nto->data.payload_crc;
-	crc_valid = nto->data.payload_crc_valid;
-	// tcph->doff = nto->data.doff;
-	// tcph->res1 = nto->data.res1;
-	// tcph->cwr = nto->data.cwr;
-	// tcph->ece = nto->data.ece;
-	// tcph->urg = nto->data.urg;
-	// tcph->ack = nto->data.ack;
-	// tcph->psh = nto->data.psh;
-	// tcph->rst = nto->data.rst;
-	// tcph->syn = nto->data.syn;
-	// tcph->fin = nto->data.fin;
 
 	memmove((void *)nto, (void *)nto + ntosz, offlen);
 
@@ -521,20 +460,13 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	skb->len -= ntosz;
 	skb->tail -= ntosz;
 
+do_decode:
 	skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, natcap_data_decode);
-
-	if (!crc_valid) {
-		NATCAP_FIXME("(%s)" DEBUG_FMT ": payload crc ignored\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
-	} else if (crc != csum_fold(skb_checksum(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, 0))) {
-		NATCAP_ERROR("(%s)" DEBUG_FMT ": payload crc checking failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
-		return -16;
-	}
 
 	if (skb_rcsum_tcpudp(skb) != 0)
 	{
 		return -32;
 	}
-	natcap_adjust_tcp_mss(tcph, -ntosz);
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 
 	return 0;
@@ -640,13 +572,22 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 		iph = ip_hdr(skb);
 		tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 	} else {
+		if (!tcph->syn || tcph->ack) {
+			NATCAP_DEBUG("(PREROUTING)" DEBUG_FMT ": first packet in but not syn\n", DEBUG_ARG(iph,tcph));
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			return NF_ACCEPT;
+		}
 		ret = natcap_tcp_decode(skb, &server_ip);
+		//reload
 		iph = ip_hdr(skb);
 		tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
+
+		//not a natcap packet
 		if (ret != 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
+
 		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time */
 			NATCAP_INFO("(PREROUTING)" DEBUG_FMT ": new natcaped connection in, after decode server_ip=%pI4\n",
 					DEBUG_ARG(iph,tcph), &server_ip);
@@ -668,7 +609,7 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 
 	skb->mark = XT_MARK_NATCAP;
 
-	NATCAP_DEBUG("(PREROUTING)" DEBUG_FMT ": after decode incomming server_ip=%pI4\n", DEBUG_ARG(iph,tcph), &server_ip);
+	NATCAP_DEBUG("(PREROUTING)" DEBUG_FMT ": after decode\n", DEBUG_ARG(iph,tcph));
 
 	return NF_ACCEPT;
 }
@@ -901,7 +842,7 @@ static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		//matched
 		NATCAP_DEBUG("(INPUT)" DEBUG_FMT ": before decode\n", DEBUG_ARG(iph,tcph));
-	}  else {
+	} else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
@@ -918,7 +859,7 @@ static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
 		return NF_DROP;
 	}
 
-	NATCAP_DEBUG("(INPUT)" DEBUG_FMT ": after decode incomming server_ip=%pI4\n", DEBUG_ARG(iph,tcph), &server_ip);
+	NATCAP_DEBUG("(INPUT)" DEBUG_FMT ": after decode\n", DEBUG_ARG(iph,tcph));
 
 	return NF_ACCEPT;
 }

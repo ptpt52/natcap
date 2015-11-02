@@ -13,40 +13,14 @@
 #pragma pack(push)
 #pragma pack(1)
 struct natcap_data {
-#if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u16 res1:4,
-		  doff:4,
-		  fin:1,
-		  syn:1,
-		  rst:1,
-		  psh:1,
-		  ack:1,
-		  urg:1,
-		  ece:1,
-		  cwr:1;
-#elif defined(__BIG_ENDIAN_BITFIELD)
-	__u16 doff:4,
-		  res1:4,
-		  cwr:1,
-		  ece:1,
-		  urg:1,
-		  ack:1,
-		  psh:1,
-		  rst:1,
-		  syn:1,
-		  fin:1;
-#else
-#error  "Adjust your <asm/byteorder.h> defines"
-#endif
 	__be16 server_port;
 	__be32 server_ip;
-	u16 payload_crc;
-	u16 payload_crc_valid;
 };
 
 struct natcap_tcp_option {
 	u8 opcode;
 #define TCPOPT_NATCAP 0x99
+
 	u8 opsize;
 	struct natcap_data data;
 };
