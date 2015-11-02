@@ -40,8 +40,6 @@
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_core.h>
 
-#define NATCAP_VERSION "2.0.0"
-
 static int natcap_major = 0;
 static int natcap_minor = 0;
 static int number_of_devices = 1;

@@ -1,6 +1,6 @@
-modname := ecap
+modname := natcap
 DKMS := dkms
-modver := $(shell awk -F'"' '/define *ECAP_VERSION/{print $$2}' < ecap.c)
+modver := $(shell awk -F'"' '/define *NATCAP_VERSION/{print $$2}' < natcap.h)
 
 # directory in which generated files are stored
 DKMS_DEST := /usr/src/$(modname)-$(modver)
@@ -9,18 +9,18 @@ all: install
 
 src_install:
 	mkdir -p '$(DKMS_DEST)'
-	cp ecap.c ecap.h '$(DKMS_DEST)'
+	cp natcap_main.c natcap.h '$(DKMS_DEST)'
 	cp Makefile '$(DKMS_DEST)/Makefile'
 	sed 's/#MODULE_VERSION#/$(modver)/' dkms.conf > '$(DKMS_DEST)/dkms.conf'
 
 build: src_install
-	$(DKMS) add -m ecap -v $(modver) 2>/dev/null || true
-	$(DKMS) build -m ecap -v $(modver)
+	$(DKMS) add -m natcap -v $(modver) 2>/dev/null || true
+	$(DKMS) build -m natcap -v $(modver)
 
 install: build
-	$(DKMS) install -m ecap -v $(modver)
+	$(DKMS) install -m natcap -v $(modver)
 
 uninstall:
-	$(DKMS) remove -m ecap -v $(modver) --all
+	$(DKMS) remove -m natcap -v $(modver) --all
 
 .PHONY: all src_install build install uninstall

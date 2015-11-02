@@ -5,6 +5,8 @@
 #ifndef _NATCAP_H_
 #define _NATCAP_H_
 
+#define NATCAP_VERSION "2.0.0"
+
 #include <linux/ctype.h>
 #include <asm/types.h>
 #include <net/netfilter/nf_conntrack.h>
