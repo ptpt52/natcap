@@ -216,6 +216,9 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 static struct fib_table *natcap_fib_get_table(struct net *net, u32 id)
 {
 	struct fib_table *tb;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+	struct hlist_node *node;
+#endif
 	struct hlist_head *head;
 	unsigned int h;
 
@@ -224,7 +227,11 @@ static struct fib_table *natcap_fib_get_table(struct net *net, u32 id)
 	h = id & (FIB_TABLE_HASHSZ - 1);
 
 	head = &net->ipv4.fib_table_hash[h];
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+	hlist_for_each_entry_rcu(tb, node, head, tb_hlist) {
+#else
 	hlist_for_each_entry_rcu(tb, head, tb_hlist) {
+#endif
 		if (tb->tb_id == id)
 			return tb;
 	}
