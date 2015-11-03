@@ -533,7 +533,7 @@ do_decode:
 	{
 		return -32;
 	}
-	skb->ip_summed = CHECKSUM_UNNECESSARY;
+	//skb->ip_summed = CHECKSUM_UNNECESSARY;
 
 	return 0;
 }
