@@ -31,19 +31,11 @@ struct natcap_tcp_option {
 #define XT_MARK_NATCAP 0x99
 #define NATCAP_WHITELIST_TID 0x99
 
-struct natcap_session {
-	__be32 server_ip;
-};
-
 /* @linux/netfilter/nf_conntrack_common.h */
 /* ct->status use bits:[18-16] for ecap status */
 #define IPS_NATCAP_BIT 16
 #define IPS_NATCAP (1 << IPS_NATCAP_BIT)
-#define IPS_NATCAP_SERVER_BIT 17
-#define IPS_NATCAP_SERVER (1 << IPS_NATCAP_SERVER_BIT)
-#define IPS_NATCAP_SESSION_BIT 19
-#define IPS_NATCAP_SESSION (1 << IPS_NATCAP_SESSION_BIT)
-#define IPS_NATCAP_BYPASS_BIT 20
+#define IPS_NATCAP_BYPASS_BIT 17
 #define IPS_NATCAP_BYPASS (1 << IPS_NATCAP_BYPASS_BIT)
 
 #endif /* _NATCAP_H_ */
