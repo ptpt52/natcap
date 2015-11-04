@@ -49,7 +49,7 @@ const char *natcap_dev_name = "natcap_ctl";
 static struct class *natcap_class;
 static struct device *natcap_dev;
 
-static int debug = 4;
+static int debug = 0;
 module_param(debug, int, 0);
 MODULE_PARM_DESC(debug, "Debug level (0=none,1=fixme,2==debug,4=info,8=warn,16=error,...,31=all)");
 
@@ -451,6 +451,14 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 		if ((err = natcap_server_delete(ip)) != 0)
 			return err;
+		return cnt;
+	} else if (strncmp(data, "debug=", 6) == 0) {
+		int d;
+		n = sscanf(data, "debug=%u", &d);
+		if (n != 1)
+			return -EINVAL;
+		debug = d;
+		printk("natcap setting debug=%u\n", debug);
 		return cnt;
 	}
 
