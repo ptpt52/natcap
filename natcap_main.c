@@ -271,27 +271,200 @@ bool dst_need_natcap(__be32 daddr, __be16 dport)
 	return false;
 }
 
+#define MAX_NATCAP_SERVER 256
+struct natcap_server_info {
+	unsigned int active_index;
+	unsigned int server_count[2];
+	__be32 server[2][MAX_NATCAP_SERVER];
+};
+
+static struct natcap_server_info natcap_server_info;
+
+static inline void natcap_server_init(void)
+{
+	memset(&natcap_server_info, 0, sizeof(natcap_server_info));
+}
+
+static inline int natcap_server_add(__be32 ip)
+{
+	struct natcap_server_info *nsi = &natcap_server_info;
+	unsigned int m = nsi->active_index;
+	unsigned int n = (m + 1) % 2;
+	unsigned int i, j;
+
+	if (nsi->server_count[m] == MAX_NATCAP_SERVER)
+		return -ENOMEM;
+
+	for (i = 0; i < nsi->server_count[m]; i++) {
+		if (nsi->server[m][i] == ip) {
+			return -EEXIST;
+		}
+	}
+
+	/* all ip(s) are stored from MAX to MIN */
+	j = 0;
+	for (i = 0; i < nsi->server_count[m]; i++) {
+		if (ntohl(ip) < ntohl(nsi->server[m][i])) {
+			nsi->server[n][j++] = nsi->server[m][i];
+		} else {
+			nsi->server[n][j++] = ip;
+			nsi->server[n][j++] = nsi->server[m][i];
+		}
+	}
+	if (nsi->server_count[m] == 0) {
+		nsi->server[n][j++] = ip;
+	}
+	nsi->server_count[n] = j;
+
+	nsi->active_index = n;
+
+	return 0;
+}
+
+static inline int natcap_server_delete(__be32 ip)
+{
+	struct natcap_server_info *nsi = &natcap_server_info;
+	unsigned int m = nsi->active_index;
+	unsigned int n = (m + 1) % 2;
+	unsigned int i, j;
+	int ret = -EINVAL;
+
+	j = 0;
+	for (i = 0; i < nsi->server_count[m]; i++) {
+		if (nsi->server[m][i] == ip) {
+			ret = 0;
+			continue;
+		}
+		nsi->server[n][j++] = nsi->server[m][i];
+	}
+	BUG_ON(i - j != 1);
+
+	nsi->server_count[n] = j;
+
+	nsi->active_index = n;
+
+	return ret;
+}
+
+static inline void natcap_server_cleanup(void)
+{
+	struct natcap_server_info *nsi = &natcap_server_info;
+	unsigned int m = nsi->active_index;
+	unsigned int n = (m + 1) % 2;
+
+	nsi->server_count[n] = 0;
+	nsi->active_index = n;
+}
+
+static inline __be32 natcap_server_select(__be32 ip, __be16 port)
+{
+	struct natcap_server_info *nsi = &natcap_server_info;
+	unsigned int m = nsi->active_index;
+	unsigned int count = nsi->server_count[m];
+	unsigned int hash;
+
+	if (count == 0)
+		return 0;
+
+	hash = (unsigned int)jiffies;
+	hash = hash % count;
+
+	return nsi->server[m][hash];
+}
+
+static inline void *natcap_server_get(loff_t idx)
+{
+	if (idx < natcap_server_info.server_count[natcap_server_info.active_index])
+		return &natcap_server_info.server[natcap_server_info.active_index][idx];
+	return NULL;
+}
+
+static void *natcap_start(struct seq_file *m, loff_t *pos)
+{
+	return natcap_server_get(*pos);
+}
+
+static void *natcap_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	(*pos)++;
+	return natcap_server_get(*pos);
+}
+
+static void natcap_stop(struct seq_file *m, void *v)
+{
+}
+
+static int natcap_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%pI4\n", v);
+	return 0;
+}
+
+const struct seq_operations natcap_seq_ops = {
+	.start = natcap_start,
+	.next = natcap_next,
+	.stop = natcap_stop,
+	.show = natcap_show,
+};
+
 static ssize_t natcap_read(struct file *file, char __user *buf, size_t buf_len, loff_t *offset)
 {
-	printk(KERN_ALERT "natcap_read\n");
-	return -EINVAL;
+	return seq_read(file, buf, buf_len, offset);
 }
 
 static ssize_t natcap_write(struct file *file, const char __user *buf, size_t buf_len, loff_t *offset)
 {
-	return 0;
+	int err;
+	int n;
+	char data[256];
+	int cnt = 256;
+	__be32 ip;
+	char *handle;
+
+	if (buf_len > cnt)
+		return -ENOMEM;
+	if (buf_len < cnt)
+		cnt = buf_len;
+
+	if (copy_from_user(data, buf, cnt) != 0)
+		return -EACCES;
+
+	if ((handle = strnstr(data, "clean", cnt)) != NULL) {
+		natcap_server_cleanup();
+		return cnt;
+	}
+
+	if (strncmp(data, "add", 3) == 0) {
+		unsigned int a, b, c, d;
+		n = sscanf(data, "add %u.%u.%u.%u", &a, &b, &c, &d);
+		if (n != 4)
+			return -EINVAL;
+		ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+		if ((err = natcap_server_add(ip)) != 0)
+			return err;
+		return cnt;
+	} else if (strncmp(data, "delete", 6) == 0) {
+		unsigned int a, b, c, d;
+		n = sscanf(data, "delete %u.%u.%u.%u", &a, &b, &c, &d);
+		if (n != 4)
+			return -EINVAL;
+		ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+		if ((err = natcap_server_delete(ip)) != 0)
+			return err;
+		return cnt;
+	}
+
+	return -EINVAL;
 }
 
 static int natcap_open(struct inode *inode, struct file *file)
 {
-	printk(KERN_ALERT "natcap_open\n");
-	return 0;
+	return seq_open(file, &natcap_seq_ops);
 }
 
 static int natcap_release(struct inode *inode, struct file *file)
 {
-	printk(KERN_ALERT "natcap_release\n");
-	return 0;
+	return seq_release(inode, file);
 }
 
 static struct file_operations natcap_fops = {
@@ -300,6 +473,7 @@ static struct file_operations natcap_fops = {
 	.release = natcap_release,
 	.read = natcap_read,
 	.write = natcap_write,
+	.llseek  = seq_lseek,
 };
 
 static inline int skb_rcsum_tcpudp(struct sk_buff *skb)
@@ -804,8 +978,14 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 		//matched
 		NATCAP_DEBUG("(OUTPUT)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
 	} else if (dst_need_natcap(iph->daddr, tcph->dest) == 0) {
-		server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
+		//server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
 		//server_ip = htonl((198<<24)|(199<<16)|(118<<8)|(35<<0));
+		server_ip = natcap_server_select(iph->daddr, tcph->dest);
+		if (server_ip == 0) {
+			NATCAP_DEBUG("(OUTPUT)" DEBUG_FMT ": no server found\n", DEBUG_ARG(iph,tcph));
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			return NF_ACCEPT;
+		}
 		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, before encode, server_ip=%pI4\n",
 				DEBUG_ARG(iph,tcph), &server_ip);
 	} else {
@@ -956,6 +1136,7 @@ static int __init natcap_init(void) {
 	printk(KERN_ALERT "natcap_init version: " NATCAP_VERSION "\n");
 
 	dnatcap_map_init();
+	natcap_server_init();
 
 	if (natcap_major>0) {
 		devno = MKDEV(natcap_major, natcap_minor);
