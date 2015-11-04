@@ -293,7 +293,7 @@ static inline int natcap_server_add(__be32 ip)
 	unsigned int i, j;
 
 	if (nsi->server_count[m] == MAX_NATCAP_SERVER)
-		return -ENOMEM;
+		return -ENOSPC;
 
 	for (i = 0; i < nsi->server_count[m]; i++) {
 		if (nsi->server[m][i] == ip) {
@@ -311,7 +311,7 @@ static inline int natcap_server_add(__be32 ip)
 			nsi->server[n][j++] = nsi->server[m][i];
 		}
 	}
-	if (nsi->server_count[m] == 0) {
+	if (j == i) {
 		nsi->server[n][j++] = ip;
 	}
 	nsi->server_count[n] = j;
@@ -327,23 +327,22 @@ static inline int natcap_server_delete(__be32 ip)
 	unsigned int m = nsi->active_index;
 	unsigned int n = (m + 1) % 2;
 	unsigned int i, j;
-	int ret = -EINVAL;
 
 	j = 0;
 	for (i = 0; i < nsi->server_count[m]; i++) {
 		if (nsi->server[m][i] == ip) {
-			ret = 0;
 			continue;
 		}
 		nsi->server[n][j++] = nsi->server[m][i];
 	}
-	BUG_ON(i - j != 1);
+	if (j == i)
+		return -ENOENT;
 
 	nsi->server_count[n] = j;
 
 	nsi->active_index = n;
 
-	return ret;
+	return 0;
 }
 
 static inline void natcap_server_cleanup(void)
@@ -352,6 +351,7 @@ static inline void natcap_server_cleanup(void)
 	unsigned int m = nsi->active_index;
 	unsigned int n = (m + 1) % 2;
 
+	nsi->server_count[m] = 0;
 	nsi->server_count[n] = 0;
 	nsi->active_index = n;
 }
