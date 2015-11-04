@@ -241,18 +241,17 @@ static struct fib_table *natcap_fib_get_table(struct net *net, u32 id)
 #define natcap_fib_get_table fib_get_table
 #endif /* CONFIG_IP_MULTIPLE_TABLES */
 
-__be32 natcap_get_gateway_from_table(struct net *net, __be32 saddr, __be32 daddr, u32 tid)
+bool dst_need_natcap(__be32 daddr, __be16 dport)
 {
+	u32 tid = NATCAP_WHITELIST_TID;
+	struct net *net = &init_net;
 	struct flowi4 fl4;
 	struct fib_result res;
 	struct fib_table *tb;
 
-	if (!net)
-		net = &init_net;
-
 	memset(&fl4, 0, sizeof(fl4));
 	fl4.daddr = daddr;
-	fl4.saddr = saddr;
+	fl4.saddr = 0;
 	fl4.flowi4_scope = RT_SCOPE_UNIVERSE;
 
 	res.tclassid = 0;
@@ -262,28 +261,14 @@ __be32 natcap_get_gateway_from_table(struct net *net, __be32 saddr, __be32 daddr
 	rcu_read_lock();
 
 	tb = natcap_fib_get_table(net, tid);
-	if (!tb || fib_table_lookup(tb, &fl4, &res, 0)) {
+	if (tb && fib_table_lookup(tb, &fl4, &res, 0) == 0) {
 		rcu_read_unlock();
-		return 0;
+		return true;
 	}
 
 	rcu_read_unlock();
 
-#if 0
-	if (!res.prefixlen &&
-			res.table->tb_num_default > 1 &&
-			res.type == RTN_UNICAST && !fl4->flowi4_oif)
-		fib_select_default(fl4, &res);
-#endif
-
-	if (res.fi) {
-		struct fib_nh *nh = &FIB_RES_NH(res);
-		if (nh->nh_gw && nh->nh_scope == RT_SCOPE_LINK) {
-			return nh->nh_gw;
-		}
-	}
-
-	return 0;
+	return false;
 }
 
 static ssize_t natcap_read(struct file *file, char __user *buf, size_t buf_len, loff_t *offset)
@@ -818,7 +803,7 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		//matched
 		NATCAP_DEBUG("(OUTPUT)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
-	} else if (natcap_get_gateway_from_table(&init_net, 0, iph->daddr, NATCAP_WHITELIST_TID) == 0) {
+	} else if (dst_need_natcap(iph->daddr, tcph->dest) == 0) {
 		server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
 		//server_ip = htonl((198<<24)|(199<<16)|(118<<8)|(35<<0));
 		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, before encode, server_ip=%pI4\n",

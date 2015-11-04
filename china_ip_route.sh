@@ -3,7 +3,7 @@ export PATH="/bin:/sbin:/usr/sbin:/usr/bin"
 
 OLDGW=`ip route show | grep '^default' | sed -e 's/default via \([^ ]*\).*/\1/'`
 
-if [ $OLDGW == '' ]; then
+if [ x$OLDGW == x ]; then
     exit 0
 fi
 
@@ -11,7 +11,7 @@ TID=153
 
 ip route flush table $TID
 
-ip route show | grep -v default | while read line;
+ip route show | grep -v default | sed 's/proto .*$//' | while read line;
 do
 	ip route add $line table $TID
 done
