@@ -11,7 +11,7 @@ TID=153
 
 ip route flush table $TID
 
-ip route show | grep -v default | sed 's/proto .*$//' | while read line;
+ip route show | grep -v default | awk '{print $1" "$2" "$3}' | while read line;
 do
 	ip route add $line table $TID
 done
