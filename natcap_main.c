@@ -658,9 +658,10 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_opt
 
 	nto->opcode = TCPOPT_NATCAP;
 	nto->opsize = ntosz;
+	nto->dnat = !!opt->dnat;
+	nto->encryption = !!opt->encryption;
 	nto->port = opt->port;
 	nto->ip = opt->ip;
-	nto->encryption = !!opt->encryption;
 
 	tcph->doff = (tcph->doff * 4 + ntosz) / 4;
 	iph->tot_len = htons(ntohs(iph->tot_len) + ntosz);
@@ -715,9 +716,10 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, struct natcap_option *o
 		return -8;
 	}
 
+	opt->dnat = nto->dnat;
+	opt->encryption = nto->encryption;
 	opt->port = nto->port;
 	opt->ip = nto->ip;
-	opt->encryption = nto->encryption;
 
 	memmove((void *)nto, (void *)nto + ntosz, offlen);
 
@@ -837,6 +839,7 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		NATCAP_DEBUG("(PREROUTING)" DEBUG_FMT ": before decode\n", DEBUG_ARG(iph,tcph));
 
+		opt.dnat = 0;
 		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 		ret = natcap_tcp_decode(skb, &opt);
 		//reload
@@ -849,6 +852,7 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 			return NF_ACCEPT;
 		}
 
+		opt.dnat = 0;
 		opt.encryption = 0;
 		ret = natcap_tcp_decode(skb, &opt);
 		server.ip = opt.ip;
@@ -868,8 +872,7 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 			NATCAP_INFO("(PREROUTING)" DEBUG_FMT ": new natcaped connection in, after decode target=" TUPLE_FMT "\n",
 					DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 
-			if (iph->daddr != server.ip &&
-					natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
+			if (opt.dnat && natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 				NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, target=" TUPLE_FMT "\n",
 						DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -947,9 +950,10 @@ static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
 		//matched
 		NATCAP_DEBUG("(POSTROUTING)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
 
+		opt.dnat = 0;
+		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 		opt.port = tcph->source;
 		opt.ip = iph->saddr;
-		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 	} else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_ACCEPT;
@@ -1045,6 +1049,7 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 
 		opt.port = tcph->dest;
 		opt.ip = iph->daddr;
+		opt.dnat = !(server.ip == opt.ip && server.port == opt.port);
 		opt.encryption = server.encryption;
 
 		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, before encode, server=" TUPLE_FMT "\n",
@@ -1071,7 +1076,7 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, after encode\n",
 				DEBUG_ARG(iph,tcph));
 		//setup DNAT
-		if (natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
+		if (opt.dnat && natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 			NATCAP_ERROR("(OUTPUT)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, server=" TUPLE_FMT "\n",
 					DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);

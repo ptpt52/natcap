@@ -20,13 +20,15 @@ struct natcap_tcp_option {
 #define TCPOPT_NATCAP 0x99
 
 	u8 opsize;
+	u8 dnat;
+	u8 encryption;
 	__be16 port;
 	__be32 ip;
-	u8 encryption;
 };
 
 struct natcap_option {
-	u16 encryption;
+	u8 dnat;
+	u8 encryption;
 	__be16 port;
 	__be32 ip;
 };
