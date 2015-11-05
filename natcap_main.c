@@ -865,12 +865,12 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 		}
 
 		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time */
-			NATCAP_INFO("(PREROUTING)" DEBUG_FMT ": new natcaped connection in, after decode server_ip=" TUPLE_FMT "\n",
+			NATCAP_INFO("(PREROUTING)" DEBUG_FMT ": new natcaped connection in, after decode target=" TUPLE_FMT "\n",
 					DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 
 			if (iph->daddr != server.ip &&
 					natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
-				NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, server=" TUPLE_FMT "\n",
+				NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, target=" TUPLE_FMT "\n",
 						DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_DROP;
