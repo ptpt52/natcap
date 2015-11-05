@@ -241,7 +241,7 @@ static struct fib_table *natcap_fib_get_table(struct net *net, u32 id)
 #define natcap_fib_get_table fib_get_table
 #endif /* CONFIG_IP_MULTIPLE_TABLES */
 
-bool dst_need_natcap(__be32 daddr, __be16 dport)
+int dst_need_natcap(__be32 daddr, __be16 dport)
 {
 	u32 tid = NATCAP_WHITELIST_TID;
 	struct net *net = &init_net;
@@ -261,14 +261,21 @@ bool dst_need_natcap(__be32 daddr, __be16 dport)
 	rcu_read_lock();
 
 	tb = natcap_fib_get_table(net, tid);
-	if (tb && fib_table_lookup(tb, &fl4, &res, 0) == 0) {
+	if (tb && fib_table_lookup(tb, &fl4, &res, FIB_LOOKUP_NOREF) == 0 &&
+			res.type == RTN_UNICAST) {
 		rcu_read_unlock();
-		return true;
+		return 0;
+	}
+	tb = natcap_fib_get_table(net, RT_TABLE_LOCAL);
+	if (tb && fib_table_lookup(tb, &fl4, &res, FIB_LOOKUP_NOREF) == 0 &&
+			res.type == RTN_LOCAL) {
+		rcu_read_unlock();
+		return 0;
 	}
 
 	rcu_read_unlock();
 
-	return false;
+	return 1;
 }
 
 #define MAX_NATCAP_SERVER 256
@@ -985,7 +992,7 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		//matched
 		NATCAP_DEBUG("(OUTPUT)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
-	} else if (dst_need_natcap(iph->daddr, tcph->dest) == 0) {
+	} else if (dst_need_natcap(iph->daddr, tcph->dest)) {
 		//server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
 		//server_ip = htonl((198<<24)|(199<<16)|(118<<8)|(35<<0));
 		server_ip = natcap_server_select(iph->daddr, tcph->dest);
