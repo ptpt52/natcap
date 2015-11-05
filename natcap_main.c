@@ -212,6 +212,9 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 #define DEBUG_FMT "[" IP_TCP_FMT "][ID=0x%x,TL=%u][" TCP_ST_FMT "]"
 #define DEBUG_ARG(i, t) IP_TCP_ARG(i,t), ntohs((i)->id), ntohs((i)->tot_len), TCP_ST_ARG(t)
 
+#define TUPLE_FMT "%pI4:%u-%c"
+#define TUPLE_ARG(t) &(t)->ip, ntohs((t)->port), (t)->encryption ? 'e' : 'o'
+
 #ifdef CONFIG_IP_MULTIPLE_TABLES
 static struct fib_table *natcap_fib_get_table(struct net *net, u32 id)
 {
@@ -282,7 +285,7 @@ int dst_need_natcap(__be32 daddr, __be16 dport)
 struct natcap_server_info {
 	unsigned int active_index;
 	unsigned int server_count[2];
-	__be32 server[2][MAX_NATCAP_SERVER];
+	struct tuple server[2][MAX_NATCAP_SERVER];
 };
 
 static struct natcap_server_info natcap_server_info;
@@ -292,7 +295,7 @@ static inline void natcap_server_init(void)
 	memset(&natcap_server_info, 0, sizeof(natcap_server_info));
 }
 
-static inline int natcap_server_add(__be32 ip)
+static inline int natcap_server_add(const struct tuple *dst)
 {
 	struct natcap_server_info *nsi = &natcap_server_info;
 	unsigned int m = nsi->active_index;
@@ -303,23 +306,23 @@ static inline int natcap_server_add(__be32 ip)
 		return -ENOSPC;
 
 	for (i = 0; i < nsi->server_count[m]; i++) {
-		if (nsi->server[m][i] == ip) {
+		if (tuple_eq(&nsi->server[m][i], dst)) {
 			return -EEXIST;
 		}
 	}
 
-	/* all ip(s) are stored from MAX to MIN */
+	/* all dst(s) are stored from MAX to MIN */
 	j = 0;
 	for (i = 0; i < nsi->server_count[m]; i++) {
-		if (ntohl(ip) < ntohl(nsi->server[m][i])) {
-			nsi->server[n][j++] = nsi->server[m][i];
+		if (tuple_lt(dst, &nsi->server[m][i])) {
+			tuple_copy(&nsi->server[n][j++], &nsi->server[m][i]);
 		} else {
-			nsi->server[n][j++] = ip;
-			nsi->server[n][j++] = nsi->server[m][i];
+			tuple_copy(&nsi->server[n][j++], dst);
+			tuple_copy(&nsi->server[n][j++], &nsi->server[m][i]);
 		}
 	}
 	if (j == i) {
-		nsi->server[n][j++] = ip;
+		tuple_copy(&nsi->server[n][j++], dst);
 	}
 	nsi->server_count[n] = j;
 
@@ -328,7 +331,7 @@ static inline int natcap_server_add(__be32 ip)
 	return 0;
 }
 
-static inline int natcap_server_delete(__be32 ip)
+static inline int natcap_server_delete(const struct tuple *dst)
 {
 	struct natcap_server_info *nsi = &natcap_server_info;
 	unsigned int m = nsi->active_index;
@@ -337,10 +340,10 @@ static inline int natcap_server_delete(__be32 ip)
 
 	j = 0;
 	for (i = 0; i < nsi->server_count[m]; i++) {
-		if (nsi->server[m][i] == ip) {
+		if (tuple_eq(&nsi->server[m][i], dst)) {
 			continue;
 		}
-		nsi->server[n][j++] = nsi->server[m][i];
+		tuple_copy(&nsi->server[n][j++], &nsi->server[m][i]);
 	}
 	if (j == i)
 		return -ENOENT;
@@ -363,20 +366,26 @@ static inline void natcap_server_cleanup(void)
 	nsi->active_index = n;
 }
 
-static inline __be32 natcap_server_select(__be32 ip, __be16 port)
+static inline void natcap_server_select(__be32 ip, __be16 port, struct tuple *dst)
 {
 	struct natcap_server_info *nsi = &natcap_server_info;
 	unsigned int m = nsi->active_index;
 	unsigned int count = nsi->server_count[m];
 	unsigned int hash;
 
+	dst->ip = 0;
+	dst->port = 0;
+	dst->encryption = 0;
+
 	if (count == 0)
-		return 0;
+		return;
 
 	hash = (unsigned int)jiffies;
 	hash = hash % count;
 
-	return nsi->server[m][hash];
+	tuple_copy(dst, &nsi->server[m][hash]);
+	if (dst->ip != 0 && dst->port == 0)
+		dst->port = port;
 }
 
 static inline void *natcap_server_get(loff_t idx)
@@ -403,7 +412,8 @@ static void natcap_stop(struct seq_file *m, void *v)
 
 static int natcap_show(struct seq_file *m, void *v)
 {
-	seq_printf(m, "%pI4\n", v);
+	struct tuple *dst = (struct tuple *)v;
+	seq_printf(m, TUPLE_FMT "\n", TUPLE_ARG(dst));
 	return 0;
 }
 
@@ -425,7 +435,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	int n;
 	char data[256];
 	int cnt = 256;
-	__be32 ip;
+	struct tuple dst;
 	char *handle;
 
 	if (buf_len > cnt)
@@ -442,21 +452,27 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	}
 
 	if (strncmp(data, "add", 3) == 0) {
-		unsigned int a, b, c, d;
-		n = sscanf(data, "add %u.%u.%u.%u", &a, &b, &c, &d);
-		if (n != 4)
+		unsigned int a, b, c, d, e;
+		char f;
+		n = sscanf(data, "add %u.%u.%u.%u:%u-%c", &a, &b, &c, &d, &e, &f);
+		if (n != 6 || e > 0xffff)
 			return -EINVAL;
-		ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
-		if ((err = natcap_server_add(ip)) != 0)
+		dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+		dst.port = htons(e);
+		dst.encryption = !!(f == 'e');
+		if ((err = natcap_server_add(&dst)) != 0)
 			return err;
 		return cnt;
 	} else if (strncmp(data, "delete", 6) == 0) {
-		unsigned int a, b, c, d;
-		n = sscanf(data, "delete %u.%u.%u.%u", &a, &b, &c, &d);
-		if (n != 4)
+		unsigned int a, b, c, d, e;
+		char f;
+		n = sscanf(data, "delete %u.%u.%u.%u:%u-%c", &a, &b, &c, &d, &e, &f);
+		if (n != 6 || e > 0xffff)
 			return -EINVAL;
-		ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
-		if ((err = natcap_server_delete(ip)) != 0)
+		dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+		dst.port = htons(e);
+		dst.encryption = !!(f == 'e');
+		if ((err = natcap_server_delete(&dst)) != 0)
 			return err;
 		return cnt;
 	} else if (strncmp(data, "debug=", 6) == 0) {
@@ -599,7 +615,7 @@ static inline void natcap_adjust_tcp_mss(struct tcphdr *tcph, int delta)
 	}
 }
 
-static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int to_server)
+static inline int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_option *opt)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
@@ -642,8 +658,9 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 
 	nto->opcode = TCPOPT_NATCAP;
 	nto->opsize = ntosz;
-	nto->data.server_port = 0;
-	nto->data.server_ip = server_ip;
+	nto->port = opt->port;
+	nto->ip = opt->ip;
+	nto->encryption = !!opt->encryption;
 
 	tcph->doff = (tcph->doff * 4 + ntosz) / 4;
 	iph->tot_len = htons(ntohs(iph->tot_len) + ntosz);
@@ -651,17 +668,18 @@ static inline int natcap_tcp_encode(struct sk_buff *skb, __be32 server_ip, int t
 	skb->tail += ntosz;
 
 do_encode:
-	skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
+	if (opt->encryption) {
+		skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
+	}
 
-	if (skb_rcsum_tcpudp(skb) != 0)
-	{
+	if (skb_rcsum_tcpudp(skb) != 0) {
 		return -8;
 	}
 
 	return 0;
 }
 
-static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
+static inline int natcap_tcp_decode(struct sk_buff *skb, struct natcap_option *opt)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
@@ -697,8 +715,9 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 		return -8;
 	}
 
-	// *server_port = nto->data.server_port;
-	*server_ip = nto->data.server_ip;
+	opt->port = nto->port;
+	opt->ip = nto->ip;
+	opt->encryption = nto->encryption;
 
 	memmove((void *)nto, (void *)nto + ntosz, offlen);
 
@@ -708,11 +727,12 @@ static inline int natcap_tcp_decode(struct sk_buff *skb, __be32 *server_ip)
 	skb->tail -= ntosz;
 
 do_decode:
-	skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, natcap_data_decode);
+	if (opt->encryption) {
+		skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, natcap_data_decode);
+	}
 
-	if (skb_rcsum_tcpudp(skb) != 0)
-	{
-		return -32;
+	if (skb_rcsum_tcpudp(skb) != 0) {
+		return -16;
 	}
 	//skb->ip_summed = CHECKSUM_UNNECESSARY;
 
@@ -787,7 +807,8 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	__be32 server_ip = 0;
+	struct natcap_option opt;
+	struct tuple server;
 
 	iph = ip_hdr(skb);
 
@@ -815,7 +836,10 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		NATCAP_DEBUG("(PREROUTING)" DEBUG_FMT ": before decode\n", DEBUG_ARG(iph,tcph));
-		ret = natcap_tcp_decode(skb, &server_ip);
+
+		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+		ret = natcap_tcp_decode(skb, &opt);
+		//reload
 		iph = ip_hdr(skb);
 		tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 	} else {
@@ -824,7 +848,12 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
-		ret = natcap_tcp_decode(skb, &server_ip);
+
+		opt.encryption = 0;
+		ret = natcap_tcp_decode(skb, &opt);
+		server.ip = opt.ip;
+		server.port = opt.port;
+		server.encryption = opt.encryption;
 		//reload
 		iph = ip_hdr(skb);
 		tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
@@ -836,14 +865,18 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 		}
 
 		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time */
-			NATCAP_INFO("(PREROUTING)" DEBUG_FMT ": new natcaped connection in, after decode server_ip=%pI4\n",
-					DEBUG_ARG(iph,tcph), &server_ip);
-			if (iph->daddr != server_ip &&
-					natcap_tcp_dnat_setup(ct, server_ip, tcph->dest) != NF_ACCEPT) {
-				NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, server_ip=%pI4\n",
-						DEBUG_ARG(iph,tcph), &server_ip);
+			NATCAP_INFO("(PREROUTING)" DEBUG_FMT ": new natcaped connection in, after decode server_ip=" TUPLE_FMT "\n",
+					DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
+
+			if (iph->daddr != server.ip &&
+					natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
+				NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, server=" TUPLE_FMT "\n",
+						DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_DROP;
+			}
+			if (server.encryption) {
+				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 			}
 		}
 	}
@@ -885,6 +918,7 @@ static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
+	struct natcap_option opt;
 
 	iph = ip_hdr(skb);
 
@@ -912,6 +946,10 @@ static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		//matched
 		NATCAP_DEBUG("(POSTROUTING)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
+
+		opt.port = tcph->source;
+		opt.ip = iph->saddr;
+		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 	} else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_ACCEPT;
@@ -927,7 +965,7 @@ static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	ret = natcap_tcp_encode(skb, iph->saddr, 0);
+	ret = natcap_tcp_encode(skb, &opt);
 	if (ret != 0) {
 		NATCAP_ERROR("(POSTROUTING)" DEBUG_FMT ": natcap_tcp_encode@server ret=%d\n",
 				DEBUG_ARG(iph,tcph), ret);
@@ -960,11 +998,12 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 #endif
 {
 	int ret = 0;
-	__be32 server_ip = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
+	struct natcap_option opt;
+	struct tuple server;
 
 	iph = ip_hdr(skb);
 
@@ -992,23 +1031,30 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		//matched
 		NATCAP_DEBUG("(OUTPUT)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
+
+		opt.port = tcph->dest;
+		opt.ip = iph->daddr;
+		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 	} else if (dst_need_natcap(iph->daddr, tcph->dest)) {
-		//server_ip = htonl((108<<24)|(61<<16)|(201<<8)|(222<<0));
-		//server_ip = htonl((198<<24)|(199<<16)|(118<<8)|(35<<0));
-		server_ip = natcap_server_select(iph->daddr, tcph->dest);
-		if (server_ip == 0) {
+		natcap_server_select(iph->daddr, tcph->dest, &server);
+		if (server.ip == 0) {
 			NATCAP_DEBUG("(OUTPUT)" DEBUG_FMT ": no server found\n", DEBUG_ARG(iph,tcph));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
-		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, before encode, server_ip=%pI4\n",
-				DEBUG_ARG(iph,tcph), &server_ip);
+
+		opt.port = tcph->dest;
+		opt.ip = iph->daddr;
+		opt.encryption = server.encryption;
+
+		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, before encode, server=" TUPLE_FMT "\n",
+				DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 	} else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
 
-	ret = natcap_tcp_encode(skb, iph->daddr, 1);
+	ret = natcap_tcp_encode(skb, &opt);
 
 	//reload
 	iph = ip_hdr(skb);
@@ -1025,11 +1071,14 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, after encode\n",
 				DEBUG_ARG(iph,tcph));
 		//setup DNAT
-		if (natcap_tcp_dnat_setup(ct, server_ip, tcph->dest) != NF_ACCEPT) {
-			NATCAP_ERROR("(OUTPUT)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, server_ip=%pI4\n",
-					DEBUG_ARG(iph,tcph), &server_ip);
+		if (natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
+			NATCAP_ERROR("(OUTPUT)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, server=" TUPLE_FMT "\n",
+					DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
+		}
+		if (opt.encryption) {
+			set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 		}
 	}
 
@@ -1062,7 +1111,7 @@ static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	__be32 server_ip = 0;
+	struct natcap_option opt;
 
 	iph = ip_hdr(skb);
 
@@ -1090,12 +1139,13 @@ static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		//matched
 		NATCAP_DEBUG("(INPUT)" DEBUG_FMT ": before decode\n", DEBUG_ARG(iph,tcph));
+		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 	} else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
 
-	ret = natcap_tcp_decode(skb, &server_ip);
+	ret = natcap_tcp_decode(skb, &opt);
 
 	//reload
 	iph = ip_hdr(skb);
