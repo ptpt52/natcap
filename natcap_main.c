@@ -51,7 +51,11 @@ static struct device *natcap_dev;
 
 static int debug = 0;
 module_param(debug, int, 0);
-MODULE_PARM_DESC(debug, "Debug level (0=none,1=fixme,2==debug,4=info,8=warn,16=error,...,31=all)");
+MODULE_PARM_DESC(debug, "Debug level (0=none,1=fixme,2==debug,4=info,8=warn,16=error,...,31=all) default=0");
+
+static int client_forward_mode = 0;
+module_param(client_forward_mode, int, 0);
+MODULE_PARM_DESC(client_forward_mode, "Client forward mode (1=enable, 0=disable) default=0");
 
 static unsigned char natcap_map[256] = {
 	152, 151, 106, 224,  13,  90, 137, 200, 178, 138, 212, 156, 238,  54,  44, 237,
@@ -785,6 +789,65 @@ static inline unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, 
 #endif
 }
 
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned int natcap_pre_in_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *));
+static unsigned int natcap_post_out_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *));
+static unsigned natcap_local_out_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *));
+static unsigned natcap_local_in_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *));
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *));
+static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *));
+static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *));
+static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *));
+#else
+static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state);
+static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state);
+static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state);
+static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state);
+#endif
+
+
 //*PREROUTING*->POSTROUTING
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_pre_in_hook(unsigned int hooknum,
@@ -811,6 +874,16 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 	struct tcphdr *tcph;
 	struct natcap_option opt;
 	struct tuple server;
+
+	if (client_forward_mode) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+		return natcap_local_out_hook(hooknum, skb, in, out, okfn);
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+		return natcap_local_out_hook(ops, skb, in, out, okfn);
+#else
+		return natcap_local_out_hook(ops, skb, state);
+#endif
+	}
 
 	iph = ip_hdr(skb);
 
@@ -922,6 +995,16 @@ static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
 	struct iphdr *iph;
 	struct tcphdr *tcph;
 	struct natcap_option opt;
+
+	if (client_forward_mode) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+		return natcap_local_in_hook(hooknum, skb, in, out, okfn);
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+		return natcap_local_in_hook(ops, skb, in, out, okfn);
+#else
+		return natcap_local_in_hook(ops, skb, state);
+#endif
+	}
 
 	iph = ip_hdr(skb);
 
