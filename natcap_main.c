@@ -392,6 +392,7 @@ static inline void natcap_server_select(__be32 ip, __be16 port, struct tuple *ds
 		dst->port = port;
 }
 
+static char natcap_ctl_buffer[PAGE_SIZE];
 static inline void *natcap_server_get(loff_t idx)
 {
 	if (idx < natcap_server_info.server_count[natcap_server_info.active_index])
@@ -401,13 +402,52 @@ static inline void *natcap_server_get(loff_t idx)
 
 static void *natcap_start(struct seq_file *m, loff_t *pos)
 {
-	return natcap_server_get(*pos);
+	int n = 0;
+
+	if ((*pos) == 0) {
+		n = snprintf(natcap_ctl_buffer,
+				sizeof(natcap_ctl_buffer) - 1,
+				"debug=%u\n"
+				"client_forward_mode=%u\n"
+				"\n"
+				"servers:\n",
+				debug, client_forward_mode);
+		natcap_ctl_buffer[n] = 0;
+		return natcap_ctl_buffer;
+	} else if ((*pos) > 0) {
+		struct tuple *dst = (struct tuple *)natcap_server_get((*pos) - 1);
+
+		if (dst) {
+			n = snprintf(natcap_ctl_buffer,
+					sizeof(natcap_ctl_buffer) - 1,
+					TUPLE_FMT "\n",
+					TUPLE_ARG(dst));
+			natcap_ctl_buffer[n] = 0;
+			return natcap_ctl_buffer;
+		}
+	}
+
+	return NULL;
 }
 
 static void *natcap_next(struct seq_file *m, void *v, loff_t *pos)
 {
+	int n;
+	struct tuple *dst;
+
 	(*pos)++;
-	return natcap_server_get(*pos);
+	if ((*pos) > 0) {
+		dst = (struct tuple *)natcap_server_get((*pos) - 1);
+		if (dst) {
+			n = snprintf(natcap_ctl_buffer,
+					sizeof(natcap_ctl_buffer) - 1,
+					TUPLE_FMT "\n",
+					TUPLE_ARG(dst));
+			natcap_ctl_buffer[n] = 0;
+			return natcap_ctl_buffer;
+		}
+	}
+	return NULL;
 }
 
 static void natcap_stop(struct seq_file *m, void *v)
@@ -416,8 +456,7 @@ static void natcap_stop(struct seq_file *m, void *v)
 
 static int natcap_show(struct seq_file *m, void *v)
 {
-	struct tuple *dst = (struct tuple *)v;
-	seq_printf(m, TUPLE_FMT "\n", TUPLE_ARG(dst));
+	seq_printf(m, "%s", (char *)v);
 	return 0;
 }
 
@@ -486,6 +525,14 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			return -EINVAL;
 		debug = d;
 		printk("natcap setting debug=%u\n", debug);
+		return cnt;
+	} else if (strncmp(data, "client_forward_mode=", 20) == 0) {
+		int d;
+		n = sscanf(data, "client_forward_mode=%u", &d);
+		if (n != 1)
+			return -EINVAL;
+		client_forward_mode = d;
+		printk("natcap setting client_forward_mode=%u\n", client_forward_mode);
 		return cnt;
 	}
 
