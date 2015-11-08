@@ -165,6 +165,11 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 	return;
 }
 
+#define NATCAP_println(fmt, ...) \
+	do { \
+		printk(KERN_NOTICE "{" MODULE_NAME "}:%s(): " pr_fmt(fmt) "\n", __FUNCTION__, ##__VA_ARGS__); \
+	} while (0)
+
 #define NATCAP_FIXME(fmt, ...) \
 	do { \
 		if (debug & 0x1) { \
@@ -407,10 +412,18 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 	if ((*pos) == 0) {
 		n = snprintf(natcap_ctl_buffer,
 				sizeof(natcap_ctl_buffer) - 1,
-				"debug=%u\n"
-				"client_forward_mode=%u\n"
+				"Usage:\n"
+				"    debug=Number -- set debug value\n"
+				"    client_forward_mode=Number -- set client forward mode value\n"
+				"    add [ip]:[port]-[e/o] -- add one server\n"
+				"    delete [ip]:[port]-[e/o] -- delete one server\n"
+				"    clean -- remove all existing server(s)\n"
 				"\n"
-				"servers:\n",
+				"Info:\n"
+				"    debug=%u\n"
+				"    client_forward_mode=%u\n"
+				"\n"
+				"Servers:\n",
 				debug, client_forward_mode);
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
@@ -441,7 +454,7 @@ static void *natcap_next(struct seq_file *m, void *v, loff_t *pos)
 		if (dst) {
 			n = snprintf(natcap_ctl_buffer,
 					sizeof(natcap_ctl_buffer) - 1,
-					TUPLE_FMT "\n",
+					"    " TUPLE_FMT "\n",
 					TUPLE_ARG(dst));
 			natcap_ctl_buffer[n] = 0;
 			return natcap_ctl_buffer;
@@ -475,68 +488,93 @@ static ssize_t natcap_read(struct file *file, char __user *buf, size_t buf_len, 
 static ssize_t natcap_write(struct file *file, const char __user *buf, size_t buf_len, loff_t *offset)
 {
 	int err;
-	int n;
+	int n, l;
 	char data[256];
 	int cnt = 256;
 	struct tuple dst;
-	char *handle;
 
-	if (buf_len > cnt)
-		return -ENOMEM;
 	if (buf_len < cnt)
 		cnt = buf_len;
 
 	if (copy_from_user(data, buf, cnt) != 0)
 		return -EACCES;
 
-	if ((handle = strnstr(data, "clean", cnt)) != NULL) {
-		natcap_server_cleanup();
-		return cnt;
+	n = 0;
+	while(n < cnt && (data[n] == ' ' || data[n] == '\n' || data[n] == '\t')) n++;
+	if (n) {
+		*offset += n;
+		return n;
 	}
 
-	if (strncmp(data, "add", 3) == 0) {
+	//make sure line ended with '\n' and line len <=256
+	l = 0;
+	while (l < cnt && data[l] != '\n') l++;
+	if (data[l] != '\n') {
+		data[l] = '\0';
+		NATCAP_println("err: line too long! data=[%s]", data);
+		return -EINVAL;
+	} else {
+		data[l] = '\0';
+		l++;
+	}
+
+	if (strncmp(data, "clean", 5) == 0) {
+		natcap_server_cleanup();
+		goto done;
+	} else if (strncmp(data, "add ", 4) == 0) {
 		unsigned int a, b, c, d, e;
 		char f;
 		n = sscanf(data, "add %u.%u.%u.%u:%u-%c", &a, &b, &c, &d, &e, &f);
-		if (n != 6 || e > 0xffff)
-			return -EINVAL;
-		dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
-		dst.port = htons(e);
-		dst.encryption = !!(f == 'e');
-		if ((err = natcap_server_add(&dst)) != 0)
-			return err;
-		return cnt;
+		if ( (n == 6 && e <= 0xffff) &&
+				(f == 'e' || f == 'o') &&
+				(((a & 0xff) == a) &&
+				 ((b & 0xff) == b) &&
+				 ((c & 0xff) == c) &&
+				 ((e & 0xff) == e)) ) {
+			dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+			dst.port = htons(e);
+			dst.encryption = !!(f == 'e');
+			if ((err = natcap_server_add(&dst)) == 0)
+				goto done;
+			NATCAP_println("natcap_server_add() failed ret=%d", err);
+		}
 	} else if (strncmp(data, "delete", 6) == 0) {
 		unsigned int a, b, c, d, e;
 		char f;
 		n = sscanf(data, "delete %u.%u.%u.%u:%u-%c", &a, &b, &c, &d, &e, &f);
-		if (n != 6 || e > 0xffff)
-			return -EINVAL;
-		dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
-		dst.port = htons(e);
-		dst.encryption = !!(f == 'e');
-		if ((err = natcap_server_delete(&dst)) != 0)
-			return err;
-		return cnt;
+		if ( (n == 6 && e <= 0xffff) &&
+				(f == 'e' || f == 'o') &&
+				(((a & 0xff) == a) &&
+				 ((b & 0xff) == b) &&
+				 ((c & 0xff) == c) &&
+				 ((e & 0xff) == e)) ) {
+			dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+			dst.port = htons(e);
+			dst.encryption = !!(f == 'e');
+			if ((err = natcap_server_delete(&dst)) == 0)
+				goto done;
+			NATCAP_println("natcap_server_delete() failed ret=%d", err);
+		}
 	} else if (strncmp(data, "debug=", 6) == 0) {
 		int d;
 		n = sscanf(data, "debug=%u", &d);
-		if (n != 1)
-			return -EINVAL;
-		debug = d;
-		printk("natcap setting debug=%u\n", debug);
-		return cnt;
+		if (n == 1) {
+			debug = d;
+			goto done;
+		}
 	} else if (strncmp(data, "client_forward_mode=", 20) == 0) {
 		int d;
 		n = sscanf(data, "client_forward_mode=%u", &d);
-		if (n != 1)
-			return -EINVAL;
-		client_forward_mode = d;
-		printk("natcap setting client_forward_mode=%u\n", client_forward_mode);
-		return cnt;
+		if (n == 1) {
+			client_forward_mode = d;
+			goto done;
+		}
 	}
 
-	return -EINVAL;
+	NATCAP_println("ignoring line[%s]", data);
+done:
+	*offset += l;
+	return l;
 }
 
 static int natcap_open(struct inode *inode, struct file *file)
@@ -1333,7 +1371,7 @@ static int __init natcap_init(void) {
 	int retval = 0;
 	dev_t devno;
 
-	printk(KERN_ALERT "natcap_init version: " NATCAP_VERSION "\n");
+	NATCAP_println("version: " NATCAP_VERSION "");
 
 	dnatcap_map_init();
 	natcap_server_init();
@@ -1345,12 +1383,12 @@ static int __init natcap_init(void) {
 		retval = alloc_chrdev_region(&devno, natcap_minor, number_of_devices, natcap_dev_name);
 	}
 	if (retval < 0) {
-		printk(KERN_WARNING "natcap: alloc_chrdev_region failed\n");
+		NATCAP_println("alloc_chrdev_region failed!");
 		return retval;
 	}
 	natcap_major = MAJOR(devno);
 	natcap_minor = MINOR(devno);
-	printk(KERN_INFO "natcap_major=%d, natcap_minor=%d\n", natcap_major, natcap_minor);
+	NATCAP_println("natcap_major=%d, natcap_minor=%d", natcap_major, natcap_minor);
 
 	cdev_init(&natcap_cdev, &natcap_fops);
 	natcap_cdev.owner = THIS_MODULE;
@@ -1358,13 +1396,13 @@ static int __init natcap_init(void) {
 
 	retval = cdev_add(&natcap_cdev, devno, 1);
 	if (retval) {
-		printk(KERN_NOTICE "error=%d adding chardev\n", retval);
+		NATCAP_println("adding chardev, error=%d", retval);
 		goto cdev_add_failed;
 	}
 
 	natcap_class = class_create(THIS_MODULE,"natcap_class");
 	if (IS_ERR(natcap_class)) {
-		printk(KERN_NOTICE "failed in creating class\n");
+		NATCAP_println("failed in creating class");
 		retval = -EINVAL;
 		goto class_create_failed;
 	}
@@ -1416,7 +1454,7 @@ cdev_add_failed:
 static void __exit natcap_exit(void) {
 	dev_t devno;
 
-	printk(KERN_ALERT "natcap_exit\n");
+	NATCAP_println("removing");
 
 	nf_unregister_hook(&natcap_pre_in_hook_ops);
 	nf_unregister_hook(&natcap_post_out_hook_ops);
@@ -1429,6 +1467,7 @@ static void __exit natcap_exit(void) {
 	class_destroy(natcap_class);
 	cdev_del(&natcap_cdev);
 	unregister_chrdev_region(devno, number_of_devices);
+	NATCAP_println("done");
 	return;
 }
 
