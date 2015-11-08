@@ -6,7 +6,7 @@
 #define _NATCAP_H_
 
 #define MODULE_NAME "natcap"
-#define NATCAP_VERSION "2.0.0"
+#define NATCAP_VERSION "2.0.1"
 
 #include <linux/ctype.h>
 #include <asm/types.h>
