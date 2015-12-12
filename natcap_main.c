@@ -530,7 +530,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				(((a & 0xff) == a) &&
 				 ((b & 0xff) == b) &&
 				 ((c & 0xff) == c) &&
-				 ((e & 0xff) == e)) ) {
+				 ((d & 0xff) == d)) ) {
 			dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 			dst.port = htons(e);
 			dst.encryption = !!(f == 'e');
@@ -547,7 +547,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				(((a & 0xff) == a) &&
 				 ((b & 0xff) == b) &&
 				 ((c & 0xff) == c) &&
-				 ((e & 0xff) == e)) ) {
+				 ((d & 0xff) == d)) ) {
 			dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 			dst.port = htons(e);
 			dst.encryption = !!(f == 'e');
