@@ -917,7 +917,7 @@ static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *));
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state);
@@ -928,6 +928,19 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state);
 static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state);
+#else
+static unsigned int natcap_pre_in_hook(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state);
+static unsigned int natcap_post_out_hook(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state);
+static unsigned int natcap_local_out_hook(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state);
+static unsigned int natcap_local_in_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state);
 #endif
@@ -946,8 +959,12 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+#else
+static unsigned int natcap_pre_in_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 #endif
@@ -965,8 +982,10 @@ static unsigned int natcap_pre_in_hook(const struct nf_hook_ops *ops,
 		return natcap_local_out_hook(hooknum, skb, in, out, okfn);
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 		return natcap_local_out_hook(ops, skb, in, out, okfn);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 		return natcap_local_out_hook(ops, skb, state);
+#else
+		return natcap_local_out_hook(priv, skb, state);
 #endif
 	}
 
@@ -1068,8 +1087,12 @@ static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+#else
+static unsigned int natcap_post_out_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 #endif
@@ -1086,8 +1109,10 @@ static unsigned int natcap_post_out_hook(const struct nf_hook_ops *ops,
 		return natcap_local_in_hook(hooknum, skb, in, out, okfn);
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 		return natcap_local_in_hook(ops, skb, in, out, okfn);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 		return natcap_local_in_hook(ops, skb, state);
+#else
+		return natcap_local_in_hook(priv, skb, state);
 #endif
 	}
 
@@ -1163,8 +1188,12 @@ static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+#else
+static unsigned int natcap_local_out_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 #endif
@@ -1273,8 +1302,12 @@ static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+#else
+static unsigned int natcap_local_in_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 #endif
@@ -1336,34 +1369,42 @@ static unsigned int natcap_local_in_hook(const struct nf_hook_ops *ops,
 }
 
 static struct nf_hook_ops natcap_pre_in_hook_ops = {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 	.owner = THIS_MODULE,
+#endif
 	.hook = natcap_pre_in_hook,
-	.hooknum = NF_INET_PRE_ROUTING,
 	.pf = PF_INET,
+	.hooknum = NF_INET_PRE_ROUTING,
 	.priority = NF_IP_PRI_CONNTRACK + 1,
 };
 
 static struct nf_hook_ops natcap_post_out_hook_ops = {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 	.owner = THIS_MODULE,
+#endif
 	.hook = natcap_post_out_hook,
-	.hooknum = NF_INET_POST_ROUTING,
 	.pf = PF_INET,
+	.hooknum = NF_INET_POST_ROUTING,
 	.priority = NF_IP_PRI_LAST,
 };
 
 static struct nf_hook_ops natcap_local_out_hook_ops = {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 	.owner = THIS_MODULE,
+#endif
 	.hook = natcap_local_out_hook,
-	.hooknum = NF_INET_LOCAL_OUT,
 	.pf = PF_INET,
+	.hooknum = NF_INET_LOCAL_OUT,
 	.priority = NF_IP_PRI_CONNTRACK + 1,
 };
 
 static struct nf_hook_ops natcap_local_in_hook_ops = {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 	.owner = THIS_MODULE,
+#endif
 	.hook = natcap_local_in_hook,
-	.hooknum = NF_INET_LOCAL_IN,
 	.pf = PF_INET,
+	.hooknum = NF_INET_LOCAL_IN,
 	.priority = NF_IP_PRI_LAST,
 };
 
