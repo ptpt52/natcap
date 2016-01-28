@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/bin/sh
 export PATH="/bin:/sbin:/usr/sbin:/usr/bin"
 
 OLDGW=`ip route show | grep '^default' | sed -e 's/default via \([^ ]*\).*/\1/'`
 
-if [ x$OLDGW == x ]; then
+if [ x$OLDGW = x ]; then
     exit 0
 fi
 
@@ -16,6 +16,10 @@ do
 	ip route add $line table $TID
 done
 
+cat $(cd `dirname $0` && pwd)/default.config | grep ^add | sed 's/:/ /g' | awk '{print $2}' | while read line
+do
+	ip route add $line/32 via $OLDGW metric 5 table $TID
+done
 
 ip route add 1.0.1.0/24 via $OLDGW metric 5 table $TID
 ip route add 1.0.2.0/23 via $OLDGW metric 5 table $TID
