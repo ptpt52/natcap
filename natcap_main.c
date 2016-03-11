@@ -250,6 +250,7 @@ static struct fib_table *natcap_fib_get_table(struct net *net, u32 id)
 	return NULL;
 }
 #else
+#error CONFIG_IP_MULTIPLE_TABLES must be enabled!!!
 #define natcap_fib_get_table fib_get_table
 #endif /* CONFIG_IP_MULTIPLE_TABLES */
 
