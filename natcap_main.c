@@ -259,10 +259,18 @@ static void dst_need_natcap_insert(__be32 daddr, __be16 dport)
 	int idx = ntohl(daddr) & DST_HASH_MASK;
 	if (test_and_set_bit(idx, natcap_dst_table_addr)) {
 		NATCAP_INFO("target %pI4:%u hash conflict @idx=%u, hashmask=%0x\n", &daddr, ntohs(dport), idx, DST_HASH_MASK);
-	}
-	else
-	{
+	} else {
 		NATCAP_INFO("target %pI4:%u hash insert @idx=%u, hashmask=%0x\n", &daddr, ntohs(dport), idx, DST_HASH_MASK);
+	}
+}
+
+static void dst_need_natcap_clear(__be32 daddr, __be16 dport)
+{
+	int idx = ntohl(daddr) & DST_HASH_MASK;
+	if (test_and_clear_bit(idx, natcap_dst_table_addr)) {
+		NATCAP_INFO("target %pI4:%u hash clear @idx=%u, hashmask=%0x\n", &daddr, ntohs(dport), idx, DST_HASH_MASK);
+	} else {
+		NATCAP_INFO("target %pI4:%u hash clear conflict @idx=%u, hashmask=%0x\n", &daddr, ntohs(dport), idx, DST_HASH_MASK);
 	}
 }
 
@@ -587,17 +595,13 @@ static inline int skb_rcsum_tcpudp(struct sk_buff *skb)
 	struct iphdr *iph = ip_hdr(skb);
 	int len = ntohs(iph->tot_len);
 
-	if (skb->len < len)
-	{
+	if (skb->len < len) {
 		return -1;
-	}
-	else if (len < (iph->ihl * 4))
-	{
+	} else if (len < (iph->ihl * 4)) {
 		return -1;
 	}
 
-	if (iph->protocol == IPPROTO_TCP)
-	{
+	if (iph->protocol == IPPROTO_TCP) {
 		struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 
 		if (skb->ip_summed == CHECKSUM_PARTIAL) {
@@ -617,9 +621,7 @@ static inline int skb_rcsum_tcpudp(struct sk_buff *skb)
 
 			skb->ip_summed = CHECKSUM_NONE;
 		}
-	}
-	else if (iph->protocol == IPPROTO_UDP)
-	{
+	} else if (iph->protocol == IPPROTO_UDP) {
 		struct udphdr *udph = (struct udphdr *)((void *)iph + iph->ihl*4);
 
 		if (skb->ip_summed == CHECKSUM_PARTIAL) {
@@ -639,9 +641,7 @@ static inline int skb_rcsum_tcpudp(struct sk_buff *skb)
 
 			skb->ip_summed = CHECKSUM_NONE;
 		}
-	}
-	else
-	{
+	} else {
 		return -1;
 	}
 
@@ -1259,6 +1259,23 @@ static unsigned int natcap_local_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
+	if (tcph->syn && !tcph->ack) {
+		if (test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
+			NATCAP_DEBUG(DEBUG_FMT "natcaped syn1\n", DEBUG_ARG(iph,tcph));
+			goto start_natcap;
+		}
+		if (test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
+			NATCAP_DEBUG(DEBUG_FMT "natcaped syn2\n", DEBUG_ARG(iph,tcph));
+			goto start_natcap;
+		}
+		if (test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
+			NATCAP_DEBUG(DEBUG_FMT "natcaped syn3\n", DEBUG_ARG(iph,tcph));
+			dst_need_natcap_clear(iph->daddr, tcph->dest);
+			goto start_natcap;
+		}
+	}
+
+start_natcap:
 	ret = natcap_tcp_encode(skb, &opt);
 
 	//reload
