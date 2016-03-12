@@ -15,6 +15,7 @@
 #include <linux/ip.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/vmalloc.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/netfilter.h>
@@ -265,6 +266,12 @@ static void dst_need_natcap_insert(__be32 daddr, __be16 dport)
 	}
 }
 
+static void natcap_dst_clear(void)
+{
+	if (natcap_dst_table_addr)
+		memset(natcap_dst_table_addr, 0, DST_HASH_SIZE);
+}
+
 #define MAX_NATCAP_SERVER 256
 struct natcap_server_info {
 	unsigned int active_index;
@@ -393,6 +400,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"    add [ip]:[port]-[e/o] -- add one server\n"
 				"    delete [ip]:[port]-[e/o] -- delete one server\n"
 				"    clean -- remove all existing server(s)\n"
+				"    clear_dst -- remove all existing target dst(s)\n"
 				"\n"
 				"Info:\n"
 				"    debug=%u\n"
@@ -495,6 +503,9 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 
 	if (strncmp(data, "clean", 5) == 0) {
 		natcap_server_cleanup();
+		goto done;
+	} else if (strncmp(data, "clear_dst", 9) == 0) {
+		natcap_dst_clear();
 		goto done;
 	} else if (strncmp(data, "add ", 4) == 0) {
 		unsigned int a, b, c, d, e;
