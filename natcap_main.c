@@ -258,7 +258,7 @@ static void dst_need_natcap_insert(__be32 daddr, __be16 dport)
 {
 	int idx = ntohl(daddr) & DST_HASH_MASK;
 	if (test_and_set_bit(idx, natcap_dst_table_addr)) {
-		NATCAP_INFO("target %pI4:%u hash conflict @idx=%u, hashmask=%0x\n", &daddr, ntohs(dport), idx, DST_HASH_MASK);
+		NATCAP_INFO("target %pI4:%u hash insert conflict @idx=%u, hashmask=%0x\n", &daddr, ntohs(dport), idx, DST_HASH_MASK);
 	} else {
 		NATCAP_INFO("target %pI4:%u hash insert @idx=%u, hashmask=%0x\n", &daddr, ntohs(dport), idx, DST_HASH_MASK);
 	}
