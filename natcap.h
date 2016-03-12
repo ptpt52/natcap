@@ -74,7 +74,6 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 }
 
 #define XT_MARK_NATCAP 0x99
-#define NATCAP_WHITELIST_TID 0x99
 
 /* @linux/netfilter/nf_conntrack_common.h */
 /* ct->status use bits:[18-16] for ecap status */
@@ -84,5 +83,11 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_BYPASS (1 << IPS_NATCAP_BYPASS_BIT)
 #define IPS_NATCAP_ENC_BIT 18
 #define IPS_NATCAP_ENC (1 << IPS_NATCAP_ENC_BIT)
+#define IPS_NATCAP_SYN1_BIT 19
+#define IPS_NATCAP_SYN1 (1 << IPS_NATCAP_SYN1_BIT)
+#define IPS_NATCAP_SYN2_BIT 20
+#define IPS_NATCAP_SYN2 (1 << IPS_NATCAP_SYN2_BIT)
+#define IPS_NATCAP_SYN3_BIT 21
+#define IPS_NATCAP_SYN3 (1 << IPS_NATCAP_SYN3_BIT)
 
 #endif /* _NATCAP_H_ */

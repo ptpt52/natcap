@@ -36,7 +36,6 @@
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
-#include <net/netfilter/nf_conntrack_extend.h>
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_core.h>
 #include <net/ip_fib.h>
@@ -224,71 +223,46 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 #define TUPLE_FMT "%pI4:%u-%c"
 #define TUPLE_ARG(t) &(t)->ip, ntohs((t)->port), (t)->encryption ? 'e' : 'o'
 
-#ifdef CONFIG_IP_MULTIPLE_TABLES
-static struct fib_table *natcap_fib_get_table(struct net *net, u32 id)
+#define DST_HASH_SIZE (1<<21) //2M bits
+#define DST_HASH_MASK (DST_HASH_SIZE*8 - 1)
+
+static void *natcap_dst_table_addr;
+
+static int inline natcap_dst_table_init(void)
 {
-	struct fib_table *tb;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
-	struct hlist_node *node;
-#endif
-	struct hlist_head *head;
-	unsigned int h;
+	natcap_dst_table_addr = vmalloc(DST_HASH_SIZE);
 
-	if (id == 0)
-		id = RT_TABLE_MAIN;
-	h = id & (FIB_TABLE_HASHSZ - 1);
-
-	head = &net->ipv4.fib_table_hash[h];
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
-	hlist_for_each_entry_rcu(tb, node, head, tb_hlist) {
-#else
-	hlist_for_each_entry_rcu(tb, head, tb_hlist) {
-#endif
-		if (tb->tb_id == id)
-			return tb;
-	}
-	return NULL;
+	if (natcap_dst_table_addr == NULL)
+		return -ENOMEM;
+	memset(natcap_dst_table_addr, 0, DST_HASH_SIZE);
+	return 0;
 }
-#else
-#error CONFIG_IP_MULTIPLE_TABLES must be enabled!!!
-#define natcap_fib_get_table fib_get_table
-#endif /* CONFIG_IP_MULTIPLE_TABLES */
 
-int dst_need_natcap(__be32 daddr, __be16 dport)
+static void natcap_dst_table_exit(void)
 {
-	u32 tid = NATCAP_WHITELIST_TID;
-	struct net *net = &init_net;
-	struct flowi4 fl4;
-	struct fib_result res;
-	struct fib_table *tb;
-
-	memset(&fl4, 0, sizeof(fl4));
-	fl4.daddr = daddr;
-	fl4.saddr = 0;
-	fl4.flowi4_scope = RT_SCOPE_UNIVERSE;
-
-	res.tclassid = 0;
-	res.fi = NULL;
-	res.table = NULL;
-
-	rcu_read_lock();
-
-	tb = natcap_fib_get_table(net, tid);
-	if (tb && fib_table_lookup(tb, &fl4, &res, FIB_LOOKUP_NOREF) == 0 &&
-			res.type == RTN_UNICAST) {
-		rcu_read_unlock();
-		return 0;
+	if (natcap_dst_table_addr != NULL)
+	{
+		vfree(natcap_dst_table_addr);
+		natcap_dst_table_addr = NULL;
 	}
-	tb = natcap_fib_get_table(net, RT_TABLE_LOCAL);
-	if (tb && fib_table_lookup(tb, &fl4, &res, FIB_LOOKUP_NOREF) == 0 &&
-			res.type == RTN_LOCAL) {
-		rcu_read_unlock();
-		return 0;
+}
+
+static int dst_need_natcap(__be32 daddr, __be16 dport)
+{
+	int idx = ntohl(daddr) & DST_HASH_MASK;
+	return test_bit(idx, natcap_dst_table_addr);
+}
+
+static void dst_need_natcap_insert(__be32 daddr, __be16 dport)
+{
+	int idx = ntohl(daddr) & DST_HASH_MASK;
+	if (test_and_set_bit(idx, natcap_dst_table_addr)) {
+		NATCAP_INFO("target %pI4:%u hash conflict @idx=%u, hashmask=%0x\n", &daddr, ntohs(dport), idx, DST_HASH_MASK);
 	}
-
-	rcu_read_unlock();
-
-	return 1;
+	else
+	{
+		NATCAP_INFO("target %pI4:%u hash insert @idx=%u, hashmask=%0x\n", &daddr, ntohs(dport), idx, DST_HASH_MASK);
+	}
 }
 
 #define MAX_NATCAP_SERVER 256
@@ -1220,6 +1194,19 @@ static unsigned int natcap_local_out_hook(void *priv,
 	}
 
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+		if (tcph->syn && !tcph->ack &&
+				test_bit(IPS_NATCAP_SYN1_BIT, &ct->status) &&
+				!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
+			NATCAP_DEBUG(DEBUG_FMT "syn2\n", DEBUG_ARG(iph,tcph));
+			return NF_ACCEPT;
+		}
+		if (tcph->syn && !tcph->ack &&
+				test_bit(IPS_NATCAP_SYN2_BIT, &ct->status) &&
+				!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
+			NATCAP_DEBUG(DEBUG_FMT "syn3 inserting target\n", DEBUG_ARG(iph,tcph));
+			dst_need_natcap_insert(iph->daddr, tcph->dest);
+			return NF_ACCEPT;
+		}
 		return NF_ACCEPT;
 	}
 
@@ -1254,6 +1241,10 @@ static unsigned int natcap_local_out_hook(void *priv,
 				DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 	} else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+		if (tcph->syn && !tcph->ack) {
+			set_bit(IPS_NATCAP_SYN1_BIT, &ct->status);
+			NATCAP_DEBUG(DEBUG_FMT "syn1\n", DEBUG_ARG(iph,tcph));
+		}
 		return NF_ACCEPT;
 	}
 
@@ -1455,6 +1446,9 @@ static int __init natcap_init(void) {
 		goto device_create_failed;
 	}
 
+	retval = natcap_dst_table_init();
+	if (retval != 0)
+		goto err;
 	retval = nf_register_hook(&natcap_local_in_hook_ops);
 	if (retval != 0)
 		goto err0;
@@ -1481,6 +1475,8 @@ err2:
 err1:
 	nf_unregister_hook(&natcap_local_in_hook_ops);
 err0:
+	natcap_dst_table_exit();
+err:
 
 	device_destroy(natcap_class, devno);
 device_create_failed:
@@ -1503,6 +1499,8 @@ static void __exit natcap_exit(void) {
 
 	nf_unregister_hook(&natcap_local_out_hook_ops);
 	nf_unregister_hook(&natcap_local_in_hook_ops);
+
+	natcap_dst_table_exit();
 
 	devno = MKDEV(natcap_major, natcap_minor);
 	device_destroy(natcap_class, devno);
