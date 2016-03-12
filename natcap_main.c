@@ -1205,18 +1205,16 @@ static unsigned int natcap_local_out_hook(void *priv,
 	}
 
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
-		if (tcph->syn && !tcph->ack &&
-				test_bit(IPS_NATCAP_SYN1_BIT, &ct->status) &&
-				!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
-			NATCAP_DEBUG(DEBUG_FMT "syn2\n", DEBUG_ARG(iph,tcph));
-			return NF_ACCEPT;
-		}
-		if (tcph->syn && !tcph->ack &&
-				test_bit(IPS_NATCAP_SYN2_BIT, &ct->status) &&
-				!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
-			NATCAP_DEBUG(DEBUG_FMT "syn3 inserting target\n", DEBUG_ARG(iph,tcph));
-			dst_need_natcap_insert(iph->daddr, tcph->dest);
-			return NF_ACCEPT;
+		if (tcph->syn && !tcph->ack && test_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
+			if (!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
+				NATCAP_DEBUG(DEBUG_FMT "bypass syn2\n", DEBUG_ARG(iph,tcph));
+				return NF_ACCEPT;
+			}
+			if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
+				NATCAP_DEBUG(DEBUG_FMT "bypass syn3 inserting target\n", DEBUG_ARG(iph,tcph));
+				dst_need_natcap_insert(iph->daddr, tcph->dest);
+				return NF_ACCEPT;
+			}
 		}
 		return NF_ACCEPT;
 	}
@@ -1254,21 +1252,21 @@ static unsigned int natcap_local_out_hook(void *priv,
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		if (tcph->syn && !tcph->ack) {
 			set_bit(IPS_NATCAP_SYN1_BIT, &ct->status);
-			NATCAP_DEBUG(DEBUG_FMT "syn1\n", DEBUG_ARG(iph,tcph));
+			NATCAP_DEBUG(DEBUG_FMT "bypass syn1\n", DEBUG_ARG(iph,tcph));
 		}
 		return NF_ACCEPT;
 	}
 
 	if (tcph->syn && !tcph->ack) {
-		if (test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
+		if (!test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
 			NATCAP_DEBUG(DEBUG_FMT "natcaped syn1\n", DEBUG_ARG(iph,tcph));
 			goto start_natcap;
 		}
-		if (test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
+		if (!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
 			NATCAP_DEBUG(DEBUG_FMT "natcaped syn2\n", DEBUG_ARG(iph,tcph));
 			goto start_natcap;
 		}
-		if (test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
+		if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
 			NATCAP_DEBUG(DEBUG_FMT "natcaped syn3\n", DEBUG_ARG(iph,tcph));
 			dst_need_natcap_clear(iph->daddr, tcph->dest);
 			goto start_natcap;
