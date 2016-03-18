@@ -1216,6 +1216,10 @@ static unsigned int natcap_local_out_hook(void *priv,
 				return NF_ACCEPT;
 			}
 		}
+		if (tcph->rst && CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+			NATCAP_DEBUG(DEBUG_FMT "bypass rst inserting target\n", DEBUG_ARG(iph,tcph));
+			dst_need_natcap_insert(iph->daddr, tcph->dest);
+		}
 		return NF_ACCEPT;
 	}
 
