@@ -172,14 +172,14 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 
 #define NATCAP_FIXME(fmt, ...) \
 	do { \
-		if (debug & 0x1) { \
+		if (debug & 0x10) { \
 			printk(KERN_ALERT "fixme: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_DEBUG(fmt, ...) \
 	do { \
-		if (debug & 0x2) { \
+		if (debug & 0x8) { \
 			printk(KERN_ALERT "debug: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
@@ -193,14 +193,14 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 
 #define NATCAP_WARN(fmt, ...) \
 	do { \
-		if (debug & 0x8) { \
+		if (debug & 0x2) { \
 			printk(KERN_ALERT "warning: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_ERROR(fmt, ...) \
 	do { \
-		if (debug & 0x16) { \
+		if (debug & 0x1) { \
 			printk(KERN_ALERT "error: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
@@ -1010,7 +1010,7 @@ static unsigned int natcap_pre_in_hook(void *priv,
 		tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 	} else {
 		if (!tcph->syn || tcph->ack) {
-			NATCAP_DEBUG("(PREROUTING)" DEBUG_FMT ": first packet in but not syn\n", DEBUG_ARG(iph,tcph));
+			NATCAP_WARN("(PREROUTING)" DEBUG_FMT ": first packet in but not syn\n", DEBUG_ARG(iph,tcph));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
@@ -1048,7 +1048,7 @@ static unsigned int natcap_pre_in_hook(void *priv,
 	}
 
 	if (ret != 0) {
-		NATCAP_WARN("(PREROUTING)" DEBUG_FMT ": natcap_tcp_decode ret = %d\n",
+		NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": natcap_tcp_decode ret = %d\n",
 			DEBUG_ARG(iph,tcph), ret);
 		return NF_DROP;
 	}
@@ -1212,13 +1212,13 @@ static unsigned int natcap_local_out_hook(void *priv,
 				return NF_ACCEPT;
 			}
 			if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
-				NATCAP_DEBUG(DEBUG_FMT "bypass syn3 inserting target\n", DEBUG_ARG(iph,tcph));
+				NATCAP_INFO(DEBUG_FMT "bypass syn3 inserting target\n", DEBUG_ARG(iph,tcph));
 				dst_need_natcap_insert(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 				return NF_ACCEPT;
 			}
 		}
 		if (tcph->rst && CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
-			NATCAP_DEBUG(DEBUG_FMT "bypass rst inserting target\n", DEBUG_ARG(iph,tcph));
+			NATCAP_INFO(DEBUG_FMT "bypass rst inserting target\n", DEBUG_ARG(iph,tcph));
 			dst_need_natcap_insert(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 			return NF_ACCEPT;
 		}
@@ -1273,7 +1273,7 @@ static unsigned int natcap_local_out_hook(void *priv,
 			goto start_natcap;
 		}
 		if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
-			NATCAP_DEBUG(DEBUG_FMT "natcaped syn3\n", DEBUG_ARG(iph,tcph));
+			NATCAP_INFO(DEBUG_FMT "natcaped syn3\n", DEBUG_ARG(iph,tcph));
 			dst_need_natcap_clear(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 			goto start_natcap;
 		}
@@ -1382,7 +1382,7 @@ static unsigned int natcap_local_in_hook(void *priv,
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	if (ret != 0) {
-		NATCAP_WARN("(INPUT)" DEBUG_FMT ": natcap_tcp_decode ret = %d\n",
+		NATCAP_ERROR("(INPUT)" DEBUG_FMT ": natcap_tcp_decode ret = %d\n",
 			DEBUG_ARG(iph,tcph), ret);
 		return NF_DROP;
 	}
