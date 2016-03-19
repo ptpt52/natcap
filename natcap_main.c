@@ -48,15 +48,15 @@ const char *natcap_dev_name = "natcap_ctl";
 static struct class *natcap_class;
 static struct device *natcap_dev;
 
-static int debug = 0;
+static unsigned int debug = 0;
 module_param(debug, int, 0);
 MODULE_PARM_DESC(debug, "Debug level (0=none,1=error,2=warn,4=info,8=debug,16=fixme,...,31=all) default=0");
 
-static int client_forward_mode = 0;
+static unsigned int client_forward_mode = 0;
 module_param(client_forward_mode, int, 0);
 MODULE_PARM_DESC(client_forward_mode, "Client forward mode (1=enable, 0=disable) default=0");
 
-static int server_seed = 0;
+static unsigned int server_seed = 0;
 module_param(server_seed, int, 0);
 MODULE_PARM_DESC(server_seed, "Server side seed number for encode");
 
@@ -440,9 +440,10 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"Info:\n"
 				"    debug=%u\n"
 				"    client_forward_mode=%u\n"
+				"    server_seed=%u"
 				"\n"
 				"Servers:\n",
-				debug, client_forward_mode);
+				debug, client_forward_mode, server_seed);
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
