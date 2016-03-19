@@ -429,21 +429,27 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 	if ((*pos) == 0) {
 		n = snprintf(natcap_ctl_buffer,
 				sizeof(natcap_ctl_buffer) - 1,
-				"Usage:\n"
-				"    debug=Number -- set debug value\n"
-				"    client_forward_mode=Number -- set client forward mode value\n"
-				"    add [ip]:[port]-[e/o] -- add one server\n"
-				"    delete [ip]:[port]-[e/o] -- delete one server\n"
-				"    clean -- remove all existing server(s)\n"
-				"    clear_dst -- remove all existing target dst(s)\n"
+				"# Usage:\n"
+				"#    debug=Number -- set debug value\n"
+				"#    client_forward_mode=Number -- set client forward mode value\n"
+				"#    add [ip]:[port]-[e/o] -- add one server\n"
+				"#    delete [ip]:[port]-[e/o] -- delete one server\n"
+				"#    clean -- remove all existing server(s)\n"
+				"#    clear_dst -- remove all existing target dst(s)\n"
+				"#\n"
+				"# Info:\n"
+				"#    server_seed=%u\n"
+				"#    debug=%u\n"
+				"#    client_forward_mode=%u\n"
+				"#\n"
+				"# Reload cmd:\n"
 				"\n"
-				"Info:\n"
-				"    debug=%u\n"
-				"    client_forward_mode=%u\n"
-				"    server_seed=%u"
-				"\n"
-				"Servers:\n",
-				debug, client_forward_mode, server_seed);
+				"clean\n"
+				"debug=%u\n"
+				"client_forward_mode=%u\n"
+				"\n",
+				server_seed, debug, client_forward_mode,
+				debug, client_forward_mode);
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -452,7 +458,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		if (dst) {
 			n = snprintf(natcap_ctl_buffer,
 					sizeof(natcap_ctl_buffer) - 1,
-					TUPLE_FMT "\n",
+					"add " TUPLE_FMT "\n",
 					TUPLE_ARG(dst));
 			natcap_ctl_buffer[n] = 0;
 			return natcap_ctl_buffer;
@@ -473,7 +479,7 @@ static void *natcap_next(struct seq_file *m, void *v, loff_t *pos)
 		if (dst) {
 			n = snprintf(natcap_ctl_buffer,
 					sizeof(natcap_ctl_buffer) - 1,
-					"    " TUPLE_FMT "\n",
+					"add " TUPLE_FMT "\n",
 					TUPLE_ARG(dst));
 			natcap_ctl_buffer[n] = 0;
 			return natcap_ctl_buffer;
