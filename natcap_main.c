@@ -224,60 +224,80 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 #define TUPLE_FMT "%pI4:%u-%c"
 #define TUPLE_ARG(t) &(t)->ip, ntohs((t)->port), (t)->encryption ? 'e' : 'o'
 
-#define DST_HASH_SIZE (1<<21) //2M bits
-#define DST_HASH_MASK (DST_HASH_SIZE*8 - 1)
+#define DST_HASH_SIZE (0x01000000 >> 3) //2M bits [00FF-FFFF]
+#define DST_HASH_MASK (0x00FFFFFF)
 
-static void *natcap_dst_table_addr;
+static void *natcap_dst_table_ptr;
 
 static int inline natcap_dst_table_init(void)
 {
-	natcap_dst_table_addr = vmalloc(DST_HASH_SIZE);
+	natcap_dst_table_ptr = vmalloc(DST_HASH_SIZE * 2);
 
-	if (natcap_dst_table_addr == NULL)
+	if (natcap_dst_table_ptr == NULL)
 		return -ENOMEM;
-	memset(natcap_dst_table_addr, 0, DST_HASH_SIZE);
+	memset(natcap_dst_table_ptr, 0, DST_HASH_SIZE * 2);
 	return 0;
 }
 
 static void natcap_dst_table_exit(void)
 {
-	if (natcap_dst_table_addr != NULL)
+	if (natcap_dst_table_ptr != NULL)
 	{
-		vfree(natcap_dst_table_addr);
-		natcap_dst_table_addr = NULL;
+		vfree(natcap_dst_table_ptr);
+		natcap_dst_table_ptr = NULL;
 	}
 }
 
 static int dst_need_natcap(__be32 daddr, __be16 dport)
 {
-	int idx = ntohl(daddr) & DST_HASH_MASK;
-	return test_bit(idx, natcap_dst_table_addr);
+	unsigned int idx0, idx1;
+	idx0 = ntohl(daddr);
+	idx1 = ((idx0 & 0xFF000000) >> 24) | ((idx0 & 0xFF000000) >> 16) | ((idx0 & 0xFF000000) >> 8);
+	idx0 = idx0 & 0x00FFFFFF;
+	idx1 = (idx1 ^ idx0) & 0x00FFFFFF;
+
+	return test_bit(idx0, natcap_dst_table_ptr) && test_bit(idx1, natcap_dst_table_ptr + DST_HASH_SIZE);
 }
 
 static void dst_need_natcap_insert(__be32 daddr, __be16 dport)
 {
-	int idx = ntohl(daddr) & DST_HASH_MASK;
-	if (test_and_set_bit(idx, natcap_dst_table_addr)) {
-		NATCAP_INFO("target %pI4:%u hash insert conflict @idx=%u, hashmask=%0x\n", &daddr, ntohs(dport), idx, DST_HASH_MASK);
-	} else {
-		NATCAP_INFO("target %pI4:%u hash insert @idx=%u, hashmask=%0x\n", &daddr, ntohs(dport), idx, DST_HASH_MASK);
+	unsigned int idx0, idx1;
+	idx0 = ntohl(daddr);
+	idx1 = ((idx0 & 0xFF000000) >> 24) | ((idx0 & 0xFF000000) >> 16) | ((idx0 & 0xFF000000) >> 8);
+	idx0 = idx0 & 0x00FFFFFF;
+	idx1 = (idx1 ^ idx0) & 0x00FFFFFF;
+
+	if (!test_and_set_bit(idx0, natcap_dst_table_ptr)) {
+		if (!test_and_set_bit(idx1, natcap_dst_table_ptr + DST_HASH_SIZE)) {
+			NATCAP_INFO("target %pI4:%u hash insert @idx=%u,%u\n", &daddr, ntohs(dport), idx0, idx1);
+			return;
+		}
 	}
+
+	NATCAP_INFO("target %pI4:%u hash insert conflict @idx=%u,%u\n", &daddr, ntohs(dport), idx0, idx1);
 }
 
 static void dst_need_natcap_clear(__be32 daddr, __be16 dport)
 {
-	int idx = ntohl(daddr) & DST_HASH_MASK;
-	if (test_and_clear_bit(idx, natcap_dst_table_addr)) {
-		NATCAP_INFO("target %pI4:%u hash clear @idx=%u, hashmask=%0x\n", &daddr, ntohs(dport), idx, DST_HASH_MASK);
-	} else {
-		NATCAP_INFO("target %pI4:%u hash clear conflict @idx=%u, hashmask=%0x\n", &daddr, ntohs(dport), idx, DST_HASH_MASK);
+	unsigned int idx0, idx1;
+	idx0 = ntohl(daddr);
+	idx1 = ((idx0 & 0xFF000000) >> 24) | ((idx0 & 0xFF000000) >> 16) | ((idx0 & 0xFF000000) >> 8);
+	idx0 = idx0 & 0x00FFFFFF;
+	idx1 = (idx1 ^ idx0) & 0x00FFFFFF;
+
+	if (test_and_clear_bit(idx0, natcap_dst_table_ptr)) {
+		if (test_and_clear_bit(idx1, natcap_dst_table_ptr + DST_HASH_SIZE)) {
+			NATCAP_INFO("target %pI4:%u hash clear @idx=%u,%u\n", &daddr, ntohs(dport), idx0, idx1);
+		}
 	}
+
+	NATCAP_INFO("target %pI4:%u hash clear conflict @idx=%u,%u\n", &daddr, ntohs(dport), idx0, idx1);
 }
 
 static void natcap_dst_clear(void)
 {
-	if (natcap_dst_table_addr)
-		memset(natcap_dst_table_addr, 0, DST_HASH_SIZE);
+	if (natcap_dst_table_ptr)
+		memset(natcap_dst_table_ptr, 0, DST_HASH_SIZE * 2);
 }
 
 #define MAX_NATCAP_SERVER 256
@@ -1217,11 +1237,13 @@ static unsigned int natcap_local_out_hook(void *priv,
 				return NF_ACCEPT;
 			}
 		}
+#if 0
 		if (tcph->rst && CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 			NATCAP_INFO(DEBUG_FMT "bypass rst inserting target\n", DEBUG_ARG(iph,tcph));
 			dst_need_natcap_insert(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 			return NF_ACCEPT;
 		}
+#endif
 		return NF_ACCEPT;
 	}
 
