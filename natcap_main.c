@@ -39,7 +39,6 @@
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_core.h>
-#include <net/ip_fib.h>
 
 static int natcap_major = 0;
 static int natcap_minor = 0;
@@ -56,6 +55,10 @@ MODULE_PARM_DESC(debug, "Debug level (0=none,1=error,2=warn,4=info,8=debug,16=fi
 static int client_forward_mode = 0;
 module_param(client_forward_mode, int, 0);
 MODULE_PARM_DESC(client_forward_mode, "Client forward mode (1=enable, 0=disable) default=0");
+
+static int server_seed = 0;
+module_param(server_seed, int, 0);
+MODULE_PARM_DESC(server_seed, "Server side seed number for encode");
 
 static unsigned char natcap_map[256] = {
 	152, 151, 106, 224,  13,  90, 137, 200, 178, 138, 212, 156, 238,  54,  44, 237,
@@ -80,6 +83,10 @@ static unsigned char dnatcap_map[256];
 static void dnatcap_map_init(void)
 {
 	int i;
+
+	for (i = 0; i < 256; i++) {
+		natcap_map[i] = (natcap_map[i] + server_seed) & 0xff;
+	}
 
 	for (i = 0; i < 256; i++) {
 		dnatcap_map[natcap_map[i]] = i;
