@@ -51,7 +51,7 @@ static struct device *natcap_dev;
 
 static int debug = 0;
 module_param(debug, int, 0);
-MODULE_PARM_DESC(debug, "Debug level (0=none,1=fixme,2==debug,4=info,8=warn,16=error,...,31=all) default=0");
+MODULE_PARM_DESC(debug, "Debug level (0=none,1=error,2=warn,4=info,8=debug,16=fixme,...,31=all) default=0");
 
 static int client_forward_mode = 0;
 module_param(client_forward_mode, int, 0);
