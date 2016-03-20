@@ -255,7 +255,7 @@ static void natcap_dst_table_exit(void)
 	}
 }
 
-static int dst_need_natcap(__be32 daddr, __be16 dport)
+static int is_natcap_dst(__be32 daddr, __be16 dport)
 {
 	unsigned int idx0, idx1;
 	idx0 = ntohl(daddr);
@@ -266,7 +266,7 @@ static int dst_need_natcap(__be32 daddr, __be16 dport)
 	return test_bit(idx0, natcap_dst_table_ptr) && test_bit(idx1, natcap_dst_table_ptr + DST_HASH_SIZE);
 }
 
-static void dst_need_natcap_insert(__be32 daddr, __be16 dport)
+static void natcap_dst_table_add(__be32 daddr, __be16 dport)
 {
 	unsigned int idx0, idx1;
 	idx0 = ntohl(daddr);
@@ -284,7 +284,7 @@ static void dst_need_natcap_insert(__be32 daddr, __be16 dport)
 	NATCAP_INFO("target %pI4:%u hash insert conflict @idx=%u,%u\n", &daddr, ntohs(dport), idx0, idx1);
 }
 
-static void dst_need_natcap_clear(__be32 daddr, __be16 dport)
+static void natcap_dst_table_del(__be32 daddr, __be16 dport)
 {
 	unsigned int idx0, idx1;
 	idx0 = ntohl(daddr);
@@ -408,6 +408,20 @@ static inline void natcap_server_select(__be32 ip, __be16 port, struct tuple *ds
 	tuple_copy(dst, &nsi->server[m][hash]);
 	if (dst->ip != 0 && dst->port == 0)
 		dst->port = port;
+}
+
+static inline int is_natcap_server(__be32 ip)
+{
+	struct natcap_server_info *nsi = &natcap_server_info;
+	unsigned int m = nsi->active_index;
+	unsigned int i;
+
+	for (i = 0; i < nsi->server_count[m]; i++) {
+		if (nsi->server[m][i].ip == ip)
+			return 1;
+	}
+
+	return 0;
 }
 
 static char natcap_ctl_buffer[PAGE_SIZE];
@@ -1256,19 +1270,20 @@ static unsigned int natcap_local_out_hook(void *priv,
 		if (tcph->syn && !tcph->ack && test_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
 			if (!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
 				NATCAP_DEBUG(DEBUG_FMT "bypass syn2\n", DEBUG_ARG(iph,tcph));
-				dst_need_natcap_insert(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 				return NF_ACCEPT;
 			}
 			if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
-				NATCAP_INFO(DEBUG_FMT "bypass syn3 inserting target\n", DEBUG_ARG(iph,tcph));
-				dst_need_natcap_insert(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+				if (!is_natcap_server(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip)) {
+					NATCAP_INFO(DEBUG_FMT "bypass syn3 inserting target\n", DEBUG_ARG(iph,tcph));
+					natcap_dst_table_add(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+				}
 				return NF_ACCEPT;
 			}
 		}
 #if 0
 		if (tcph->rst && CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 			NATCAP_INFO(DEBUG_FMT "bypass rst inserting target\n", DEBUG_ARG(iph,tcph));
-			dst_need_natcap_insert(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+			natcap_dst_table_add(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 			return NF_ACCEPT;
 		}
 #endif
@@ -1289,7 +1304,7 @@ static unsigned int natcap_local_out_hook(void *priv,
 		opt.port = tcph->dest;
 		opt.ip = iph->daddr;
 		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-	} else if (dst_need_natcap(iph->daddr, tcph->dest)) {
+	} else if (is_natcap_dst(iph->daddr, tcph->dest)) {
 		natcap_server_select(iph->daddr, tcph->dest, &server);
 		if (server.ip == 0) {
 			NATCAP_DEBUG("(OUTPUT)" DEBUG_FMT ": no server found\n", DEBUG_ARG(iph,tcph));
@@ -1324,7 +1339,7 @@ static unsigned int natcap_local_out_hook(void *priv,
 		}
 		if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
 			NATCAP_INFO(DEBUG_FMT "natcaped syn3\n", DEBUG_ARG(iph,tcph));
-			dst_need_natcap_clear(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+			natcap_dst_table_del(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 			goto start_natcap;
 		}
 	}
