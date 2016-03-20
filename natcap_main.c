@@ -1267,26 +1267,25 @@ static unsigned int natcap_local_out_hook(void *priv,
 	}
 
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+		if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+			if (tcph->rst) {
+				NATCAP_INFO(DEBUG_FMT ": tcp rst by server\n", DEBUG_ARG(iph,tcph));
+			}
+			return NF_ACCEPT;
+		}
 		if (tcph->syn && !tcph->ack && test_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
 			if (!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
-				NATCAP_DEBUG(DEBUG_FMT "bypass syn2\n", DEBUG_ARG(iph,tcph));
+				NATCAP_DEBUG(DEBUG_FMT ": bypass syn2\n", DEBUG_ARG(iph,tcph));
 				return NF_ACCEPT;
 			}
 			if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
 				if (!is_natcap_server(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip)) {
-					NATCAP_INFO(DEBUG_FMT "bypass syn3 inserting target\n", DEBUG_ARG(iph,tcph));
+					NATCAP_INFO(DEBUG_FMT ": bypass syn3 add target\n", DEBUG_ARG(iph,tcph));
 					natcap_dst_table_add(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 				}
 				return NF_ACCEPT;
 			}
 		}
-#if 0
-		if (tcph->rst && CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
-			NATCAP_INFO(DEBUG_FMT "bypass rst inserting target\n", DEBUG_ARG(iph,tcph));
-			natcap_dst_table_add(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
-			return NF_ACCEPT;
-		}
-#endif
 		return NF_ACCEPT;
 	}
 
@@ -1323,22 +1322,22 @@ static unsigned int natcap_local_out_hook(void *priv,
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		if (tcph->syn && !tcph->ack) {
 			set_bit(IPS_NATCAP_SYN1_BIT, &ct->status);
-			NATCAP_DEBUG(DEBUG_FMT "bypass syn1\n", DEBUG_ARG(iph,tcph));
+			NATCAP_DEBUG(DEBUG_FMT ": bypass syn1\n", DEBUG_ARG(iph,tcph));
 		}
 		return NF_ACCEPT;
 	}
 
 	if (tcph->syn && !tcph->ack) {
 		if (!test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
-			NATCAP_DEBUG(DEBUG_FMT "natcaped syn1\n", DEBUG_ARG(iph,tcph));
+			NATCAP_DEBUG(DEBUG_FMT ": natcaped syn1\n", DEBUG_ARG(iph,tcph));
 			goto start_natcap;
 		}
 		if (!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
-			NATCAP_DEBUG(DEBUG_FMT "natcaped syn2\n", DEBUG_ARG(iph,tcph));
+			NATCAP_DEBUG(DEBUG_FMT ": natcaped syn2\n", DEBUG_ARG(iph,tcph));
 			goto start_natcap;
 		}
 		if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
-			NATCAP_INFO(DEBUG_FMT "natcaped syn3\n", DEBUG_ARG(iph,tcph));
+			NATCAP_INFO(DEBUG_FMT ": natcaped syn3 del target\n", DEBUG_ARG(iph,tcph));
 			natcap_dst_table_del(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 			goto start_natcap;
 		}
