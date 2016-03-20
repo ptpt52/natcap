@@ -339,19 +339,15 @@ static inline int natcap_server_add(const struct tuple *dst)
 
 	/* all dst(s) are stored from MAX to MIN */
 	j = 0;
-	for (i = 0; i < nsi->server_count[m]; i++) {
-		if (tuple_lt(dst, &nsi->server[m][i])) {
-			tuple_copy(&nsi->server[n][j++], &nsi->server[m][i]);
-		} else {
-			tuple_copy(&nsi->server[n][j++], dst);
-			tuple_copy(&nsi->server[n][j++], &nsi->server[m][i]);
-		}
+	for (i = 0; i < nsi->server_count[m] && tuple_lt(dst, &nsi->server[m][i]); i++) {
+		tuple_copy(&nsi->server[n][j++], &nsi->server[m][i]);
 	}
-	if (j == i) {
-		tuple_copy(&nsi->server[n][j++], dst);
+	tuple_copy(&nsi->server[n][j++], dst);
+	for (; i < nsi->server_count[m]; i++) {
+		tuple_copy(&nsi->server[n][j++], &nsi->server[m][i]);
 	}
-	nsi->server_count[n] = j;
 
+	nsi->server_count[n] = j;
 	nsi->active_index = n;
 
 	return 0;
@@ -512,34 +508,42 @@ static ssize_t natcap_read(struct file *file, char __user *buf, size_t buf_len, 
 
 static ssize_t natcap_write(struct file *file, const char __user *buf, size_t buf_len, loff_t *offset)
 {
-	int err;
+	int err = 0;
 	int n, l;
-	char data[256];
-	int cnt = 256;
 	struct tuple dst;
+	int cnt = 256;
+	static char data[256];
+	static int data_left = 0;
 
+	cnt -= data_left;
 	if (buf_len < cnt)
 		cnt = buf_len;
 
-	if (copy_from_user(data, buf, cnt) != 0)
+	if (copy_from_user(data + data_left, buf, cnt) != 0)
 		return -EACCES;
 
 	n = 0;
 	while(n < cnt && (data[n] == ' ' || data[n] == '\n' || data[n] == '\t')) n++;
 	if (n) {
 		*offset += n;
+		data_left = 0;
 		return n;
 	}
 
 	//make sure line ended with '\n' and line len <=256
 	l = 0;
-	while (l < cnt && data[l] != '\n') l++;
-	if (data[l] != '\n') {
-		data[l] = '\0';
-		NATCAP_println("err: line too long! data=[%s]", data);
-		return -EINVAL;
+	while (l < cnt && data[l + data_left] != '\n') l++;
+	if (l >= cnt) {
+		data_left += l;
+		if (data_left >= 256) {
+			NATCAP_println("err: too long a line");
+			data_left = 0;
+			return -EINVAL;
+		}
+		goto done;
 	} else {
-		data[l] = '\0';
+		data[l + data_left] = '\0';
+		data_left = 0;
 		l++;
 	}
 
@@ -600,6 +604,10 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	}
 
 	NATCAP_println("ignoring line[%s]", data);
+	if (err != 0) {
+		return err;
+	}
+
 done:
 	*offset += l;
 	return l;
@@ -607,7 +615,13 @@ done:
 
 static int natcap_open(struct inode *inode, struct file *file)
 {
-	return seq_open(file, &natcap_seq_ops);
+	int ret = seq_open(file, &natcap_seq_ops);
+	if (ret)
+		return ret;
+	//set nonseekable
+	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
+
+	return 0;
 }
 
 static int natcap_release(struct inode *inode, struct file *file)
