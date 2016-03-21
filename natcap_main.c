@@ -39,6 +39,9 @@
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_core.h>
+#include <linux/netfilter/ipset/ip_set.h>
+#include <linux/netfilter/x_tables.h>
+#include <uapi/linux/netfilter/xt_set.h>
 
 static int natcap_major = 0;
 static int natcap_minor = 0;
@@ -230,6 +233,44 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 
 #define TUPLE_FMT "%pI4:%u-%c"
 #define TUPLE_ARG(t) &(t)->ip, ntohs((t)->port), (t)->encryption ? 'e' : 'o'
+
+static inline int ip_set_match(struct sk_buff *skb, const char *ip_set_name)
+{
+	int ret = 0;
+	ip_set_id_t id;
+	struct ip_set *set;
+	struct ip_set_adt_opt opt;
+	struct xt_action_param par;
+
+	memset(&opt, 0, sizeof(opt));
+	opt.family = NFPROTO_IPV4;
+	opt.dim = IPSET_DIM_ONE;
+	opt.flags = 0;
+	opt.cmdflags = 0;
+	opt.ext.timeout = UINT_MAX;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+	par.in = skb->dev;
+#else
+	par.net = dev_net(skb->dev);
+#endif
+
+	id = ip_set_get_byname(&init_net, ip_set_name, &set);
+	if (id == IPSET_INVALID_ID) {
+		NATCAP_WARN("ip_set '%s' not found", ip_set_name);
+		return 0;
+	}
+
+	ret = ip_set_test(id, skb, &par, &opt);
+
+	ip_set_put_byindex(&init_net, id);
+
+	if (ret > 0) {
+		return 1;
+	}
+
+	return 0;
+}
 
 #define DST_HASH_SIZE (0x01000000 >> 3) //2M bits [00FF-FFFF]
 #define DST_HASH_MASK (0x00FFFFFF)
@@ -1279,7 +1320,8 @@ static unsigned int natcap_local_out_hook(void *priv,
 				return NF_ACCEPT;
 			}
 			if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
-				if (!is_natcap_server(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip)) {
+				if (!is_natcap_server(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) &&
+						!ip_set_match(skb, "cniplist")) {
 					NATCAP_INFO(DEBUG_FMT ": bypass syn3 add target\n", DEBUG_ARG(iph,tcph));
 					natcap_dst_table_add(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 				}
@@ -1303,7 +1345,7 @@ static unsigned int natcap_local_out_hook(void *priv,
 		opt.port = tcph->dest;
 		opt.ip = iph->daddr;
 		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-	} else if (is_natcap_dst(iph->daddr, tcph->dest)) {
+	} else if (ip_set_match(skb, "gfwlist") || is_natcap_dst(iph->daddr, tcph->dest)) {
 		natcap_server_select(iph->daddr, tcph->dest, &server);
 		if (server.ip == 0) {
 			NATCAP_DEBUG("(OUTPUT)" DEBUG_FMT ": no server found\n", DEBUG_ARG(iph,tcph));
