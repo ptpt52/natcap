@@ -458,8 +458,11 @@ static inline void natcap_server_select(__be32 ip, __be16 port, struct tuple *ds
 	hash = hash % count;
 
 	tuple_copy(dst, &nsi->server[m][hash]);
-	if (dst->ip != 0 && dst->port == 0)
+	if (dst->port == __constant_htons(0)) {
 		dst->port = port;
+	} else if (dst->port == __constant_htons(65535)) {
+		dst->port = ((jiffies^ip) & 0xFFFF);
+	}
 }
 
 static inline int is_natcap_server(__be32 ip)
