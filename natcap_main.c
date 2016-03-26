@@ -449,8 +449,8 @@ static inline void natcap_server_select(__be32 ip, __be16 port, struct tuple *ds
 	if (count == 0)
 		return;
 
-	if (time_after(jiffies, server_jiffies)) {
-		server_jiffies = jiffies + server_persist_timeout * HZ;
+	if (time_after(jiffies, server_jiffies + server_persist_timeout * HZ)) {
+		server_jiffies = jiffies;
 		server_index++;
 	}
 
