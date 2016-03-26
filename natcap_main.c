@@ -63,6 +63,10 @@ static unsigned int server_seed = 0;
 module_param(server_seed, int, 0);
 MODULE_PARM_DESC(server_seed, "Server side seed number for encode");
 
+static unsigned int server_persist_timeout = 0;
+module_param(server_persist_timeout, int, 0);
+MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
+
 static unsigned char natcap_map[256] = {
 	152, 151, 106, 224,  13,  90, 137, 200, 178, 138, 212, 156, 238,  54,  44, 237,
 	101,  42,  97,  91, 163, 191, 119, 157, 123, 102, 124, 125, 197,  35,  15,  26,
@@ -431,6 +435,8 @@ static inline void natcap_server_cleanup(void)
 
 static inline void natcap_server_select(__be32 ip, __be16 port, struct tuple *dst)
 {
+	static unsigned int server_index = 0;
+	static unsigned long server_jiffies = 0;
 	struct natcap_server_info *nsi = &natcap_server_info;
 	unsigned int m = nsi->active_index;
 	unsigned int count = nsi->server_count[m];
@@ -443,7 +449,12 @@ static inline void natcap_server_select(__be32 ip, __be16 port, struct tuple *ds
 	if (count == 0)
 		return;
 
-	hash = (unsigned int)jiffies;
+	if (time_after(jiffies, server_jiffies)) {
+		server_jiffies = jiffies + server_persist_timeout * HZ;
+		server_index++;
+	}
+
+	hash = server_index ^ ntohl(ip);
 	hash = hash % count;
 
 	tuple_copy(dst, &nsi->server[m][hash]);
@@ -492,15 +503,17 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    server_seed=%u\n"
 				"#    debug=%u\n"
 				"#    client_forward_mode=%u\n"
+				"#    server_persist_timeout=%u\n"
 				"#\n"
 				"# Reload cmd:\n"
 				"\n"
 				"clean\n"
 				"debug=%u\n"
 				"client_forward_mode=%u\n"
+				"server_persist_timeout=%u\n"
 				"\n",
-				server_seed, debug, client_forward_mode,
-				debug, client_forward_mode);
+				server_seed, debug, client_forward_mode, server_persist_timeout,
+				debug, client_forward_mode, server_persist_timeout);
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -654,6 +667,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		n = sscanf(data, "client_forward_mode=%u", &d);
 		if (n == 1) {
 			client_forward_mode = d;
+			goto done;
+		}
+	} else if (strncmp(data, "server_persist_timeout=", 23) == 0) {
+		int d;
+		n = sscanf(data, "server_persist_timeout=%u", &d);
+		if (n == 1) {
+			server_persist_timeout = d;
 			goto done;
 		}
 	}
