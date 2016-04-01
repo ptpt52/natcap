@@ -259,7 +259,7 @@ static inline int ip_set_match(const struct net_device *in, const struct net_dev
 	par.net = dev_net(in ? in : out);
 #endif
 
-	id = ip_set_get_byname(dev_net(skb->dev), ip_set_name, &set);
+	id = ip_set_get_byname(dev_net(in ? in : out), ip_set_name, &set);
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
 		return 0;
@@ -267,7 +267,7 @@ static inline int ip_set_match(const struct net_device *in, const struct net_dev
 
 	ret = ip_set_test(id, skb, &par, &opt);
 
-	ip_set_put_byindex(dev_net(skb->dev), id);
+	ip_set_put_byindex(dev_net(in ? in : out), id);
 
 	if (ret > 0) {
 		return 1;
