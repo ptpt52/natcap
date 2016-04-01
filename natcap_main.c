@@ -951,7 +951,7 @@ static inline unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, 
 	}
 	memset(&range.min_ip, 0, sizeof(range.min_ip));
 	memset(&range.max_ip, 0, sizeof(range.max_ip));
-	range.flags = IP_NAT_RANGE_MAP_IPS;
+	range.flags = IP_NAT_RANGE_MAP_IPS | IP_NAT_RANGE_PROTO_SPECIFIED;
 	range.min_ip = ip;
 	range.max_ip = ip;
 	range.min.tcp.port = port;
@@ -964,7 +964,7 @@ static inline unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, 
 	}
 	memset(&range.min_ip, 0, sizeof(range.min_ip));
 	memset(&range.max_ip, 0, sizeof(range.max_ip));
-	range.flags = NF_NAT_RANGE_MAP_IPS;
+	range.flags = NF_NAT_RANGE_MAP_IPS | NF_NAT_RANGE_PROTO_SPECIFIED;
 	range.min_ip = ip;
 	range.max_ip = ip;
 	range.min.tcp.port = port;
@@ -977,7 +977,7 @@ static inline unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, 
 	}
 	memset(&range.min_addr, 0, sizeof(range.min_addr));
 	memset(&range.max_addr, 0, sizeof(range.max_addr));
-	range.flags = NF_NAT_RANGE_MAP_IPS;
+	range.flags = NF_NAT_RANGE_MAP_IPS | NF_NAT_RANGE_PROTO_SPECIFIED;
 	range.min_addr.ip = ip;
 	range.max_addr.ip = ip;
 	range.min_proto.tcp.port = port;
