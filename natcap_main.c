@@ -238,7 +238,7 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 #define TUPLE_FMT "%pI4:%u-%c"
 #define TUPLE_ARG(t) &(t)->ip, ntohs((t)->port), (t)->encryption ? 'e' : 'o'
 
-static inline int ip_set_match(struct sk_buff *skb, const char *ip_set_name)
+static inline int ip_set_match(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
 {
 	int ret = 0;
 	ip_set_id_t id;
@@ -253,21 +253,21 @@ static inline int ip_set_match(struct sk_buff *skb, const char *ip_set_name)
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
-	par.in = skb->dev;
-#else
-	par.net = dev_net(skb->dev);
+	par.in = in;
+	par.out = out;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
+	par.net = dev_net(in ? in : out);
 #endif
 
-	id = ip_set_get_byname(&init_net, ip_set_name, &set);
+	id = ip_set_get_byname(dev_net(skb->dev), ip_set_name, &set);
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_WARN("ip_set '%s' not found", ip_set_name);
+		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
 	ret = ip_set_test(id, skb, &par, &opt);
 
-	ip_set_put_byindex(&init_net, id);
+	ip_set_put_byindex(dev_net(skb->dev), id);
 
 	if (ret > 0) {
 		return 1;
@@ -1289,22 +1289,30 @@ static unsigned int natcap_post_out_hook(void *priv,
 
 //*OUTPUT*->POSTROUTING
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+#define NATCAP_IN_DEV in
+#define NATCAP_OUT_DEV out
 static unsigned natcap_local_out_hook(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+#define NATCAP_IN_DEV in
+#define NATCAP_OUT_DEV out
 static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+#define NATCAP_IN_DEV (state->in)
+#define NATCAP_OUT_DEV (state->out)
 static unsigned int natcap_local_out_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 #else
+#define NATCAP_IN_DEV (state->in)
+#define NATCAP_OUT_DEV (state->out)
 static unsigned int natcap_local_out_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
@@ -1344,7 +1352,7 @@ static unsigned int natcap_local_out_hook(void *priv,
 			}
 			if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
 				if (!is_natcap_server(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) &&
-						!ip_set_match(skb, "cniplist")) {
+						!ip_set_match(NATCAP_IN_DEV, NATCAP_OUT_DEV, skb, "cniplist")) {
 					NATCAP_INFO(DEBUG_FMT ": bypass syn3 add target\n", DEBUG_ARG(iph,tcph));
 					natcap_dst_table_add(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 				}
@@ -1368,7 +1376,7 @@ static unsigned int natcap_local_out_hook(void *priv,
 		opt.port = tcph->dest;
 		opt.ip = iph->daddr;
 		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-	} else if (ip_set_match(skb, "gfwlist") || is_natcap_dst(iph->daddr, tcph->dest)) {
+	} else if (ip_set_match(NATCAP_IN_DEV, NATCAP_OUT_DEV, skb, "gfwlist") || is_natcap_dst(iph->daddr, tcph->dest)) {
 		natcap_server_select(iph->daddr, tcph->dest, &server);
 		if (server.ip == 0) {
 			NATCAP_DEBUG("(OUTPUT)" DEBUG_FMT ": no server found\n", DEBUG_ARG(iph,tcph));
