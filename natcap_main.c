@@ -486,7 +486,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"# Usage:\n"
 				"#    debug=Number -- set debug value\n"
 				"#    client_forward_mode=Number -- set client forward mode value\n"
-				"#    add [ip]:[port]-[e/o] -- add one server\n"
+				"#    server [ip]:[port]-[e/o] -- add one server\n"
 				"#    delete [ip]:[port]-[e/o] -- delete one server\n"
 				"#    clean -- remove all existing server(s)\n"
 				"#\n"
@@ -513,7 +513,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		if (dst) {
 			n = snprintf(natcap_ctl_buffer,
 					sizeof(natcap_ctl_buffer) - 1,
-					"add " TUPLE_FMT "\n",
+					"server " TUPLE_FMT "\n",
 					TUPLE_ARG(dst));
 			natcap_ctl_buffer[n] = 0;
 			return natcap_ctl_buffer;
@@ -534,7 +534,7 @@ static void *natcap_next(struct seq_file *m, void *v, loff_t *pos)
 		if (dst) {
 			n = snprintf(natcap_ctl_buffer,
 					sizeof(natcap_ctl_buffer) - 1,
-					"add " TUPLE_FMT "\n",
+					"server " TUPLE_FMT "\n",
 					TUPLE_ARG(dst));
 			natcap_ctl_buffer[n] = 0;
 			return natcap_ctl_buffer;
@@ -609,10 +609,10 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	if (strncmp(data, "clean", 5) == 0) {
 		natcap_server_cleanup();
 		goto done;
-	} else if (strncmp(data, "add ", 4) == 0) {
+	} else if (strncmp(data, "server ", 7) == 0) {
 		unsigned int a, b, c, d, e;
 		char f;
-		n = sscanf(data, "add %u.%u.%u.%u:%u-%c", &a, &b, &c, &d, &e, &f);
+		n = sscanf(data, "server %u.%u.%u.%u:%u-%c", &a, &b, &c, &d, &e, &f);
 		if ( (n == 6 && e <= 0xffff) &&
 				(f == 'e' || f == 'o') &&
 				(((a & 0xff) == a) &&
