@@ -238,7 +238,7 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 #define TUPLE_FMT "%pI4:%u-%c"
 #define TUPLE_ARG(t) &(t)->ip, ntohs((t)->port), (t)->encryption ? 'e' : 'o'
 
-static inline int ip_set_match(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+static inline int ip_set_test_dst(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
 {
 	int ret = 0;
 	ip_set_id_t id;
@@ -269,87 +269,75 @@ static inline int ip_set_match(const struct net_device *in, const struct net_dev
 
 	ip_set_put_byindex(dev_net(in ? in : out), id);
 
-	if (ret > 0) {
-		return 1;
+	return ret;
+}
+
+static inline int ip_set_add_dst(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+{
+	int ret = 0;
+	ip_set_id_t id;
+	struct ip_set *set;
+	struct ip_set_adt_opt opt;
+	struct xt_action_param par;
+
+	memset(&opt, 0, sizeof(opt));
+	opt.family = NFPROTO_IPV4;
+	opt.dim = IPSET_DIM_ONE;
+	opt.flags = 0;
+	opt.cmdflags = 0;
+	opt.ext.timeout = UINT_MAX;
+
+	par.in = in;
+	par.out = out;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
+	par.net = dev_net(in ? in : out);
+#endif
+
+	id = ip_set_get_byname(dev_net(in ? in : out), ip_set_name, &set);
+	if (id == IPSET_INVALID_ID) {
+		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
+		return 0;
 	}
 
-	return 0;
+	ret = ip_set_add(id, skb, &par, &opt);
+
+	ip_set_put_byindex(dev_net(in ? in : out), id);
+
+	return ret;
 }
 
-#define DST_HASH_SIZE (0x01000000 >> 3) //2M bits [00FF-FFFF]
-#define DST_HASH_MASK (0x00FFFFFF)
-
-static void *natcap_dst_table_ptr;
-
-static int inline natcap_dst_table_init(void)
+static inline int ip_set_del_dst(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
 {
-	natcap_dst_table_ptr = vmalloc(DST_HASH_SIZE * 2);
+	int ret = 0;
+	ip_set_id_t id;
+	struct ip_set *set;
+	struct ip_set_adt_opt opt;
+	struct xt_action_param par;
 
-	if (natcap_dst_table_ptr == NULL)
-		return -ENOMEM;
-	memset(natcap_dst_table_ptr, 0, DST_HASH_SIZE * 2);
-	return 0;
-}
+	memset(&opt, 0, sizeof(opt));
+	opt.family = NFPROTO_IPV4;
+	opt.dim = IPSET_DIM_ONE;
+	opt.flags = 0;
+	opt.cmdflags = 0;
+	opt.ext.timeout = UINT_MAX;
 
-static void natcap_dst_table_exit(void)
-{
-	if (natcap_dst_table_ptr != NULL)
-	{
-		vfree(natcap_dst_table_ptr);
-		natcap_dst_table_ptr = NULL;
-	}
-}
+	par.in = in;
+	par.out = out;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
+	par.net = dev_net(in ? in : out);
+#endif
 
-static int is_natcap_dst(__be32 daddr, __be16 dport)
-{
-	unsigned int idx0, idx1;
-	idx0 = ntohl(daddr);
-	idx1 = ((idx0 & 0xFF000000) >> 24) | ((idx0 & 0xFF000000) >> 16) | ((idx0 & 0xFF000000) >> 8);
-	idx0 = idx0 & 0x00FFFFFF;
-	idx1 = (idx1 ^ idx0) & 0x00FFFFFF;
-
-	return test_bit(idx0, natcap_dst_table_ptr) && test_bit(idx1, natcap_dst_table_ptr + DST_HASH_SIZE);
-}
-
-static void natcap_dst_table_add(__be32 daddr, __be16 dport)
-{
-	unsigned int idx0, idx1;
-	idx0 = ntohl(daddr);
-	idx1 = ((idx0 & 0xFF000000) >> 24) | ((idx0 & 0xFF000000) >> 16) | ((idx0 & 0xFF000000) >> 8);
-	idx0 = idx0 & 0x00FFFFFF;
-	idx1 = (idx1 ^ idx0) & 0x00FFFFFF;
-
-	if (!test_and_set_bit(idx0, natcap_dst_table_ptr)) {
-		if (!test_and_set_bit(idx1, natcap_dst_table_ptr + DST_HASH_SIZE)) {
-			NATCAP_INFO("target %pI4:%u hash insert @idx=%u,%u\n", &daddr, ntohs(dport), idx0, idx1);
-			return;
-		}
+	id = ip_set_get_byname(dev_net(in ? in : out), ip_set_name, &set);
+	if (id == IPSET_INVALID_ID) {
+		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
+		return 0;
 	}
 
-	NATCAP_INFO("target %pI4:%u hash insert conflict @idx=%u,%u\n", &daddr, ntohs(dport), idx0, idx1);
-}
+	ret = ip_set_del(id, skb, &par, &opt);
 
-static void natcap_dst_table_del(__be32 daddr, __be16 dport)
-{
-	unsigned int idx0, idx1;
-	idx0 = ntohl(daddr);
-	idx1 = ((idx0 & 0xFF000000) >> 24) | ((idx0 & 0xFF000000) >> 16) | ((idx0 & 0xFF000000) >> 8);
-	idx0 = idx0 & 0x00FFFFFF;
-	idx1 = (idx1 ^ idx0) & 0x00FFFFFF;
+	ip_set_put_byindex(dev_net(in ? in : out), id);
 
-	if (test_and_clear_bit(idx0, natcap_dst_table_ptr)) {
-		if (test_and_clear_bit(idx1, natcap_dst_table_ptr + DST_HASH_SIZE)) {
-			NATCAP_INFO("target %pI4:%u hash clear @idx=%u,%u\n", &daddr, ntohs(dport), idx0, idx1);
-		}
-	}
-
-	NATCAP_INFO("target %pI4:%u hash clear conflict @idx=%u,%u\n", &daddr, ntohs(dport), idx0, idx1);
-}
-
-static void natcap_dst_clear(void)
-{
-	if (natcap_dst_table_ptr)
-		memset(natcap_dst_table_ptr, 0, DST_HASH_SIZE * 2);
+	return ret;
 }
 
 #define MAX_NATCAP_SERVER 256
@@ -500,7 +488,6 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    add [ip]:[port]-[e/o] -- add one server\n"
 				"#    delete [ip]:[port]-[e/o] -- delete one server\n"
 				"#    clean -- remove all existing server(s)\n"
-				"#    clear_dst -- remove all existing target dst(s)\n"
 				"#\n"
 				"# Info:\n"
 				"#    server_seed=%u\n"
@@ -620,9 +607,6 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 
 	if (strncmp(data, "clean", 5) == 0) {
 		natcap_server_cleanup();
-		goto done;
-	} else if (strncmp(data, "clear_dst", 9) == 0) {
-		natcap_dst_clear();
 		goto done;
 	} else if (strncmp(data, "add ", 4) == 0) {
 		unsigned int a, b, c, d, e;
@@ -1352,9 +1336,9 @@ static unsigned int natcap_local_out_hook(void *priv,
 			}
 			if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
 				if (!is_natcap_server(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) &&
-						!ip_set_match(NATCAP_IN_DEV, NATCAP_OUT_DEV, skb, "cniplist")) {
-					NATCAP_INFO(DEBUG_FMT ": bypass syn3 add target\n", DEBUG_ARG(iph,tcph));
-					natcap_dst_table_add(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+						ip_set_test_dst(NATCAP_IN_DEV, NATCAP_OUT_DEV, skb, "cniplist") <= 0) {
+					NATCAP_INFO(DEBUG_FMT ": bypass syn3 add target to gfwlist\n", DEBUG_ARG(iph,tcph));
+					ip_set_add_dst(NATCAP_IN_DEV, NATCAP_OUT_DEV, skb, "gfwlist");
 				}
 				return NF_ACCEPT;
 			}
@@ -1376,7 +1360,7 @@ static unsigned int natcap_local_out_hook(void *priv,
 		opt.port = tcph->dest;
 		opt.ip = iph->daddr;
 		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-	} else if (ip_set_match(NATCAP_IN_DEV, NATCAP_OUT_DEV, skb, "gfwlist") || is_natcap_dst(iph->daddr, tcph->dest)) {
+	} else if (ip_set_test_dst(NATCAP_IN_DEV, NATCAP_OUT_DEV, skb, "gfwlist") > 0) {
 		natcap_server_select(iph->daddr, tcph->dest, &server);
 		if (server.ip == 0) {
 			NATCAP_DEBUG("(OUTPUT)" DEBUG_FMT ": no server found\n", DEBUG_ARG(iph,tcph));
@@ -1410,8 +1394,8 @@ static unsigned int natcap_local_out_hook(void *priv,
 			goto start_natcap;
 		}
 		if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
-			NATCAP_INFO(DEBUG_FMT ": natcaped syn3 del target\n", DEBUG_ARG(iph,tcph));
-			natcap_dst_table_del(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+			NATCAP_INFO(DEBUG_FMT ": natcaped syn3 del target from gfwlist\n", DEBUG_ARG(iph,tcph));
+			ip_set_del_dst(NATCAP_IN_DEV, NATCAP_OUT_DEV, skb, "gfwlist");
 			goto start_natcap;
 		}
 	}
@@ -1615,9 +1599,6 @@ static int __init natcap_init(void) {
 		goto device_create_failed;
 	}
 
-	retval = natcap_dst_table_init();
-	if (retval != 0)
-		goto err;
 	retval = nf_register_hook(&natcap_local_in_hook_ops);
 	if (retval != 0)
 		goto err0;
@@ -1644,9 +1625,6 @@ err2:
 err1:
 	nf_unregister_hook(&natcap_local_in_hook_ops);
 err0:
-	natcap_dst_table_exit();
-err:
-
 	device_destroy(natcap_class, devno);
 device_create_failed:
 	class_destroy(natcap_class);
@@ -1668,8 +1646,6 @@ static void __exit natcap_exit(void) {
 
 	nf_unregister_hook(&natcap_local_out_hook_ops);
 	nf_unregister_hook(&natcap_local_in_hook_ops);
-
-	natcap_dst_table_exit();
 
 	devno = MKDEV(natcap_major, natcap_minor);
 	device_destroy(natcap_class, devno);
