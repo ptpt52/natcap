@@ -442,7 +442,8 @@ static inline void natcap_server_select(__be32 ip, __be16 port, struct tuple *ds
 		server_index++;
 	}
 
-	hash = server_index ^ ntohl(ip);
+	//hash = server_index ^ ntohl(ip);
+	hash = server_index;
 	hash = hash % count;
 
 	tuple_copy(dst, &nsi->server[m][hash]);
