@@ -1113,18 +1113,6 @@ static unsigned int natcap_pre_in_hook(void *priv,
 	struct natcap_option opt;
 	struct tuple server;
 
-	if (client_forward_mode) {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-		return natcap_local_out_hook(hooknum, skb, in, out, okfn);
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
-		return natcap_local_out_hook(ops, skb, in, out, okfn);
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
-		return natcap_local_out_hook(ops, skb, state);
-#else
-		return natcap_local_out_hook(priv, skb, state);
-#endif
-	}
-
 	iph = ip_hdr(skb);
 
 	if (iph->protocol != IPPROTO_TCP)
@@ -1141,6 +1129,25 @@ static unsigned int natcap_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
+	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+		if (skb_csum_test(skb) != 0) {
+			NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": checksum failed\n", DEBUG_ARG(iph,tcph));
+			return NF_DROP;
+		}
+	}
+
+	if (client_forward_mode) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+		return natcap_local_out_hook(hooknum, skb, in, out, okfn);
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+		return natcap_local_out_hook(ops, skb, in, out, okfn);
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		return natcap_local_out_hook(ops, skb, state);
+#else
+		return natcap_local_out_hook(priv, skb, state);
+#endif
+	}
+
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) { /* in client side */
 		if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 			skb->mark = XT_MARK_NATCAP;
@@ -1154,11 +1161,6 @@ static unsigned int natcap_pre_in_hook(void *priv,
 
 		opt.dnat = 0;
 		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-
-		if (skb_csum_test(skb) != 0) {
-			NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": checksum failed\n", DEBUG_ARG(iph,tcph));
-			return NF_DROP;
-		}
 
 		ret = natcap_tcp_decode(skb, &opt);
 		//reload
@@ -1303,11 +1305,6 @@ static unsigned int natcap_post_out_hook(void *priv,
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	if (!skb->sk && skb_csum_test(skb) != 0) {
-		NATCAP_ERROR("(POSTROUTING)" DEBUG_FMT ": checksum failed\n", DEBUG_ARG(iph,tcph));
-		return NF_DROP;
-	}
-
 	ret = natcap_tcp_encode(skb, &opt);
 	if (ret != 0) {
 		NATCAP_ERROR("(POSTROUTING)" DEBUG_FMT ": natcap_tcp_encode@server ret=%d\n",
@@ -1451,11 +1448,6 @@ static unsigned int natcap_local_out_hook(void *priv,
 	}
 
 start_natcap:
-	if (!skb->sk && skb_csum_test(skb) != 0) {
-		NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": checksum failed\n", DEBUG_ARG(iph,tcph));
-		return NF_DROP;
-	}
-
 	ret = natcap_tcp_encode(skb, &opt);
 
 	//reload
