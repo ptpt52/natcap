@@ -1290,7 +1290,6 @@ static unsigned int natcap_post_out_hook(void *priv,
 		opt.port = tcph->source;
 		opt.ip = iph->saddr;
 	} else {
-		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
 
@@ -1303,6 +1302,11 @@ static unsigned int natcap_post_out_hook(void *priv,
 	//reload
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+
+	if (!skb->sk && skb_csum_test(skb) != 0) {
+		NATCAP_ERROR("(POSTROUTING)" DEBUG_FMT ": checksum failed\n", DEBUG_ARG(iph,tcph));
+		return NF_DROP;
+	}
 
 	ret = natcap_tcp_encode(skb, &opt);
 	if (ret != 0) {
@@ -1447,13 +1451,8 @@ static unsigned int natcap_local_out_hook(void *priv,
 	}
 
 start_natcap:
-	if (skb->sk) {
-		NATCAP_ERROR("(OUTPUT)" DEBUG_FMT ": have sk\n", DEBUG_ARG(iph,tcph));
-	} else {
-		NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": no sk\n", DEBUG_ARG(iph,tcph));
-	}
 	if (!skb->sk && skb_csum_test(skb) != 0) {
-		NATCAP_ERROR("(INPUT)" DEBUG_FMT ": checksum failed\n", DEBUG_ARG(iph,tcph));
+		NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": checksum failed\n", DEBUG_ARG(iph,tcph));
 		return NF_DROP;
 	}
 
@@ -1548,13 +1547,7 @@ static unsigned int natcap_local_in_hook(void *priv,
 		NATCAP_DEBUG("(INPUT)" DEBUG_FMT ": before decode\n", DEBUG_ARG(iph,tcph));
 		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 	} else {
-		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_ACCEPT;
-	}
-
-	if (skb_csum_test(skb) != 0) {
-		NATCAP_ERROR("(INPUT)" DEBUG_FMT ": checksum failed\n", DEBUG_ARG(iph,tcph));
-		return NF_DROP;
 	}
 
 	ret = natcap_tcp_decode(skb, &opt);
