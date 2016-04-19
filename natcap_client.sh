@@ -36,7 +36,7 @@ clean
 debug=0
 client_forward_mode=1
 server_persist_timeout=60
-add 159.203.236.52:65535-e
-add 108.61.201.222:65535-e
+server 159.203.236.52:65535-e
+server 108.61.201.222:65535-e
 EOF
 }

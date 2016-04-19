@@ -701,6 +701,45 @@ static struct file_operations natcap_fops = {
 	.llseek  = seq_lseek,
 };
 
+static inline int skb_csum_test(struct sk_buff *skb)
+{
+	struct iphdr *iph = ip_hdr(skb);
+	int len = ntohs(iph->tot_len);
+
+	if (skb->len < len) {
+		return -1;
+	} else if (len < (iph->ihl * 4)) {
+		return -1;
+	}
+
+	if (iph->protocol == IPPROTO_TCP) {
+		__sum16 old_check, new_check;
+		__wsum csum;
+		struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
+
+		old_check = iph->check;
+		iph->check = 0;
+		new_check = ip_fast_csum(iph, iph->ihl);
+		iph->check = old_check;
+		if (old_check != new_check) {
+			return -1;
+		}
+
+		old_check = tcph->check;
+		tcph->check = 0;
+		csum = skb_checksum(skb, iph->ihl * 4, len - iph->ihl * 4, 0);
+		new_check = csum_tcpudp_magic(iph->saddr, iph->daddr, len - iph->ihl * 4, iph->protocol, csum);
+		tcph->check = old_check;
+		if (old_check != new_check) {
+			return -1;
+		}
+
+		return 0;
+	}
+
+	return -1;
+}
+
 static inline int skb_rcsum_tcpudp(struct sk_buff *skb)
 {
 	struct iphdr *iph = ip_hdr(skb);
@@ -1115,6 +1154,12 @@ static unsigned int natcap_pre_in_hook(void *priv,
 
 		opt.dnat = 0;
 		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+
+		if (skb_csum_test(skb) != 0) {
+			NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": checksum failed\n", DEBUG_ARG(iph,tcph));
+			return NF_DROP;
+		}
+
 		ret = natcap_tcp_decode(skb, &opt);
 		//reload
 		iph = ip_hdr(skb);
@@ -1402,6 +1447,16 @@ static unsigned int natcap_local_out_hook(void *priv,
 	}
 
 start_natcap:
+	if (skb->sk) {
+		NATCAP_ERROR("(OUTPUT)" DEBUG_FMT ": have sk\n", DEBUG_ARG(iph,tcph));
+	} else {
+		NATCAP_ERROR("(PREROUTING)" DEBUG_FMT ": no sk\n", DEBUG_ARG(iph,tcph));
+	}
+	if (!skb->sk && skb_csum_test(skb) != 0) {
+		NATCAP_ERROR("(INPUT)" DEBUG_FMT ": checksum failed\n", DEBUG_ARG(iph,tcph));
+		return NF_DROP;
+	}
+
 	ret = natcap_tcp_encode(skb, &opt);
 
 	//reload
@@ -1495,6 +1550,11 @@ static unsigned int natcap_local_in_hook(void *priv,
 	} else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_ACCEPT;
+	}
+
+	if (skb_csum_test(skb) != 0) {
+		NATCAP_ERROR("(INPUT)" DEBUG_FMT ": checksum failed\n", DEBUG_ARG(iph,tcph));
+		return NF_DROP;
 	}
 
 	ret = natcap_tcp_decode(skb, &opt);
