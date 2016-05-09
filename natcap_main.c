@@ -1422,6 +1422,9 @@ static unsigned int natcap_local_out_hook(void *priv,
 		opt.ip = iph->daddr;
 		opt.dnat = !(server.ip == opt.ip && server.port == opt.port);
 		opt.encryption = server.encryption;
+		if (tcph->dest == __constant_htons(443)) {
+			opt.encryption = 0;
+		}
 
 		NATCAP_INFO("(OUTPUT)" DEBUG_FMT ": new natcaped connection out, before encode, server=" TUPLE_FMT "\n",
 				DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
