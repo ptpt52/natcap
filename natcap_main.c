@@ -843,7 +843,7 @@ static inline void natcap_adjust_tcp_mss(struct tcphdr *tcph, int delta)
 	}
 }
 
-static inline int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_option *opt)
+static int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_option *opt)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
@@ -908,7 +908,7 @@ do_encode:
 	return 0;
 }
 
-static inline int natcap_tcp_decode(struct sk_buff *skb, struct natcap_option *opt)
+static int natcap_tcp_decode(struct sk_buff *skb, struct natcap_option *opt)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
