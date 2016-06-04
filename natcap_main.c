@@ -452,6 +452,10 @@ static inline void natcap_server_select(__be32 ip, __be16 port, struct tuple *ds
 	} else if (dst->port == __constant_htons(65535)) {
 		dst->port = ((jiffies^ip) & 0xFFFF);
 	}
+
+	if (port == __constant_htons(443)) {
+		dst->encryption = 0;
+	}
 }
 
 static inline int is_natcap_server(__be32 ip)
