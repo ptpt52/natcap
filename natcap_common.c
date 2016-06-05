@@ -294,7 +294,7 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_option *opt, int 
 	nto->opt.ip = opt->ip;
 	if (mode == 0) {
 		memcpy(nto->mac_addr, default_mac_addr, ETH_ALEN);
-		nto->u_hash = htons(default_u_hash);
+		nto->u_hash = default_u_hash;
 	}
 
 	tcph->doff = (tcph->doff * 4 + ntosz) / 4;

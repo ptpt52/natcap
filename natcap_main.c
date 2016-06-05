@@ -79,9 +79,9 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"\n",
 				mode == 0 ? "client" : "server",
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
-				default_u_hash,
+				ntohs(default_u_hash),
 				server_seed, debug, client_forward_mode, server_persist_timeout,
-				debug, default_u_hash, client_forward_mode, server_persist_timeout);
+				debug, ntohs(default_u_hash), client_forward_mode, server_persist_timeout);
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -231,7 +231,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		int d;
 		n = sscanf(data, "u_hash=%u", &d);
 		if (n == 1) {
-			default_u_hash = d;
+			default_u_hash = htons(d);
 			goto done;
 		}
 	} else if (strncmp(data, "client_forward_mode=", 20) == 0) {
