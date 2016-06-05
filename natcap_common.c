@@ -294,7 +294,7 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_option *opt, int 
 	nto->opt.ip = opt->ip;
 	if (mode == 0) {
 		memcpy(nto->mac_addr, default_mac_addr, ETH_ALEN);
-		nto->u_hash = default_u_hash;
+		nto->u_hash = htons(default_u_hash);
 	}
 
 	tcph->doff = (tcph->doff * 4 + ntosz) / 4;
@@ -352,7 +352,7 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_option *opt, int mode)
 
 	if (mode == 1) {
 		NATCAP_INFO("(%s)" DEBUG_FMT ": client mac_addr=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u\n", __FUNCTION__, DEBUG_ARG(iph,tcph),
-				nto->mac_addr[0], nto->mac_addr[1], nto->mac_addr[2], nto->mac_addr[3], nto->mac_addr[4], nto->mac_addr[5], nto->u_hash);
+				nto->mac_addr[0], nto->mac_addr[1], nto->mac_addr[2], nto->mac_addr[3], nto->mac_addr[4], nto->mac_addr[5], ntohs(nto->u_hash));
 	}
 	opt->dnat = nto->opt.dnat;
 	opt->encryption = nto->opt.encryption;
