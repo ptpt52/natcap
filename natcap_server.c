@@ -2,6 +2,7 @@
  * Author: Chen Minqiang <ptpt52@gmail.com>
  *  Date : Sun, 05 Jun 2016 16:23:40 +0800
  */
+#include <linux/module.h>
 #include <linux/version.h>
 #include <linux/ip.h>
 #include <linux/netfilter.h>

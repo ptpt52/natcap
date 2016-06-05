@@ -30,6 +30,7 @@ unsigned int server_persist_timeout = 0;
 module_param(server_persist_timeout, int, 0);
 MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
 
+u16 default_u_hash = 0;
 unsigned char default_mac_addr[ETH_ALEN];
 static void default_mac_addr_init(void)
 {

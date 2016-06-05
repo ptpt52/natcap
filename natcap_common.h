@@ -22,7 +22,7 @@ extern unsigned int server_seed;
 
 #define NATCAP_println(fmt, ...) \
 	do { \
-		printk(KERN_NOTICE "{" MODULE_NAME "}:%s(): " pr_fmt(fmt) "\n", __FUNCTION__, ##__VA_ARGS__); \
+		printk(KERN_DEFAULT "{" MODULE_NAME "}:%s(): " pr_fmt(fmt) "\n", __FUNCTION__, ##__VA_ARGS__); \
 	} while (0)
 
 #define NATCAP_FIXME(fmt, ...) \
@@ -35,28 +35,28 @@ extern unsigned int server_seed;
 #define NATCAP_DEBUG(fmt, ...) \
 	do { \
 		if (debug & 0x8) { \
-			printk(KERN_ALERT "debug: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_DEBUG "debug: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_INFO(fmt, ...) \
 	do { \
 		if (debug & 0x4) { \
-			printk(KERN_ALERT "info: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_INFO "info: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_WARN(fmt, ...) \
 	do { \
 		if (debug & 0x2) { \
-			printk(KERN_ALERT "warning: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_WARNING "warning: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_ERROR(fmt, ...) \
 	do { \
 		if (debug & 0x1) { \
-			printk(KERN_ALERT "error: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_ERR "error: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 

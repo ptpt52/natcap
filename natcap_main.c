@@ -62,6 +62,8 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#\n"
 				"# Info:\n"
 				"#    mode=%s\n"
+				"#    default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n"
+				"#    default_u_hash=%u\n"
 				"#    server_seed=%u\n"
 				"#    debug=%u\n"
 				"#    client_forward_mode=%u\n"
@@ -71,12 +73,15 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"\n"
 				"clean\n"
 				"debug=%u\n"
+				"u_hash=%u\n"
 				"client_forward_mode=%u\n"
 				"server_persist_timeout=%u\n"
 				"\n",
 				mode == 0 ? "client" : "server",
+				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
+				default_u_hash,
 				server_seed, debug, client_forward_mode, server_persist_timeout,
-				debug, client_forward_mode, server_persist_timeout);
+				debug, default_u_hash, client_forward_mode, server_persist_timeout);
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -220,6 +225,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		n = sscanf(data, "debug=%u", &d);
 		if (n == 1) {
 			debug = d;
+			goto done;
+		}
+	} else if (strncmp(data, "u_hash=", 7) == 0) {
+		int d;
+		n = sscanf(data, "u_hash=%u", &d);
+		if (n == 1) {
+			default_u_hash = d;
 			goto done;
 		}
 	} else if (strncmp(data, "client_forward_mode=", 20) == 0) {

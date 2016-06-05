@@ -2,7 +2,12 @@
  * Author: Chen Minqiang <ptpt52@gmail.com>
  *  Date : Sun, 05 Jun 2016 16:27:20 +0800
  */
+#include <linux/module.h>
 #include <linux/version.h>
+#include <linux/mman.h>
+#include <linux/spinlock.h>
+#include <linux/rcupdate.h>
+#include <linux/highmem.h>
 #include <linux/udp.h>
 #include <linux/netfilter.h>
 #include <net/netfilter/nf_conntrack.h>
@@ -289,7 +294,7 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_option *opt, int 
 	nto->opt.ip = opt->ip;
 	if (mode == 0) {
 		memcpy(nto->mac_addr, default_mac_addr, ETH_ALEN);
-		nto->u_hash = 0;
+		nto->u_hash = default_u_hash;
 	}
 
 	tcph->doff = (tcph->doff * 4 + ntosz) / 4;
