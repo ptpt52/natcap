@@ -6,7 +6,7 @@
 #define _NATCAP_H_
 
 #define MODULE_NAME "natcap"
-#define NATCAP_VERSION "3.0.0"
+#define NATCAP_VERSION "4.0.0"
 
 #include <linux/ctype.h>
 #include <asm/types.h>
@@ -26,9 +26,10 @@ struct natcap_option {
 struct natcap_tcp_option {
 	u8 opcode;
 #define TCPOPT_NATCAP 0x99
-
 	u8 opsize;
 	struct natcap_option opt;
+	u8 mac_addr[ETH_ALEN];
+	u16 u_hash;
 };
 
 #pragma pack(pop)
