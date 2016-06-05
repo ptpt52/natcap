@@ -886,10 +886,10 @@ static int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_option *op
 
 	nto->opcode = TCPOPT_NATCAP;
 	nto->opsize = ntosz;
-	nto->dnat = !!opt->dnat;
-	nto->encryption = !!opt->encryption;
-	nto->port = opt->port;
-	nto->ip = opt->ip;
+	nto->opt.dnat = !!opt->dnat;
+	nto->opt.encryption = !!opt->encryption;
+	nto->opt.port = opt->port;
+	nto->opt.ip = opt->ip;
 
 	tcph->doff = (tcph->doff * 4 + ntosz) / 4;
 	iph->tot_len = htons(ntohs(iph->tot_len) + ntosz);
@@ -944,10 +944,10 @@ static int natcap_tcp_decode(struct sk_buff *skb, struct natcap_option *opt)
 		return -8;
 	}
 
-	opt->dnat = nto->dnat;
-	opt->encryption = nto->encryption;
-	opt->port = nto->port;
-	opt->ip = nto->ip;
+	opt->dnat = nto->opt.dnat;
+	opt->encryption = nto->opt.encryption;
+	opt->port = nto->opt.port;
+	opt->ip = nto->opt.ip;
 
 	memmove((void *)nto, (void *)nto + ntosz, offlen);
 
