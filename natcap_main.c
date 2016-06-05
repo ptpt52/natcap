@@ -452,10 +452,6 @@ static inline void natcap_server_select(__be32 ip, __be16 port, struct tuple *ds
 	} else if (dst->port == __constant_htons(65535)) {
 		dst->port = ((jiffies^ip) & 0xFFFF);
 	}
-
-	if (port == __constant_htons(443)) {
-		dst->encryption = 0;
-	}
 }
 
 static inline int is_natcap_server(__be32 ip)
@@ -1426,7 +1422,8 @@ static unsigned int natcap_local_out_hook(void *priv,
 		opt.ip = iph->daddr;
 		opt.dnat = !(server.ip == opt.ip && server.port == opt.port);
 		opt.encryption = server.encryption;
-		if (tcph->dest == __constant_htons(443)) {
+		if (tcph->dest == __constant_htons(443) ||
+				tcph->dest == __constant_htons(22)) {
 			opt.encryption = 0;
 		}
 
