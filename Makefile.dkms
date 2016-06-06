@@ -9,7 +9,16 @@ all: install
 
 src_install:
 	mkdir -p '$(DKMS_DEST)'
-	cp natcap_main.c natcap.h '$(DKMS_DEST)'
+	cp \
+		natcap_main.c \
+		natcap.h \
+		natcap_common.c \
+		natcap_common.h \
+		natcap_client.c \
+		natcap_client.h \
+		natcap_server.c \
+		natcap_server.h \
+		'$(DKMS_DEST)'
 	cp Makefile '$(DKMS_DEST)/Makefile'
 	sed 's/#MODULE_VERSION#/$(modver)/' dkms.conf > '$(DKMS_DEST)/dkms.conf'
 

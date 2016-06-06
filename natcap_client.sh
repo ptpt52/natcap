@@ -21,7 +21,7 @@ ipset destroy gfwlist
 ipset restore -f cniplist.set
 ipset create gfwlist iphash
 
-SERVER=108.61.201.222
+SERVER=45.32.63.59
 iptables -t nat -A OUTPUT -d 8.8.8.8 -p udp --dport 53 -j DNAT --to-destination $SERVER:5353
 iptables -t nat -A PREROUTING -d 8.8.8.8 -p udp --dport 53 -j DNAT --to-destination $SERVER:5353
 
@@ -36,7 +36,6 @@ clean
 debug=0
 client_forward_mode=1
 server_persist_timeout=60
-server 159.203.236.52:65535-e
-server 108.61.201.222:65535-e
+server 45.32.63.59:65535-e
 EOF
 }
