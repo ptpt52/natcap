@@ -123,7 +123,7 @@ static unsigned int natcap_server_in_hook(void *priv,
 
 		if (verify_client(in, out, skb, &nto) != 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-			NATCAP_INFO("(SERVER_IN)" DEBUG_FMT ": client mac=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u verified failed\n", DEBUG_ARG(iph,tcph),
+			NATCAP_WARN("(SERVER_IN)" DEBUG_FMT ": client mac=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u verified failed\n", DEBUG_ARG(iph,tcph),
 					nto.mac_addr[0], nto.mac_addr[1], nto.mac_addr[2], nto.mac_addr[3], nto.mac_addr[4], nto.mac_addr[5], ntohs(nto.u_hash));
 			return NF_ACCEPT;
 		}
