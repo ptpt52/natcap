@@ -43,7 +43,7 @@ extern unsigned int server_seed;
 #define NATCAP_INFO(fmt, ...) \
 	do { \
 		if (debug & 0x4) { \
-			printk(KERN_INFO "info: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_DEFAULT "info: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 

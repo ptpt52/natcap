@@ -388,7 +388,7 @@ int do_ip_set_test(const struct net_device *in, const struct net_device *out, st
 	struct xt_action_param par;
 
 	memset(&opt, 0, sizeof(opt));
-	opt.family = NFPROTO_UNSPEC;
+	opt.family = NFPROTO_IPV4;
 	opt.dim = IPSET_DIM_ONE;
 	opt.flags = flags;
 	opt.cmdflags = 0;
@@ -422,7 +422,7 @@ int do_ip_set_add(const struct net_device *in, const struct net_device *out, str
 	struct xt_action_param par;
 
 	memset(&opt, 0, sizeof(opt));
-	opt.family = NFPROTO_UNSPEC;
+	opt.family = NFPROTO_IPV4;
 	opt.dim = IPSET_DIM_ONE;
 	opt.flags = flags;
 	opt.cmdflags = 0;
@@ -456,7 +456,7 @@ int do_ip_set_del(const struct net_device *in, const struct net_device *out, str
 	struct xt_action_param par;
 
 	memset(&opt, 0, sizeof(opt));
-	opt.family = NFPROTO_UNSPEC;
+	opt.family = NFPROTO_IPV4;
 	opt.dim = IPSET_DIM_ONE;
 	opt.flags = flags;
 	opt.cmdflags = 0;

@@ -111,9 +111,6 @@ static unsigned int natcap_server_in_hook(void *priv,
 		nto.opt.dnat = 0;
 		nto.opt.encryption = 0;
 		ret = natcap_tcp_decode(skb, &nto, 1);
-		server.ip = nto.opt.ip;
-		server.port = nto.opt.port;
-		server.encryption = nto.opt.encryption;
 		//reload
 		iph = ip_hdr(skb);
 		tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
@@ -133,6 +130,10 @@ static unsigned int natcap_server_in_hook(void *priv,
 
 		NATCAP_INFO("(SERVER_IN)" DEBUG_FMT ": client mac=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u verified ok\n", DEBUG_ARG(iph,tcph),
 				nto.mac_addr[0], nto.mac_addr[1], nto.mac_addr[2], nto.mac_addr[3], nto.mac_addr[4], nto.mac_addr[5], ntohs(nto.u_hash));
+
+		server.ip = nto.opt.ip;
+		server.port = nto.opt.port;
+		server.encryption = nto.opt.encryption;
 
 		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time */
 			NATCAP_INFO("(SERVER_IN)" DEBUG_FMT ": new natcaped connection in, after decode target=" TUPLE_FMT "\n",
