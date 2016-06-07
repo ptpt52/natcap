@@ -245,11 +245,11 @@ static inline int skb_rcsum_tcpudp(struct sk_buff *skb)
 	return 0;
 }
 
-int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_option *opt, int mode)
+int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_tcp_option *nto, int mode)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_tcp_option *nto = NULL;
+	struct natcap_tcp_option *pnto = NULL;
 	int ntosz = ALIGN(sizeof(struct natcap_tcp_option), sizeof(unsigned int));
 	int offlen;
 
@@ -283,18 +283,18 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_option *opt, int 
 		return -4;
 	}
 
-	nto = (struct natcap_tcp_option *)((void *)tcph + sizeof(struct tcphdr));
-	memmove((void *)nto + ntosz, (void *)nto, offlen);
+	pnto = (struct natcap_tcp_option *)((void *)tcph + sizeof(struct tcphdr));
+	memmove((void *)pnto + ntosz, (void *)pnto, offlen);
 
-	nto->opcode = TCPOPT_NATCAP;
-	nto->opsize = ntosz;
-	nto->opt.dnat = !!opt->dnat;
-	nto->opt.encryption = !!opt->encryption;
-	nto->opt.port = opt->port;
-	nto->opt.ip = opt->ip;
+	pnto->opcode = TCPOPT_NATCAP;
+	pnto->opsize = ntosz;
+	pnto->opt.dnat = !!nto->opt.dnat;
+	pnto->opt.encryption = !!nto->opt.encryption;
+	pnto->opt.port = nto->opt.port;
+	pnto->opt.ip = nto->opt.ip;
 	if (mode == 0) {
-		memcpy(nto->mac_addr, default_mac_addr, ETH_ALEN);
-		nto->u_hash = default_u_hash;
+		memcpy(pnto->mac_addr, default_mac_addr, ETH_ALEN);
+		pnto->u_hash = default_u_hash;
 	}
 
 	tcph->doff = (tcph->doff * 4 + ntosz) / 4;
@@ -303,7 +303,7 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_option *opt, int 
 	skb->tail += ntosz;
 
 do_encode:
-	if (opt->encryption) {
+	if (nto->opt.encryption) {
 		skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
 	}
 
@@ -314,11 +314,11 @@ do_encode:
 	return 0;
 }
 
-int natcap_tcp_decode(struct sk_buff *skb, struct natcap_option *opt, int mode)
+int natcap_tcp_decode(struct sk_buff *skb, struct natcap_tcp_option *nto, int mode)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_tcp_option *nto = NULL;
+	struct natcap_tcp_option *pnto = NULL;
 	int ntosz = ALIGN(sizeof(struct natcap_tcp_option), sizeof(unsigned int));
 	int offlen;
 
@@ -335,31 +335,31 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_option *opt, int mode)
 		goto do_decode;
 	}
 
-	nto = (struct natcap_tcp_option *)((void *)tcph + sizeof(struct tcphdr));
-	if (nto->opcode != TCPOPT_NATCAP ||
-			nto->opsize != ntosz) {
+	pnto = (struct natcap_tcp_option *)((void *)tcph + sizeof(struct tcphdr));
+	if (pnto->opcode != TCPOPT_NATCAP ||
+			pnto->opsize != ntosz) {
 		return -2;
 	}
 	if (tcph->doff * 4 < sizeof(struct tcphdr) + ntosz) {
 		return -4;
 	}
 
-	offlen = skb_tail_pointer(skb) - (unsigned char *)nto - ntosz;
+	offlen = skb_tail_pointer(skb) - (unsigned char *)pnto - ntosz;
 	if (offlen < 0) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
 		return -8;
 	}
 
 	if (mode == 1) {
-		NATCAP_INFO("(%s)" DEBUG_FMT ": client mac_addr=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u\n", __FUNCTION__, DEBUG_ARG(iph,tcph),
-				nto->mac_addr[0], nto->mac_addr[1], nto->mac_addr[2], nto->mac_addr[3], nto->mac_addr[4], nto->mac_addr[5], ntohs(nto->u_hash));
+		memcpy(nto->mac_addr, pnto->mac_addr, ETH_ALEN);
+		nto->u_hash = pnto->u_hash;
 	}
-	opt->dnat = nto->opt.dnat;
-	opt->encryption = nto->opt.encryption;
-	opt->port = nto->opt.port;
-	opt->ip = nto->opt.ip;
+	nto->opt.dnat = pnto->opt.dnat;
+	nto->opt.encryption = pnto->opt.encryption;
+	nto->opt.port = pnto->opt.port;
+	nto->opt.ip = pnto->opt.ip;
 
-	memmove((void *)nto, (void *)nto + ntosz, offlen);
+	memmove((void *)pnto, (void *)pnto + ntosz, offlen);
 
 	tcph->doff = (tcph->doff * 4 - ntosz) / 4;
 	iph->tot_len = htons(ntohs(iph->tot_len) - ntosz);
@@ -367,7 +367,7 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_option *opt, int mode)
 	skb->tail -= ntosz;
 
 do_decode:
-	if (opt->encryption) {
+	if (nto->opt.encryption) {
 		skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, natcap_data_decode);
 	}
 
@@ -379,7 +379,7 @@ do_decode:
 	return 0;
 }
 
-int ip_set_test_dst(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+int do_ip_set_test(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, u8 flags)
 {
 	int ret = 0;
 	ip_set_id_t id;
@@ -388,9 +388,9 @@ int ip_set_test_dst(const struct net_device *in, const struct net_device *out, s
 	struct xt_action_param par;
 
 	memset(&opt, 0, sizeof(opt));
-	opt.family = NFPROTO_IPV4;
+	opt.family = NFPROTO_UNSPEC;
 	opt.dim = IPSET_DIM_ONE;
-	opt.flags = 0;
+	opt.flags = flags;
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 
@@ -413,7 +413,7 @@ int ip_set_test_dst(const struct net_device *in, const struct net_device *out, s
 	return ret;
 }
 
-int ip_set_add_dst(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+int do_ip_set_add(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, u8 flags)
 {
 	int ret = 0;
 	ip_set_id_t id;
@@ -422,9 +422,9 @@ int ip_set_add_dst(const struct net_device *in, const struct net_device *out, st
 	struct xt_action_param par;
 
 	memset(&opt, 0, sizeof(opt));
-	opt.family = NFPROTO_IPV4;
+	opt.family = NFPROTO_UNSPEC;
 	opt.dim = IPSET_DIM_ONE;
-	opt.flags = 0;
+	opt.flags = flags;
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 
@@ -447,7 +447,7 @@ int ip_set_add_dst(const struct net_device *in, const struct net_device *out, st
 	return ret;
 }
 
-int ip_set_del_dst(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+int do_ip_set_del(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, u8 flags)
 {
 	int ret = 0;
 	ip_set_id_t id;
@@ -456,9 +456,9 @@ int ip_set_del_dst(const struct net_device *in, const struct net_device *out, st
 	struct xt_action_param par;
 
 	memset(&opt, 0, sizeof(opt));
-	opt.family = NFPROTO_IPV4;
+	opt.family = NFPROTO_UNSPEC;
 	opt.dim = IPSET_DIM_ONE;
-	opt.flags = 0;
+	opt.flags = flags;
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 

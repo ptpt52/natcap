@@ -181,41 +181,40 @@ static inline int is_natcap_server(__be32 ip)
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-#define NATCAP_IN_DEV in
-#define NATCAP_OUT_DEV out
 static unsigned natcap_client_out_hook(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
+{
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
-#define NATCAP_IN_DEV in
-#define NATCAP_OUT_DEV out
 static unsigned int natcap_client_out_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
+{
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
-#define NATCAP_IN_DEV (state->in)
-#define NATCAP_OUT_DEV (state->out)
 static unsigned int natcap_client_out_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
+{
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
 #else
-#define NATCAP_IN_DEV (state->in)
-#define NATCAP_OUT_DEV (state->out)
 static unsigned int natcap_client_out_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
-#endif
 {
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
+#endif
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_option opt;
+	struct natcap_tcp_option nto;
 	struct tuple server;
 
 	iph = ip_hdr(skb);
@@ -244,9 +243,9 @@ static unsigned int natcap_client_out_hook(void *priv,
 			}
 			if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
 				if (!is_natcap_server(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) &&
-						ip_set_test_dst(NATCAP_IN_DEV, NATCAP_OUT_DEV, skb, "cniplist") <= 0) {
+						ip_set_test_dst_ip(in, out, skb, "cniplist") <= 0) {
 					NATCAP_INFO(DEBUG_FMT ": bypass syn3 add target to gfwlist\n", DEBUG_ARG(iph,tcph));
-					ip_set_add_dst(NATCAP_IN_DEV, NATCAP_OUT_DEV, skb, "gfwlist");
+					ip_set_add_dst_ip(in, out, skb, "gfwlist");
 				}
 				return NF_ACCEPT;
 			}
@@ -262,10 +261,10 @@ static unsigned int natcap_client_out_hook(void *priv,
 		//matched
 		NATCAP_DEBUG("(CLIENT_OUT)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
 
-		opt.port = tcph->dest;
-		opt.ip = iph->daddr;
-		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-	} else if (ip_set_test_dst(NATCAP_IN_DEV, NATCAP_OUT_DEV, skb, "gfwlist") > 0) {
+		nto.opt.port = tcph->dest;
+		nto.opt.ip = iph->daddr;
+		nto.opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+	} else if (ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
 		natcap_server_select(iph->daddr, tcph->dest, &server);
 		if (server.ip == 0) {
 			NATCAP_DEBUG("(CLIENT_OUT)" DEBUG_FMT ": no server found\n", DEBUG_ARG(iph,tcph));
@@ -273,13 +272,13 @@ static unsigned int natcap_client_out_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
-		opt.port = tcph->dest;
-		opt.ip = iph->daddr;
-		opt.dnat = !(server.ip == opt.ip && server.port == opt.port);
-		opt.encryption = server.encryption;
+		nto.opt.port = tcph->dest;
+		nto.opt.ip = iph->daddr;
+		nto.opt.dnat = !(server.ip == nto.opt.ip && server.port == nto.opt.port);
+		nto.opt.encryption = server.encryption;
 		if (tcph->dest == __constant_htons(443) ||
 				tcph->dest == __constant_htons(22)) {
-			opt.encryption = 0;
+			nto.opt.encryption = 0;
 		}
 
 		NATCAP_INFO("(CLIENT_OUT)" DEBUG_FMT ": new natcaped connection out, before encode, server=" TUPLE_FMT "\n",
@@ -304,13 +303,13 @@ static unsigned int natcap_client_out_hook(void *priv,
 		}
 		if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
 			NATCAP_INFO(DEBUG_FMT ": natcaped syn3 del target from gfwlist\n", DEBUG_ARG(iph,tcph));
-			ip_set_del_dst(NATCAP_IN_DEV, NATCAP_OUT_DEV, skb, "gfwlist");
+			ip_set_del_dst_ip(in, out, skb, "gfwlist");
 			goto start_natcap;
 		}
 	}
 
 start_natcap:
-	ret = natcap_tcp_encode(skb, &opt, 0);
+	ret = natcap_tcp_encode(skb, &nto, 0);
 
 	//reload
 	iph = ip_hdr(skb);
@@ -327,13 +326,13 @@ start_natcap:
 		NATCAP_INFO("(CLIENT_OUT)" DEBUG_FMT ": new natcaped connection out, after encode\n",
 				DEBUG_ARG(iph,tcph));
 		//setup DNAT
-		if (opt.dnat && natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
+		if (nto.opt.dnat && natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 			NATCAP_ERROR("(CLIENT_OUT)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, server=" TUPLE_FMT "\n",
 					DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
 		}
-		if (opt.encryption) {
+		if (nto.opt.encryption) {
 			set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 		}
 	}
@@ -370,7 +369,7 @@ static unsigned int natcap_client_in_hook(void *priv,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_option opt;
+	struct natcap_tcp_option nto;
 
 	iph = ip_hdr(skb);
 
@@ -395,12 +394,12 @@ static unsigned int natcap_client_in_hook(void *priv,
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		//matched
 		NATCAP_DEBUG("(CLIENT_IN)" DEBUG_FMT ": before decode\n", DEBUG_ARG(iph,tcph));
-		opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+		nto.opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 	} else {
 		return NF_ACCEPT;
 	}
 
-	ret = natcap_tcp_decode(skb, &opt, 0);
+	ret = natcap_tcp_decode(skb, &nto, 0);
 
 	//reload
 	iph = ip_hdr(skb);

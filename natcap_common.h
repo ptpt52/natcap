@@ -14,6 +14,7 @@
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_core.h>
+#include <linux/netfilter/ipset/ip_set.h>
 #include "natcap.h"
 
 extern unsigned int debug;
@@ -80,12 +81,16 @@ extern unsigned int server_seed;
 #define TUPLE_ARG(t) &(t)->ip, ntohs((t)->port), (t)->encryption ? 'e' : 'o'
 
 int skb_csum_test(struct sk_buff *skb);
-int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_option *opt, int mode);
-int natcap_tcp_decode(struct sk_buff *skb, struct natcap_option *opt, int mode);
+int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_tcp_option *nto, int mode);
+int natcap_tcp_decode(struct sk_buff *skb, struct natcap_tcp_option *nto, int mode);
 
-int ip_set_test_dst(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
-int ip_set_add_dst(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
-int ip_set_del_dst(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
+int do_ip_set_test(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, u8 flags);
+int do_ip_set_add(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, u8 flags);
+int do_ip_set_del(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, u8 flags);
+#define ip_set_test_dst_ip(in, out, skb, ip_set_name) do_ip_set_test(in, out, skb, ip_set_name, 0)
+#define ip_set_add_dst_ip(in, out, skb, ip_set_name) do_ip_set_add(in, out, skb, ip_set_name, 0)
+#define ip_set_del_dst_ip(in, out, skb, ip_set_name) do_ip_set_del(in, out, skb, ip_set_name, 0)
+#define ip_set_test_src_mac(in, out, skb, ip_set_name) do_ip_set_test(in, out, skb, ip_set_name, IPSET_DIM_ONE_SRC)
 
 unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, __be16 port);
 
