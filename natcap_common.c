@@ -379,7 +379,7 @@ do_decode:
 	return 0;
 }
 
-int do_ip_set_test(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, u8 flags)
+int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
 {
 	int ret = 0;
 	ip_set_id_t id;
@@ -390,7 +390,7 @@ int do_ip_set_test(const struct net_device *in, const struct net_device *out, st
 	memset(&opt, 0, sizeof(opt));
 	opt.family = NFPROTO_IPV4;
 	opt.dim = IPSET_DIM_ONE;
-	opt.flags = flags;
+	opt.flags = 0;
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 
@@ -413,7 +413,7 @@ int do_ip_set_test(const struct net_device *in, const struct net_device *out, st
 	return ret;
 }
 
-int do_ip_set_add(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, u8 flags)
+int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
 {
 	int ret = 0;
 	ip_set_id_t id;
@@ -424,7 +424,7 @@ int do_ip_set_add(const struct net_device *in, const struct net_device *out, str
 	memset(&opt, 0, sizeof(opt));
 	opt.family = NFPROTO_IPV4;
 	opt.dim = IPSET_DIM_ONE;
-	opt.flags = flags;
+	opt.flags = 0;
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 
@@ -447,7 +447,7 @@ int do_ip_set_add(const struct net_device *in, const struct net_device *out, str
 	return ret;
 }
 
-int do_ip_set_del(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, u8 flags)
+int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
 {
 	int ret = 0;
 	ip_set_id_t id;
@@ -458,7 +458,7 @@ int do_ip_set_del(const struct net_device *in, const struct net_device *out, str
 	memset(&opt, 0, sizeof(opt));
 	opt.family = NFPROTO_IPV4;
 	opt.dim = IPSET_DIM_ONE;
-	opt.flags = flags;
+	opt.flags = 0;
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 
@@ -475,6 +475,40 @@ int do_ip_set_del(const struct net_device *in, const struct net_device *out, str
 	}
 
 	ret = ip_set_del(id, skb, &par, &opt);
+
+	ip_set_put_byindex(dev_net(in ? in : out), id);
+
+	return ret;
+}
+
+int ip_set_test_src_mac(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+{
+	int ret = 0;
+	ip_set_id_t id;
+	struct ip_set *set;
+	struct ip_set_adt_opt opt;
+	struct xt_action_param par;
+
+	memset(&opt, 0, sizeof(opt));
+	opt.family = NFPROTO_UNSPEC;
+	opt.dim = IPSET_DIM_ONE;
+	opt.flags = IPSET_DIM_ONE_SRC;
+	opt.cmdflags = 0;
+	opt.ext.timeout = UINT_MAX;
+
+	par.in = in;
+	par.out = out;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
+	par.net = dev_net(in ? in : out);
+#endif
+
+	id = ip_set_get_byname(dev_net(in ? in : out), ip_set_name, &set);
+	if (id == IPSET_INVALID_ID) {
+		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
+		return 0;
+	}
+
+	ret = ip_set_test(id, skb, &par, &opt);
 
 	ip_set_put_byindex(dev_net(in ? in : out), id);
 
