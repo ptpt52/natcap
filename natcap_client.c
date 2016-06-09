@@ -17,6 +17,7 @@
 #include <linux/skbuff.h>
 #include <linux/string.h>
 #include <linux/tcp.h>
+#include <linux/udp.h>
 #include <linux/version.h>
 #include <net/netfilter/nf_conntrack.h>
 #include "natcap_common.h"
@@ -229,6 +230,10 @@ static unsigned int natcap_client_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
+	if (test_bit(IPS_NATCAP_UDP_BIT, &ct->status)) {
+		return NF_ACCEPT;
+	}
+
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 			if (tcph->rst) {
@@ -308,7 +313,7 @@ static unsigned int natcap_client_out_hook(void *priv,
 	}
 
 start_natcap:
-	ret = natcap_tcp_encode(skb, &nto, 0);
+	ret = natcap_tcp_encode(skb, &nto);
 
 	//reload
 	iph = ip_hdr(skb);
@@ -386,6 +391,10 @@ static unsigned int natcap_client_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
+	if (test_bit(IPS_NATCAP_UDP_BIT, &ct->status)) {
+		return NF_ACCEPT;
+	}
+
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
@@ -398,7 +407,7 @@ static unsigned int natcap_client_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	ret = natcap_tcp_decode(skb, &nto, 0);
+	ret = natcap_tcp_decode(skb, &nto);
 
 	//reload
 	iph = ip_hdr(skb);
@@ -421,30 +430,90 @@ static unsigned natcap_client_udp_proxy_out(unsigned int hooknum,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
+{
+	u_int8_t pf = PF_INET;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_client_udp_proxy_out(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
+{
+	u_int8_t pf = ops->pf;
+	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_client_udp_proxy_out(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
+{
+	u_int8_t pf = ops->pf;
+	unsigned int hooknum = ops->hooknum;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_client_udp_proxy_out(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
-#endif
 {
+	u_int8_t pf = state->pf;
+	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
+#endif
+	int ret;
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
 	struct iphdr *iph;
-	//struct tcphdr *tcph;
-	//struct udphdr *udph;
+	struct tcphdr *tcph;
+	struct udphdr *udph;
+	struct tuple server;
 
 	iph = ip_hdr(skb);
 
 	if (iph->protocol != IPPROTO_UDP)
 		return NF_ACCEPT;
+
+	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
+
+	if (ip_set_test_dst_ip(in, out, skb, "udproxylist") <= 0) {
+		return NF_ACCEPT;
+	}
+
+	natcap_server_select(iph->daddr, udph->dest, &server);
+	if (server.ip == 0) {
+		return NF_ACCEPT;
+	}
+	server.port = __constant_htons(12315);
+
+	ret = natcap_udp_encode(skb, 0);
+	if (ret != 0) {
+		NATCAP_ERROR("(CLIENT_OUT)" DEBUG_FMT_UDP ": natcap_udp_encode@client ret=%d\n", DEBUG_ARG_UDP(iph,udph), ret);
+		return NF_ACCEPT;
+	}
+
+	ret = nf_conntrack_in(dev_net(in), pf, hooknum, skb);
+	if (ret != NF_ACCEPT) {
+		return ret;
+	}
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (!ct) {
+		return NF_DROP;
+	}
+
+	iph = ip_hdr(skb);
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
+
+	if (!test_and_set_bit(IPS_NATCAP_UDP_BIT, &ct->status)) { /* first time out */
+		NATCAP_INFO("(CLIENT_OUT)" DEBUG_FMT ": new natcaped connection out, server=" TUPLE_FMT "\n",
+				DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
+		if (natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
+			NATCAP_ERROR("(CLIENT_OUT)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, server=" TUPLE_FMT "\n",
+					DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
+			return NF_DROP;
+		}
+	}
+
 	return NF_ACCEPT;
 }
 
@@ -470,17 +539,49 @@ static unsigned int natcap_client_udp_proxy_in(void *priv,
 		const struct nf_hook_state *state)
 #endif
 {
+	int ret;
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
 	struct iphdr *iph;
-	//struct tcphdr *tcph;
-	//struct udphdr *udph;
+	struct tcphdr *tcph;
+	struct udphdr *udph;
+	struct natcap_udp_tcpopt nuo;
 
 	iph = ip_hdr(skb);
 
-	if (iph->protocol != IPPROTO_UDP)
+	if (iph->protocol != IPPROTO_TCP)
 		return NF_ACCEPT;
+
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+
+	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
+		return NF_ACCEPT;
+	}
+
+	if (!test_bit(IPS_NATCAP_UDP_BIT, &ct->status)) {
+		return NF_ACCEPT;
+	}
+
+	NATCAP_INFO("(CLIENT_IN)" DEBUG_FMT ": before decode\n", DEBUG_ARG(iph,tcph));
+
+	ret = natcap_udp_decode(skb, &nuo);
+	if (ret != 0) {
+		NATCAP_ERROR("(CLIENT_IN)" DEBUG_FMT ": natcap_udp_decode ret = %d\n", DEBUG_ARG(iph,tcph), ret);
+		return NF_DROP;
+	}
+
+	iph = ip_hdr(skb);
+	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
+
+	NATCAP_INFO("(CLIENT_IN)" DEBUG_FMT_UDP ": after decode\n", DEBUG_ARG_UDP(iph,udph));
+
 	return NF_ACCEPT;
 }
-
 
 static struct nf_hook_ops client_hooks[] = {
 	{
@@ -525,6 +626,24 @@ static struct nf_hook_ops client_hooks[] = {
 #endif
 		.hook = natcap_client_udp_proxy_out,
 		.pf = PF_INET,
+		.hooknum = NF_INET_PRE_ROUTING,
+		.priority = NF_IP_PRI_CONNTRACK - 1,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
+		.hook = natcap_client_udp_proxy_out,
+		.pf = PF_INET,
+		.hooknum = NF_INET_LOCAL_OUT,
+		.priority = NF_IP_PRI_CONNTRACK - 1,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
+		.hook = natcap_client_udp_proxy_in,
+		.pf = PF_INET,
 		.hooknum = NF_INET_POST_ROUTING,
 		.priority = NF_IP_PRI_LAST,
 	},
@@ -534,8 +653,8 @@ static struct nf_hook_ops client_hooks[] = {
 #endif
 		.hook = natcap_client_udp_proxy_in,
 		.pf = PF_INET,
-		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_FIRST,
+		.hooknum = NF_INET_LOCAL_IN,
+		.priority = NF_IP_PRI_LAST,
 	},
 };
 

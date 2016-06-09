@@ -245,7 +245,7 @@ static inline int skb_rcsum_tcpudp(struct sk_buff *skb)
 	return 0;
 }
 
-int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_tcp_tcpopt *nto, int mode)
+int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_tcp_tcpopt *nto)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
@@ -284,17 +284,15 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_tcp_tcpopt *nto, 
 	}
 
 	pnto = (struct natcap_tcp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
-	memmove((void *)pnto + ntosz, (void *)pnto, offlen);
+	memmove((void *)tcph + sizeof(struct tcphdr) + ntosz, (void *)tcph + sizeof(struct tcphdr), offlen);
 
 	pnto->opcode = TCPOPT_NATCAP;
-	pnto->opsize = ntosz;
+	pnto->opsize = ALIGN(sizeof(struct natcap_tcp_tcpopt), sizeof(unsigned int));
 	pnto->encryption = !!nto->encryption;
 	pnto->port = nto->port;
 	pnto->ip = nto->ip;
-	if (mode == 0) {
-		memcpy(pnto->mac_addr, default_mac_addr, ETH_ALEN);
-		pnto->u_hash = default_u_hash;
-	}
+	memcpy(pnto->mac_addr, default_mac_addr, ETH_ALEN);
+	pnto->u_hash = default_u_hash;
 
 	tcph->doff = (tcph->doff * 4 + ntosz) / 4;
 	iph->tot_len = htons(ntohs(iph->tot_len) + ntosz);
@@ -313,7 +311,7 @@ do_encode:
 	return 0;
 }
 
-int natcap_tcp_decode(struct sk_buff *skb, struct natcap_tcp_tcpopt *nto, int mode)
+int natcap_tcp_decode(struct sk_buff *skb, struct natcap_tcp_tcpopt *nto)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
@@ -336,28 +334,26 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_tcp_tcpopt *nto, int mo
 
 	pnto = (struct natcap_tcp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
 	if (pnto->opcode != TCPOPT_NATCAP ||
-			pnto->opsize != ntosz) {
+			pnto->opsize != ALIGN(sizeof(struct natcap_tcp_tcpopt), sizeof(unsigned int))) {
 		return -2;
 	}
-	if (tcph->doff * 4 < sizeof(struct tcphdr) + ntosz) {
+	if (tcph->doff * 4 < sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_tcp_tcpopt), sizeof(unsigned int))) {
 		return -4;
 	}
 
-	offlen = skb_tail_pointer(skb) - (unsigned char *)pnto - ntosz;
+	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)tcph + sizeof(struct tcphdr)) - ntosz;
 	if (offlen < 0) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
 		return -8;
 	}
 
-	if (mode == 1) {
-		memcpy(nto->mac_addr, pnto->mac_addr, ETH_ALEN);
-		nto->u_hash = pnto->u_hash;
-	}
+	memcpy(nto->mac_addr, pnto->mac_addr, ETH_ALEN);
+	nto->u_hash = pnto->u_hash;
 	nto->encryption = pnto->encryption;
 	nto->port = pnto->port;
 	nto->ip = pnto->ip;
 
-	memmove((void *)pnto, (void *)pnto + ntosz, offlen);
+	memmove((void *)tcph + sizeof(struct tcphdr), (void *)tcph + sizeof(struct tcphdr) + ntosz, offlen);
 
 	tcph->doff = (tcph->doff * 4 - ntosz) / 4;
 	iph->tot_len = htons(ntohs(iph->tot_len) - ntosz);
@@ -373,6 +369,149 @@ do_decode:
 		return -32;
 	}
 	//skb->ip_summed = CHECKSUM_UNNECESSARY;
+
+	return 0;
+}
+
+int natcap_udp_encode(struct sk_buff *skb, int mode)
+{
+	struct iphdr *iph;
+	struct tcphdr *tcph;
+	struct udphdr *udph;
+	struct natcap_udp_tcpopt *pnuo = NULL;
+	int nuosz = ALIGN(sizeof(struct tcphdr) + sizeof(struct natcap_udp_tcpopt) - sizeof(struct udphdr), sizeof(unsigned int));
+	int offlen;
+	__be32 dip;
+	__be16 sport, dport;
+
+	iph = ip_hdr(skb);
+	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
+
+	if (skb->len != ntohs(iph->tot_len)) {
+		NATCAP_ERROR("(%s)" DEBUG_FMT_UDP ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG_UDP(iph,udph), skb->len, ntohs(iph->tot_len));
+		return -1;
+	}
+
+	//XXX do use skb_tailroom here!!
+	if (skb->end - skb->tail < nuosz && pskb_expand_head(skb, 0, nuosz, GFP_ATOMIC)) {
+		/* no memory */
+		NATCAP_ERROR("(%s)" DEBUG_FMT_UDP ": pskb_expand_head failed\n", __FUNCTION__, DEBUG_ARG_UDP(iph,udph));
+		return -2;
+	}
+
+	//reload
+	iph = ip_hdr(skb);
+	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
+	tcph = (struct tcphdr *)udph;
+
+	offlen = skb_tail_pointer(skb) - (unsigned char *)udph - sizeof(struct udphdr);
+	if (offlen < 0) {
+		NATCAP_ERROR("(%s)" DEBUG_FMT_UDP ": skb udp offlen = %d\n", __FUNCTION__, DEBUG_ARG_UDP(iph,udph), offlen);
+		return -4;
+	}
+
+	dip = iph->daddr;
+	dport = udph->dest;
+	sport = udph->source;
+
+	pnuo = (struct natcap_udp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
+	memmove((void *)udph + sizeof(struct udphdr) + nuosz, (void *)udph + sizeof(struct udphdr), offlen);
+
+	pnuo->opcode = TCPOPT_NATCAP_UDP;
+	pnuo->opsize = ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int));
+	pnuo->port = dport;
+	pnuo->ip = dip;
+
+	iph->tot_len = htons(ntohs(iph->tot_len) + nuosz);
+	iph->protocol = IPPROTO_TCP;
+	iph->id = __constant_htons(0xDEAD);
+
+	tcph->source = sport;
+	tcph->dest = dport;
+	tcph->doff = (sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int))) / 4;
+	tcph->res1 = 0;
+	tcph->cwr = 0;
+	tcph->ece = 0;
+	tcph->urg = 0;
+	tcph->psh = 0;
+	if (mode == 0) {
+		tcph->rst = 0;
+		tcph->syn = 1;
+		tcph->ack = 0;
+	} else {
+		tcph->rst = 1;
+		tcph->syn = 0;
+		tcph->ack = 1;
+	}
+	tcph->fin = 0;
+
+	skb->len += nuosz;
+	skb->tail += nuosz;
+
+	skb->ip_summed = CHECKSUM_NONE;
+	skb_rcsum_tcpudp(skb);
+
+	return 0;
+}
+
+int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo)
+{
+	struct iphdr *iph;
+	struct tcphdr *tcph;
+	struct udphdr *udph;
+	struct natcap_udp_tcpopt *pnuo = NULL;
+	int nuosz = ALIGN(sizeof(struct tcphdr) + sizeof(struct natcap_udp_tcpopt) - sizeof(struct udphdr), sizeof(unsigned int));
+	int offlen;
+	__be16 sport, dport;
+
+	iph = ip_hdr(skb);
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+
+	if (skb->len != ntohs(iph->tot_len)) {
+		NATCAP_ERROR("(%s)" DEBUG_FMT ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb->len, ntohs(iph->tot_len));
+		return -1;
+	}
+
+	if (!((tcph->syn && !tcph->ack) || (tcph->rst && tcph->ack))) {
+		//not (syn or rst-ack)
+		return -1;
+	}
+
+	pnuo = (struct natcap_udp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
+	if (pnuo->opcode != TCPOPT_NATCAP_UDP ||
+			pnuo->opsize != ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int))) {
+		return -2;
+	}
+	if (tcph->doff * 4 < sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int))) {
+		return -4;
+	}
+
+	udph = (struct udphdr *)tcph;
+
+	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)udph + sizeof(struct udphdr)) - nuosz;
+	if (offlen < 0) {
+		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb udp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
+		return -8;
+	}
+
+	nuo->port = pnuo->port;
+	nuo->ip = pnuo->ip;
+	dport = tcph->dest;
+	sport = tcph->source;
+
+	memmove((void *)udph + sizeof(struct udphdr), (void *)udph + sizeof(struct udphdr) + nuosz, offlen);
+
+	iph->tot_len = htons(ntohs(iph->tot_len) - nuosz);
+	iph->protocol = IPPROTO_UDP;
+
+	udph->source = sport;
+	udph->dest = dport;
+	udph->len = htons(sizeof(struct udphdr) + offlen);
+	skb->len -= nuosz;
+	skb->tail -= nuosz;
+
+	skb->ip_summed = CHECKSUM_NONE;
+	skb_rcsum_tcpudp(skb);
 
 	return 0;
 }

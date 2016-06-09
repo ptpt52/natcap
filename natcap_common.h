@@ -60,8 +60,8 @@ extern unsigned int server_seed;
 		} \
 	} while (0)
 
-#define IP_TCP_FMT	"%pI4:%u->%pI4:%u"
-#define IP_TCP_ARG(i,t)	&(i)->saddr, ntohs((t)->source), &(i)->daddr, ntohs((t)->dest)
+#define IP_TCPUDP_FMT	"%pI4:%u->%pI4:%u"
+#define IP_TCPUDP_ARG(i,t)	&(i)->saddr, ntohs((t)->source), &(i)->daddr, ntohs((t)->dest)
 #define TCP_ST_FMT	"%c%c%c%c%c%c%c%c"
 #define TCP_ST_ARG(t) \
 	(t)->cwr ? 'C' : '.', \
@@ -72,16 +72,24 @@ extern unsigned int server_seed;
 	(t)->rst ? 'R' : '.', \
 	(t)->syn ? 'S' : '.', \
 	(t)->fin ? 'F' : '.'
+#define UDP_ST_FMT "len:%u,check:%04x"
+#define UDP_ST_ARG(u) ntohs((u)->len), ntohs((u)->check)
 
-#define DEBUG_FMT "[" IP_TCP_FMT "][ID=0x%x,TL=%u][" TCP_ST_FMT "]"
-#define DEBUG_ARG(i, t) IP_TCP_ARG(i,t), ntohs((i)->id), ntohs((i)->tot_len), TCP_ST_ARG(t)
+#define DEBUG_FMT "[TCP][" IP_TCPUDP_FMT "][ID=0x%x,TL=%u][" TCP_ST_FMT "]"
+#define DEBUG_ARG(i, t) IP_TCPUDP_ARG(i,t), ntohs((i)->id), ntohs((i)->tot_len), TCP_ST_ARG(t)
+
+#define DEBUG_FMT_UDP "[UDP][" IP_TCPUDP_FMT "][ID=0x%x,TL=%u][" UDP_ST_FMT "]"
+#define DEBUG_ARG_UDP(i, u) IP_TCPUDP_ARG(i,u), ntohs((i)->id), ntohs((i)->tot_len), UDP_ST_ARG(u)
 
 #define TUPLE_FMT "%pI4:%u-%c"
 #define TUPLE_ARG(t) &(t)->ip, ntohs((t)->port), (t)->encryption ? 'e' : 'o'
 
 int skb_csum_test(struct sk_buff *skb);
-int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_tcp_tcpopt *nto, int mode);
-int natcap_tcp_decode(struct sk_buff *skb, struct natcap_tcp_tcpopt *nto, int mode);
+int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_tcp_tcpopt *nto);
+int natcap_tcp_decode(struct sk_buff *skb, struct natcap_tcp_tcpopt *nto);
+
+int natcap_udp_encode(struct sk_buff *skb, int mode);
+int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo);
 
 int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
 int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
