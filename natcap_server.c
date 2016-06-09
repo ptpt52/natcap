@@ -305,8 +305,7 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 	}
 
 	if (!test_and_set_bit(IPS_NATCAP_UDP_BIT, &ct->status)) { /* first time in */
-		NATCAP_INFO("(SERVER_IN)" DEBUG_FMT_UDP ": new natcaped connection in, after decode\n",
-				DEBUG_ARG_UDP(iph,udph));
+		NATCAP_INFO("(SERVER_IN)" DEBUG_FMT_UDP ": new natcaped connection in, after decode, target=%pI4:%u\n", DEBUG_ARG_UDP(iph,udph), &nuo.ip, ntohs(nuo.port));
 		if (natcap_tcp_dnat_setup(ct, nuo.ip, nuo.port) != NF_ACCEPT) {
 			NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT_UDP ": natcap_tcp_dnat_setup failed, target=%pI4:%u\n", DEBUG_ARG_UDP(iph,udph), &nuo.ip, ntohs(nuo.port));
 			return NF_DROP;

@@ -318,7 +318,7 @@ start_natcap:
 	}
 
 	if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
-		NATCAP_INFO("(CLIENT_OUT)" DEBUG_FMT ": new natcaped connection out, after encode\n", DEBUG_ARG(iph,tcph));
+		NATCAP_INFO("(CLIENT_OUT)" DEBUG_FMT ": new natcaped connection out, after encode, server=" TUPLE_FMT "\n", DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 		if (natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 			NATCAP_ERROR("(CLIENT_OUT)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
