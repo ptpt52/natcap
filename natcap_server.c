@@ -70,28 +70,24 @@ static unsigned int natcap_server_in_hook(void *priv,
 	struct tuple server;
 
 	iph = ip_hdr(skb);
-
 	if (iph->protocol != IPPROTO_TCP)
 		return NF_ACCEPT;
-
-	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
-
 	if (test_bit(IPS_NATCAP_UDP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
-
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
+
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		if (skb_csum_test(skb) != 0) {
@@ -99,9 +95,7 @@ static unsigned int natcap_server_in_hook(void *priv,
 			return NF_DROP;
 		}
 		NATCAP_DEBUG("(SERVER_IN)" DEBUG_FMT ": before decode\n", DEBUG_ARG(iph,tcph));
-
 		nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-
 		ret = natcap_tcp_decode(skb, &nto);
 		//reload
 		iph = ip_hdr(skb);
@@ -115,37 +109,38 @@ static unsigned int natcap_server_in_hook(void *priv,
 
 		nto.encryption = 0;
 		ret = natcap_tcp_decode(skb, &nto);
-		//reload
-		iph = ip_hdr(skb);
-		tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
-
-		//not a natcap packet
 		if (ret != 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
+		//reload
+		iph = ip_hdr(skb);
+		tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 
 		if (verify_client(in, out, skb, &nto) != 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-			NATCAP_WARN("(SERVER_IN)" DEBUG_FMT ": client mac=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u verified failed\n", DEBUG_ARG(iph,tcph),
-					nto.mac_addr[0], nto.mac_addr[1], nto.mac_addr[2], nto.mac_addr[3], nto.mac_addr[4], nto.mac_addr[5], ntohs(nto.u_hash));
+			NATCAP_WARN("(SERVER_IN)" DEBUG_FMT ": client mac=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u verified failed\n",
+					DEBUG_ARG(iph,tcph),
+					nto.mac_addr[0], nto.mac_addr[1], nto.mac_addr[2],
+					nto.mac_addr[3], nto.mac_addr[4], nto.mac_addr[5],
+					ntohs(nto.u_hash));
 			return NF_ACCEPT;
 		}
 
-		NATCAP_INFO("(SERVER_IN)" DEBUG_FMT ": client mac=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u verified ok\n", DEBUG_ARG(iph,tcph),
-				nto.mac_addr[0], nto.mac_addr[1], nto.mac_addr[2], nto.mac_addr[3], nto.mac_addr[4], nto.mac_addr[5], ntohs(nto.u_hash));
+		NATCAP_INFO("(SERVER_IN)" DEBUG_FMT ": client mac=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u verified ok\n",
+				DEBUG_ARG(iph,tcph),
+				nto.mac_addr[0], nto.mac_addr[1], nto.mac_addr[2],
+				nto.mac_addr[3], nto.mac_addr[4], nto.mac_addr[5],
+				ntohs(nto.u_hash));
 
 		server.ip = nto.ip;
 		server.port = nto.port;
 		server.encryption = nto.encryption;
-
 		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
-			NATCAP_INFO("(SERVER_IN)" DEBUG_FMT ": new natcaped connection in, after decode target=" TUPLE_FMT "\n",
-					DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
+			NATCAP_INFO("(SERVER_IN)" DEBUG_FMT ": new natcaped connection in, after decode target=" TUPLE_FMT "\n", DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 
 			if (natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
-				NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, target=" TUPLE_FMT "\n",
-						DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
+				NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_DROP;
 			}
@@ -156,8 +151,7 @@ static unsigned int natcap_server_in_hook(void *priv,
 	}
 
 	if (ret != 0) {
-		NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT ": natcap_tcp_decode ret = %d\n",
-			DEBUG_ARG(iph,tcph), ret);
+		NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT ": natcap_tcp_decode ret = %d\n", DEBUG_ARG(iph,tcph), ret);
 		return NF_DROP;
 	}
 
@@ -199,54 +193,46 @@ static unsigned int natcap_server_out_hook(void *priv,
 	struct natcap_tcp_tcpopt nto;
 
 	iph = ip_hdr(skb);
-
 	if (iph->protocol != IPPROTO_TCP)
 		return NF_ACCEPT;
-
-	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-
 	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
-
 	if (test_bit(IPS_NATCAP_UDP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
-
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 
-	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
-		//matched
-		NATCAP_DEBUG("(SERVER_OUT)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
-
-		nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-		nto.port = tcph->source;
-		nto.ip = iph->saddr;
-	} else {
+	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
+
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+
+	NATCAP_DEBUG("(SERVER_OUT)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
+	nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+	nto.port = tcph->source;
+	nto.ip = iph->saddr;
 
 	/* XXX I just confirm it first  */
 	ret = nf_conntrack_confirm(skb);
 	if (ret != NF_ACCEPT) {
 		return ret;
 	}
-
 	//reload
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	ret = natcap_tcp_encode(skb, &nto);
 	if (ret != 0) {
-		NATCAP_ERROR("(SERVER_OUT)" DEBUG_FMT ": natcap_tcp_encode@server ret=%d\n",
-				DEBUG_ARG(iph,tcph), ret);
+		NATCAP_ERROR("(SERVER_OUT)" DEBUG_FMT ": natcap_tcp_encode@server ret=%d\n", DEBUG_ARG(iph,tcph), ret);
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_DROP;
 	}
@@ -298,7 +284,6 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 	struct natcap_udp_tcpopt nuo;
 
 	iph = ip_hdr(skb);
-
 	if (iph->protocol != IPPROTO_TCP)
 		return NF_ACCEPT;
 
@@ -306,7 +291,7 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 	if (ret != 0) {
 		return NF_ACCEPT;
 	}
-
+	//reload
 	iph = ip_hdr(skb);
 	udph = (struct udphdr *)((void *)iph + iph->ihl*4);
 
@@ -314,18 +299,16 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 	if (ret != NF_ACCEPT) {
 		return ret;
 	}
-
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct) {
 		return NF_DROP;
 	}
 
 	if (!test_and_set_bit(IPS_NATCAP_UDP_BIT, &ct->status)) { /* first time in */
-		NATCAP_INFO("(SERVER_IN)" DEBUG_FMT_UDP ": new natcaped connection in, after encode\n",
+		NATCAP_INFO("(SERVER_IN)" DEBUG_FMT_UDP ": new natcaped connection in, after decode\n",
 				DEBUG_ARG_UDP(iph,udph));
 		if (natcap_tcp_dnat_setup(ct, nuo.ip, nuo.port) != NF_ACCEPT) {
-			NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT_UDP ": natcap_tcp_dnat_setup failed, target=%pI4:%u\n",
-					DEBUG_ARG_UDP(iph,udph), &nuo.ip, ntohs(nuo.port));
+			NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT_UDP ": natcap_tcp_dnat_setup failed, target=%pI4:%u\n", DEBUG_ARG_UDP(iph,udph), &nuo.ip, ntohs(nuo.port));
 			return NF_DROP;
 		}
 	}
@@ -365,17 +348,13 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 	struct udphdr *udph;
 
 	iph = ip_hdr(skb);
-
 	if (iph->protocol != IPPROTO_UDP)
 		return NF_ACCEPT;
-
-	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-
 	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
@@ -384,7 +363,9 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 		return NF_ACCEPT;
 	}
 
-	NATCAP_INFO("(SERVER_OUT)" DEBUG_FMT_UDP ": before encode\n", DEBUG_ARG_UDP(iph,udph));
+	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
+
+	NATCAP_DEBUG("(SERVER_OUT)" DEBUG_FMT_UDP ": before encode\n", DEBUG_ARG_UDP(iph,udph));
 
 	/* XXX I just confirm it first  */
 	ret = nf_conntrack_confirm(skb);
@@ -401,7 +382,7 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	NATCAP_INFO("(SERVER_OUT)" DEBUG_FMT ":after encode\n", DEBUG_ARG(iph,tcph));
+	NATCAP_DEBUG("(SERVER_OUT)" DEBUG_FMT ":after encode\n", DEBUG_ARG(iph,tcph));
 
 	return NF_ACCEPT;
 }
