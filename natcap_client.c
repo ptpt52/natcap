@@ -30,7 +30,7 @@ unsigned int server_persist_timeout = 0;
 module_param(server_persist_timeout, int, 0);
 MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
 
-u16 default_u_hash = 0;
+u32 default_u_hash = 0;
 unsigned char default_mac_addr[ETH_ALEN];
 static void default_mac_addr_init(void)
 {
@@ -214,7 +214,7 @@ static unsigned int natcap_client_out_hook(void *priv,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_tcp_option nto;
+	struct natcap_tcp_tcpopt nto;
 	struct tuple server;
 
 	iph = ip_hdr(skb);
@@ -261,9 +261,9 @@ static unsigned int natcap_client_out_hook(void *priv,
 		//matched
 		NATCAP_DEBUG("(CLIENT_OUT)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
 
-		nto.opt.port = tcph->dest;
-		nto.opt.ip = iph->daddr;
-		nto.opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+		nto.port = tcph->dest;
+		nto.ip = iph->daddr;
+		nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 	} else if (ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
 		natcap_server_select(iph->daddr, tcph->dest, &server);
 		if (server.ip == 0) {
@@ -272,13 +272,12 @@ static unsigned int natcap_client_out_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
-		nto.opt.port = tcph->dest;
-		nto.opt.ip = iph->daddr;
-		nto.opt.dnat = !(server.ip == nto.opt.ip && server.port == nto.opt.port);
-		nto.opt.encryption = server.encryption;
+		nto.port = tcph->dest;
+		nto.ip = iph->daddr;
+		nto.encryption = server.encryption;
 		if (tcph->dest == __constant_htons(443) ||
 				tcph->dest == __constant_htons(22)) {
-			nto.opt.encryption = 0;
+			nto.encryption = 0;
 		}
 
 		NATCAP_INFO("(CLIENT_OUT)" DEBUG_FMT ": new natcaped connection out, before encode, server=" TUPLE_FMT "\n",
@@ -326,13 +325,13 @@ start_natcap:
 		NATCAP_INFO("(CLIENT_OUT)" DEBUG_FMT ": new natcaped connection out, after encode\n",
 				DEBUG_ARG(iph,tcph));
 		//setup DNAT
-		if (nto.opt.dnat && natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
+		if (natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 			NATCAP_ERROR("(CLIENT_OUT)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, server=" TUPLE_FMT "\n",
 					DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
 		}
-		if (nto.opt.encryption) {
+		if (nto.encryption) {
 			set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 		}
 	}
@@ -369,7 +368,7 @@ static unsigned int natcap_client_in_hook(void *priv,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_tcp_option nto;
+	struct natcap_tcp_tcpopt nto;
 
 	iph = ip_hdr(skb);
 
@@ -394,7 +393,7 @@ static unsigned int natcap_client_in_hook(void *priv,
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		//matched
 		NATCAP_DEBUG("(CLIENT_IN)" DEBUG_FMT ": before decode\n", DEBUG_ARG(iph,tcph));
-		nto.opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+		nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 	} else {
 		return NF_ACCEPT;
 	}
@@ -415,6 +414,73 @@ static unsigned int natcap_client_in_hook(void *priv,
 
 	return NF_ACCEPT;
 }
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned natcap_client_udp_proxy_out(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_client_udp_proxy_out(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+static unsigned int natcap_client_udp_proxy_out(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+#else
+static unsigned int natcap_client_udp_proxy_out(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+#endif
+{
+	struct iphdr *iph;
+	//struct tcphdr *tcph;
+	//struct udphdr *udph;
+
+	iph = ip_hdr(skb);
+
+	if (iph->protocol != IPPROTO_UDP)
+		return NF_ACCEPT;
+	return NF_ACCEPT;
+}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned natcap_client_udp_proxy_in(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_client_udp_proxy_in(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+static unsigned int natcap_client_udp_proxy_in(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+#else
+static unsigned int natcap_client_udp_proxy_in(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+#endif
+{
+	struct iphdr *iph;
+	//struct tcphdr *tcph;
+	//struct udphdr *udph;
+
+	iph = ip_hdr(skb);
+
+	if (iph->protocol != IPPROTO_UDP)
+		return NF_ACCEPT;
+	return NF_ACCEPT;
+}
+
 
 static struct nf_hook_ops client_hooks[] = {
 	{
@@ -452,6 +518,24 @@ static struct nf_hook_ops client_hooks[] = {
 		.pf = PF_INET,
 		.hooknum = NF_INET_LOCAL_IN,
 		.priority = NF_IP_PRI_LAST,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
+		.hook = natcap_client_udp_proxy_out,
+		.pf = PF_INET,
+		.hooknum = NF_INET_POST_ROUTING,
+		.priority = NF_IP_PRI_LAST,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
+		.hook = natcap_client_udp_proxy_in,
+		.pf = PF_INET,
+		.hooknum = NF_INET_PRE_ROUTING,
+		.priority = NF_IP_PRI_FIRST,
 	},
 };
 

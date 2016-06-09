@@ -12,7 +12,7 @@
 extern unsigned int client_forward_mode;
 extern unsigned int server_persist_timeout;
 
-extern u16 default_u_hash;
+extern u32 default_u_hash;
 extern unsigned char default_mac_addr[ETH_ALEN];
 
 void natcap_server_cleanup(void);

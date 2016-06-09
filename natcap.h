@@ -16,20 +16,23 @@
 #pragma pack(push)
 #pragma pack(1)
 
-struct natcap_option {
-	u8 dnat;
-	u8 encryption;
-	__be16 port;
-	__be32 ip;
-};
-
-struct natcap_tcp_option {
+struct natcap_tcp_tcpopt {
 	u8 opcode;
 #define TCPOPT_NATCAP 0x99
 	u8 opsize;
-	struct natcap_option opt;
+	__be16 port;
+	__be32 ip;
+	u32 u_hash;
 	u8 mac_addr[ETH_ALEN];
-	u16 u_hash;
+	u16 encryption;
+};
+
+struct natcap_udp_tcpopt {
+	u8 opcode;
+#define TCPOPT_NATCAP_UDP 0x9A
+	u8 opsize;
+	__be16 port;
+	__be32 ip;
 };
 
 #pragma pack(pop)

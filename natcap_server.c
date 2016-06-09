@@ -16,7 +16,7 @@
 #include "natcap_common.h"
 #include "natcap_server.h"
 
-static inline int verify_client(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const struct natcap_tcp_option *nto)
+static inline int verify_client(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const struct natcap_tcp_tcpopt *nto)
 {
 	int ret;
 	unsigned char old_mac[ETH_ALEN];
@@ -64,7 +64,7 @@ static unsigned int natcap_server_in_hook(void *priv,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_tcp_option nto;
+	struct natcap_tcp_tcpopt nto;
 	struct tuple server;
 
 	iph = ip_hdr(skb);
@@ -94,8 +94,7 @@ static unsigned int natcap_server_in_hook(void *priv,
 		}
 		NATCAP_DEBUG("(SERVER_IN)" DEBUG_FMT ": before decode\n", DEBUG_ARG(iph,tcph));
 
-		nto.opt.dnat = 0;
-		nto.opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+		nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 
 		ret = natcap_tcp_decode(skb, &nto, 1);
 		//reload
@@ -108,8 +107,7 @@ static unsigned int natcap_server_in_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
-		nto.opt.dnat = 0;
-		nto.opt.encryption = 0;
+		nto.encryption = 0;
 		ret = natcap_tcp_decode(skb, &nto, 1);
 		//reload
 		iph = ip_hdr(skb);
@@ -131,15 +129,15 @@ static unsigned int natcap_server_in_hook(void *priv,
 		NATCAP_INFO("(SERVER_IN)" DEBUG_FMT ": client mac=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u verified ok\n", DEBUG_ARG(iph,tcph),
 				nto.mac_addr[0], nto.mac_addr[1], nto.mac_addr[2], nto.mac_addr[3], nto.mac_addr[4], nto.mac_addr[5], ntohs(nto.u_hash));
 
-		server.ip = nto.opt.ip;
-		server.port = nto.opt.port;
-		server.encryption = nto.opt.encryption;
+		server.ip = nto.ip;
+		server.port = nto.port;
+		server.encryption = nto.encryption;
 
 		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time */
 			NATCAP_INFO("(SERVER_IN)" DEBUG_FMT ": new natcaped connection in, after decode target=" TUPLE_FMT "\n",
 					DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 
-			if (nto.opt.dnat && natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
+			if (natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 				NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, target=" TUPLE_FMT "\n",
 						DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -192,7 +190,7 @@ static unsigned int natcap_server_out_hook(void *priv,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_tcp_option nto;
+	struct natcap_tcp_tcpopt nto;
 
 	iph = ip_hdr(skb);
 
@@ -218,10 +216,9 @@ static unsigned int natcap_server_out_hook(void *priv,
 		//matched
 		NATCAP_DEBUG("(SERVER_OUT)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
 
-		nto.opt.dnat = 0;
-		nto.opt.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-		nto.opt.port = tcph->source;
-		nto.opt.ip = iph->saddr;
+		nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+		nto.port = tcph->source;
+		nto.ip = iph->saddr;
 	} else {
 		return NF_ACCEPT;
 	}
