@@ -80,10 +80,10 @@ extern const char *const hooknames[];
 #define DEBUG_FMT_PREFIX "[%s](%s)"
 #define DEBUG_ARG_PREFIX hooknames[hooknum], __FUNCTION__
 
-#define DEBUG_FMT "[" IP_TCPUDP_FMT "][ID:%04X,IL:%u][" TCP_ST_FMT "]"
+#define DEBUG_FMT "[" IP_TCPUDP_FMT "|ID:%04X,IL:%u|" TCP_ST_FMT "]"
 #define DEBUG_ARG(i, t) IP_TCPUDP_ARG(i,t), ntohs((i)->id), ntohs((i)->tot_len), TCP_ST_ARG(t)
 
-#define DEBUG_FMT_UDP "[" IP_TCPUDP_FMT "][ID:%04X,IL:%u][" UDP_ST_FMT "]"
+#define DEBUG_FMT_UDP "[" IP_TCPUDP_FMT "|ID:%04X,IL:%u|" UDP_ST_FMT "]"
 #define DEBUG_ARG_UDP(i, u) IP_TCPUDP_ARG(i,u), ntohs((i)->id), ntohs((i)->tot_len), UDP_ST_ARG(u)
 
 #define TUPLE_FMT "%pI4:%u-%c"
