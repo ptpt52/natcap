@@ -33,6 +33,14 @@ unsigned int server_seed = 0;
 module_param(server_seed, int, 0);
 MODULE_PARM_DESC(server_seed, "Server side seed number for encode");
 
+const char *const hooknames[] = {
+	[NF_INET_PRE_ROUTING] = "PREROUTING",
+	[NF_INET_LOCAL_IN] = "INPUT",
+	[NF_INET_FORWARD] = "FORWARD",
+	[NF_INET_LOCAL_OUT] = "OUTPUT",
+	[NF_INET_POST_ROUTING] = "POSTROUTING",
+};
+
 static unsigned char natcap_map[256] = {
 	152, 151, 106, 224,  13,  90, 137, 200, 178, 138, 212, 156, 238,  54,  44, 237,
 	101,  42,  97,  91, 163, 191, 119, 157, 123, 102, 124, 125, 197,  35,  15,  26,

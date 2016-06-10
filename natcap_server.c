@@ -46,11 +46,13 @@ static unsigned int natcap_server_in_hook(const struct nf_hook_ops *ops,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
 {
+	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_server_in_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 {
+	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
 #else
@@ -58,6 +60,7 @@ static unsigned int natcap_server_in_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 {
+	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
 #endif
@@ -91,10 +94,10 @@ static unsigned int natcap_server_in_hook(void *priv,
 
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		if (skb_csum_test(skb) != 0) {
-			NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT ": checksum failed\n", DEBUG_ARG(iph,tcph));
+			NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT_PREFIX DEBUG_FMT ": checksum failed\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 			return NF_DROP;
 		}
-		NATCAP_DEBUG("(SERVER_IN)" DEBUG_FMT ": before decode\n", DEBUG_ARG(iph,tcph));
+		NATCAP_DEBUG("(SERVER_IN)" DEBUG_FMT_PREFIX DEBUG_FMT ": before decode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 		nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 		ret = natcap_tcp_decode(skb, &nto);
 		//reload
@@ -102,7 +105,7 @@ static unsigned int natcap_server_in_hook(void *priv,
 		tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 	} else {
 		if (!tcph->syn || tcph->ack) {
-			NATCAP_WARN("(SERVER_IN)" DEBUG_FMT ": first packet in but not syn\n", DEBUG_ARG(iph,tcph));
+			NATCAP_WARN("(SERVER_IN)" DEBUG_FMT_PREFIX DEBUG_FMT ": first packet in but not syn\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
@@ -119,16 +122,16 @@ static unsigned int natcap_server_in_hook(void *priv,
 
 		if (verify_client(in, out, skb, &nto) != 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-			NATCAP_WARN("(SERVER_IN)" DEBUG_FMT ": client mac=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u verified failed\n",
-					DEBUG_ARG(iph,tcph),
+			NATCAP_WARN("(SERVER_IN)" DEBUG_FMT_PREFIX DEBUG_FMT ": client mac=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u verified failed\n",
+					DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph),
 					nto.mac_addr[0], nto.mac_addr[1], nto.mac_addr[2],
 					nto.mac_addr[3], nto.mac_addr[4], nto.mac_addr[5],
 					ntohl(nto.u_hash));
 			return NF_ACCEPT;
 		}
 
-		NATCAP_INFO("(SERVER_IN)" DEBUG_FMT ": client mac=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u verified ok\n",
-				DEBUG_ARG(iph,tcph),
+		NATCAP_INFO("(SERVER_IN)" DEBUG_FMT_PREFIX DEBUG_FMT ": client mac=%02X:%02X:%02X:%02X:%02X:%02X, u_hash=%u verified ok\n",
+				DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph),
 				nto.mac_addr[0], nto.mac_addr[1], nto.mac_addr[2],
 				nto.mac_addr[3], nto.mac_addr[4], nto.mac_addr[5],
 				ntohl(nto.u_hash));
@@ -137,10 +140,10 @@ static unsigned int natcap_server_in_hook(void *priv,
 		server.port = nto.port;
 		server.encryption = nto.encryption;
 		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
-			NATCAP_INFO("(SERVER_IN)" DEBUG_FMT ": new natcaped connection in, after decode target=" TUPLE_FMT "\n", DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
+			NATCAP_INFO("(SERVER_IN)" DEBUG_FMT_PREFIX DEBUG_FMT ": new natcaped connection in, after decode target=" TUPLE_FMT "\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 
 			if (natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
-				NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT ": natcap_tcp_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
+				NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcap_tcp_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_DROP;
 			}
@@ -151,13 +154,13 @@ static unsigned int natcap_server_in_hook(void *priv,
 	}
 
 	if (ret != 0) {
-		NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT ": natcap_tcp_decode ret = %d\n", DEBUG_ARG(iph,tcph), ret);
+		NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcap_tcp_decode ret = %d\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), ret);
 		return NF_DROP;
 	}
 
 	skb->mark = XT_MARK_NATCAP;
 
-	NATCAP_DEBUG("(SERVER_IN)" DEBUG_FMT ": after decode\n", DEBUG_ARG(iph,tcph));
+	NATCAP_DEBUG("(SERVER_IN)" DEBUG_FMT_PREFIX DEBUG_FMT ": after decode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 
 	return NF_ACCEPT;
 }
@@ -169,22 +172,28 @@ static unsigned int natcap_server_out_hook(unsigned int hooknum,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
+{
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_server_out_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
+{
+	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_server_out_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
+{
+	unsigned int hooknum = state->hook;
 #else
 static unsigned int natcap_server_out_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
-#endif
 {
+	unsigned int hooknum = state->hook;
+#endif
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
@@ -216,7 +225,7 @@ static unsigned int natcap_server_out_hook(void *priv,
 
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	NATCAP_DEBUG("(SERVER_OUT)" DEBUG_FMT ": before encode\n", DEBUG_ARG(iph,tcph));
+	NATCAP_DEBUG("(SERVER_OUT)" DEBUG_FMT_PREFIX DEBUG_FMT ": before encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 	nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 	nto.port = tcph->source;
 	nto.ip = iph->saddr;
@@ -232,12 +241,12 @@ static unsigned int natcap_server_out_hook(void *priv,
 
 	ret = natcap_tcp_encode(skb, &nto);
 	if (ret != 0) {
-		NATCAP_ERROR("(SERVER_OUT)" DEBUG_FMT ": natcap_tcp_encode@server ret=%d\n", DEBUG_ARG(iph,tcph), ret);
+		NATCAP_ERROR("(SERVER_OUT)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcap_tcp_encode@server ret=%d\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), ret);
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_DROP;
 	}
 
-	NATCAP_DEBUG("(SERVER_OUT)" DEBUG_FMT ":after encode\n", DEBUG_ARG(iph,tcph));
+	NATCAP_DEBUG("(SERVER_OUT)" DEBUG_FMT_PREFIX DEBUG_FMT ":after encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 
 	return NF_ACCEPT;
 }
@@ -305,9 +314,9 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 	}
 
 	if (!test_and_set_bit(IPS_NATCAP_UDP_BIT, &ct->status)) { /* first time in */
-		NATCAP_INFO("(SERVER_IN)" DEBUG_FMT_UDP ": new natcaped connection in, after decode, target=%pI4:%u\n", DEBUG_ARG_UDP(iph,udph), &nuo.ip, ntohs(nuo.port));
+		NATCAP_INFO("(SERVER_IN)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": new natcaped connection in, after decode, target=%pI4:%u\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph), &nuo.ip, ntohs(nuo.port));
 		if (natcap_tcp_dnat_setup(ct, nuo.ip, nuo.port) != NF_ACCEPT) {
-			NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT_UDP ": natcap_tcp_dnat_setup failed, target=%pI4:%u\n", DEBUG_ARG_UDP(iph,udph), &nuo.ip, ntohs(nuo.port));
+			NATCAP_ERROR("(SERVER_IN)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": natcap_tcp_dnat_setup failed, target=%pI4:%u\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph), &nuo.ip, ntohs(nuo.port));
 			return NF_DROP;
 		}
 	}
@@ -323,22 +332,28 @@ static unsigned natcap_server_udp_proxy_out(unsigned int hooknum,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
+{
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_server_udp_proxy_out(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
+{
+	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_server_udp_proxy_out(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
+{
+	unsigned int hooknum = state->hook;
 #else
 static unsigned int natcap_server_udp_proxy_out(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
-#endif
 {
+	unsigned int hooknum = state->hook;
+#endif
 	int ret;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
@@ -364,7 +379,7 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 
 	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
 
-	NATCAP_DEBUG("(SERVER_OUT)" DEBUG_FMT_UDP ": before encode\n", DEBUG_ARG_UDP(iph,udph));
+	NATCAP_DEBUG("(SERVER_OUT)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": before encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph));
 
 	/* XXX I just confirm it first  */
 	ret = nf_conntrack_confirm(skb);
@@ -374,14 +389,14 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 
 	ret = natcap_udp_encode(skb, 1);
 	if (ret != 0) {
-		NATCAP_ERROR("(SERVER_OUT)" DEBUG_FMT_UDP ": natcap_udp_encode@server ret=%d\n", DEBUG_ARG_UDP(iph,udph), ret);
+		NATCAP_ERROR("(SERVER_OUT)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": natcap_udp_encode@server ret=%d\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph), ret);
 		return NF_DROP;
 	}
 
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	NATCAP_DEBUG("(SERVER_OUT)" DEBUG_FMT ":after encode\n", DEBUG_ARG(iph,tcph));
+	NATCAP_DEBUG("(SERVER_OUT)" DEBUG_FMT_PREFIX DEBUG_FMT ":after encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 
 	return NF_ACCEPT;
 }
