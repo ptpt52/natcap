@@ -19,15 +19,48 @@
 #define NATCAP_CLIENT_MODE (1<<0)
 #define NATCAP_NEED_ENC    (1<<1)
 
-struct natcap_tcp_tcpopt {
+struct natcap_TCPOPT_header {
 	u8 opcode;
 #define TCPOPT_NATCAP 0x99
 	u8 opsize;
-	__be16 port;
-	__be32 ip;
+	u8 type;
+	u8 encryption;
+};
+
+struct natcap_TCPOPT_data {
 	u32 u_hash;
 	u8 mac_addr[ETH_ALEN];
-	u16 encryption;
+	__be16 port;
+	__be32 ip;
+};
+
+struct natcap_TCPOPT_dst {
+	__be32 ip;
+	__be16 port;
+};
+
+struct natcap_TCPOPT_user {
+	u32 u_hash;
+	u8 mac_addr[ETH_ALEN];
+};
+
+struct natcap_TCPOPT {
+#define NATCAP_TCPOPT_NONE 0
+	struct natcap_TCPOPT_header header;
+	union {
+		struct {
+#define NATCAP_TCPOPT_ALL 1
+			struct natcap_TCPOPT_data data;
+		} all;
+		struct {
+#define NATCAP_TCPOPT_DST 2
+			struct natcap_TCPOPT_dst data;
+		} dst;
+		struct {
+#define NATCAP_TCPOPT_USER 3
+			struct natcap_TCPOPT_user data;
+		} user;
+	};
 };
 
 struct natcap_udp_tcpopt {
@@ -93,6 +126,10 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_SYN2 (1 << IPS_NATCAP_SYN2_BIT)
 #define IPS_NATCAP_SYN3_BIT 29
 #define IPS_NATCAP_SYN3 (1 << IPS_NATCAP_SYN3_BIT)
+#define IPS_NATCAP_AUTH_BIT 30
+#define IPS_NATCAP_AUTH (1 << IPS_NATCAP_AUTH_BIT)
+#define IPS_NATCAP_DROP_BIT 31
+#define IPS_NATCAP_DROP (1 << IPS_NATCAP_DROP_BIT)
 
 #define IPS_NATCAP_UDP_BIT 23
 #define IPS_NATCAP_UDP (1 << IPS_NATCAP_UDP_BIT)

@@ -223,6 +223,7 @@ static unsigned int natcap_client_out_hook(void *priv,
 	struct iphdr *iph;
 	struct tcphdr *tcph;
 	unsigned long status = NATCAP_CLIENT_MODE;
+	struct natcap_TCPOPT tcpopt;
 	struct tuple server;
 
 	iph = ip_hdr(skb);
@@ -308,7 +309,10 @@ static unsigned int natcap_client_out_hook(void *priv,
 	}
 
 start_natcap:
-	ret = natcap_tcp_encode(skb, status);
+	ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
+	if (ret >= 0) {
+		ret = natcap_tcp_encode(skb, &tcpopt);
+	}
 	//reload
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
@@ -369,7 +373,7 @@ static unsigned int natcap_client_in_hook(void *priv,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_tcp_tcpopt nto;
+	struct natcap_TCPOPT tcpopt;
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_TCP)
@@ -397,8 +401,8 @@ static unsigned int natcap_client_in_hook(void *priv,
 
 	NATCAP_DEBUG("(CI)" DEBUG_FMT_PREFIX DEBUG_FMT ": before decode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 
-	nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-	ret = natcap_tcp_decode(skb, &nto);
+	tcpopt.header.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+	ret = natcap_tcp_decode(skb, &tcpopt);
 	//reload
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);

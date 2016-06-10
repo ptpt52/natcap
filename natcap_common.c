@@ -253,82 +253,125 @@ static inline int skb_rcsum_tcpudp(struct sk_buff *skb)
 	return 0;
 }
 
-int natcap_tcp_encode(struct sk_buff *skb, unsigned long status)
+int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_conn *ct, struct natcap_TCPOPT *tcpopt)
+{
+	int size;
+	struct iphdr *iph = ip_hdr(skb);
+	struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+
+	if ((status & NATCAP_NEED_ENC))
+		tcpopt->header.encryption = 1;
+	else
+		tcpopt->header.encryption = 0;
+
+	if ((status & NATCAP_CLIENT_MODE)) {
+		if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
+			tcpopt->header.type = NATCAP_TCPOPT_NONE;
+			tcpopt->header.opsize = 0;
+			return 0;
+		}
+		//not syn
+		if (!(tcph->syn && !tcph->ack)) {
+			size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int));
+			if (tcph->doff * 4 + size <= 60) {
+				tcpopt->header.type = NATCAP_TCPOPT_USER;
+				tcpopt->header.opcode = TCPOPT_NATCAP;
+				tcpopt->header.opsize = size;
+				memcpy(tcpopt->user.data.mac_addr, default_mac_addr, ETH_ALEN);
+				tcpopt->user.data.u_hash = default_u_hash;
+				set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
+				return size;
+			}
+			tcpopt->header.type = NATCAP_TCPOPT_NONE;
+			tcpopt->header.opsize = 0;
+			return 0;
+		}
+		//syn
+		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data), sizeof(unsigned int));
+		if (tcph->doff * 4 + size <= 60)
+		{
+			tcpopt->header.type = NATCAP_TCPOPT_ALL;
+			tcpopt->header.opcode = TCPOPT_NATCAP;
+			tcpopt->header.opsize = size;
+			tcpopt->all.data.ip = iph->daddr;
+			tcpopt->all.data.port = tcph->dest;
+			memcpy(tcpopt->all.data.mac_addr, default_mac_addr, ETH_ALEN);
+			tcpopt->all.data.u_hash = default_u_hash;
+			set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
+			return size;
+		}
+		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int));
+		if (tcph->doff * 4 + size <= 60) {
+			tcpopt->header.type = NATCAP_TCPOPT_DST;
+			tcpopt->header.opcode = TCPOPT_NATCAP;
+			tcpopt->header.opsize = size;
+			tcpopt->dst.data.ip = iph->daddr;
+			tcpopt->dst.data.port = tcph->dest;
+			return size;
+		}
+		return -1;
+	} else {
+		tcpopt->header.type = NATCAP_TCPOPT_NONE;
+		tcpopt->header.opsize = 0;
+		return 0;
+	}
+}
+
+int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_tcp_tcpopt *pnto = NULL;
-	int ntosz = ALIGN(sizeof(struct natcap_tcp_tcpopt), sizeof(unsigned int));
 	int offlen;
-	__be32 dip;
-	__be16 dport;
 
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	if (skb->len != ntohs(iph->tot_len)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb->len, ntohs(iph->tot_len));
-		return -1;
+		return -EINVAL;
 	}
 
-	if (!tcph->syn || tcph->ack) {
-		//not syn packet
+	if (tcpopt->header.type == NATCAP_TCPOPT_NONE) {
 		goto do_encode;
 	}
-
-	//XXX do use skb_tailroom here!!
-	if (skb->end - skb->tail < ntosz && pskb_expand_head(skb, 0, ntosz, GFP_ATOMIC)) {
-		/* no memory */
+	if (tcph->doff * 4 + tcpopt->header.opsize > 60)
+		return -EINVAL;
+	if (skb->end - skb->tail < tcpopt->header.opsize && pskb_expand_head(skb, 0, tcpopt->header.opsize, GFP_ATOMIC)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": pskb_expand_head failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
-		return -2;
+		return -ENOMEM;
 	}
 
-	//reload
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-
 	offlen = skb_tail_pointer(skb) - (unsigned char *)tcph - sizeof(struct tcphdr);
 	if (offlen < 0) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
-		return -4;
+		return -EINVAL;
 	}
+	memmove((void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize, (void *)tcph + sizeof(struct tcphdr), offlen);
+	memcpy((void *)tcph + sizeof(struct tcphdr), (void *)tcpopt, tcpopt->header.opsize);
 
-	dport = tcph->dest;
-	dip = iph->daddr;
-
-	pnto = (struct natcap_tcp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
-	memmove((void *)tcph + sizeof(struct tcphdr) + ntosz, (void *)tcph + sizeof(struct tcphdr), offlen);
-
-	pnto->opcode = TCPOPT_NATCAP;
-	pnto->opsize = ALIGN(sizeof(struct natcap_tcp_tcpopt), sizeof(unsigned int));
-	pnto->encryption = (!!(status & NATCAP_NEED_ENC));
-	pnto->port = dport;
-	pnto->ip = dip;
-	memcpy(pnto->mac_addr, default_mac_addr, ETH_ALEN);
-	pnto->u_hash = default_u_hash;
-
-	tcph->doff = (tcph->doff * 4 + ntosz) / 4;
-	iph->tot_len = htons(ntohs(iph->tot_len) + ntosz);
-	skb->len += ntosz;
-	skb->tail += ntosz;
+	tcph->doff = (tcph->doff * 4 + tcpopt->header.opsize) / 4;
+	iph->tot_len = htons(ntohs(iph->tot_len) + tcpopt->header.opsize);
+	skb->len += tcpopt->header.opsize;
+	skb->tail += tcpopt->header.opsize;
 
 do_encode:
-	if ((status & NATCAP_NEED_ENC)) {
+	if (tcpopt->header.encryption) {
 		skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
 	}
-	if ((status & NATCAP_NEED_ENC) || pnto) {
+	if (tcpopt->header.encryption || tcpopt->header.type != NATCAP_TCPOPT_NONE) {
 		skb_rcsum_tcpudp(skb);
 	}
 
 	return 0;
 }
 
-int natcap_tcp_decode(struct sk_buff *skb, struct natcap_tcp_tcpopt *nto)
+int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_tcp_tcpopt *pnto = NULL;
-	int ntosz = ALIGN(sizeof(struct natcap_tcp_tcpopt), sizeof(unsigned int));
+	struct natcap_TCPOPT *opt;
 	int offlen;
 
 	iph = ip_hdr(skb);
@@ -336,47 +379,53 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_tcp_tcpopt *nto)
 
 	if (skb->len != ntohs(iph->tot_len)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb->len, ntohs(iph->tot_len));
-		return -1;
+		return -EINVAL;
 	}
 
-	if (!tcph->syn || tcph->ack) {
-		//not syn packet
+	tcpopt->header.opcode = 0;
+	tcpopt->header.opsize = 0;
+	tcpopt->header.type = NATCAP_TCPOPT_NONE;
+	opt = (struct natcap_TCPOPT *)((void *)tcph + sizeof(struct tcphdr));
+	if (opt->header.opcode != TCPOPT_NATCAP) {
 		goto do_decode;
 	}
-
-	pnto = (struct natcap_tcp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
-	if (pnto->opcode != TCPOPT_NATCAP ||
-			pnto->opsize != ALIGN(sizeof(struct natcap_tcp_tcpopt), sizeof(unsigned int))) {
-		return -2;
+	if (
+			!(
+				(opt->header.type == NATCAP_TCPOPT_ALL &&
+				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data), sizeof(unsigned int))) ||
+				(opt->header.type == NATCAP_TCPOPT_DST &&
+				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int))) ||
+				(opt->header.type == NATCAP_TCPOPT_USER &&
+				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int)))
+			 )
+	   )
+	{
+		return -EINVAL;
 	}
-	if (tcph->doff * 4 < sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_tcp_tcpopt), sizeof(unsigned int))) {
-		return -4;
+
+	if (tcph->doff * 4 < sizeof(struct tcphdr) + opt->header.opsize) {
+		return -EINVAL;
 	}
 
-	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)tcph + sizeof(struct tcphdr)) - ntosz;
+	memcpy((void *)tcpopt, (void *)opt, opt->header.opsize);
+
+	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)tcph + sizeof(struct tcphdr)) - tcpopt->header.opsize;
 	if (offlen < 0) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
-		return -8;
+		return -EINVAL;
 	}
+	memmove((void *)tcph + sizeof(struct tcphdr), (void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize, offlen);
 
-	memcpy(nto->mac_addr, pnto->mac_addr, ETH_ALEN);
-	nto->u_hash = pnto->u_hash;
-	nto->encryption = pnto->encryption;
-	nto->port = pnto->port;
-	nto->ip = pnto->ip;
-
-	memmove((void *)tcph + sizeof(struct tcphdr), (void *)tcph + sizeof(struct tcphdr) + ntosz, offlen);
-
-	tcph->doff = (tcph->doff * 4 - ntosz) / 4;
-	iph->tot_len = htons(ntohs(iph->tot_len) - ntosz);
-	skb->len -= ntosz;
-	skb->tail -= ntosz;
+	tcph->doff = (tcph->doff * 4 - tcpopt->header.opsize) / 4;
+	iph->tot_len = htons(ntohs(iph->tot_len) - tcpopt->header.opsize);
+	skb->len -= tcpopt->header.opsize;
+	skb->tail -= tcpopt->header.opsize;
 
 do_decode:
-	if (nto->encryption) {
+	if (tcpopt->header.encryption) {
 		skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, natcap_data_decode);
 	}
-	if (nto->encryption || pnto) {
+	if (tcpopt->header.encryption || tcpopt->header.type != NATCAP_TCPOPT_NONE) {
 		skb_rcsum_tcpudp(skb);
 		//skb->ip_summed = CHECKSUM_UNNECESSARY;
 	}
