@@ -123,7 +123,7 @@ static unsigned int natcap_server_in_hook(void *priv,
 					DEBUG_ARG(iph,tcph),
 					nto.mac_addr[0], nto.mac_addr[1], nto.mac_addr[2],
 					nto.mac_addr[3], nto.mac_addr[4], nto.mac_addr[5],
-					ntohs(nto.u_hash));
+					ntohl(nto.u_hash));
 			return NF_ACCEPT;
 		}
 
@@ -131,7 +131,7 @@ static unsigned int natcap_server_in_hook(void *priv,
 				DEBUG_ARG(iph,tcph),
 				nto.mac_addr[0], nto.mac_addr[1], nto.mac_addr[2],
 				nto.mac_addr[3], nto.mac_addr[4], nto.mac_addr[5],
-				ntohs(nto.u_hash));
+				ntohl(nto.u_hash));
 
 		server.ip = nto.ip;
 		server.port = nto.port;
