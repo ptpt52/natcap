@@ -442,14 +442,14 @@ int natcap_udp_encode(struct sk_buff *skb, int mode)
 	tcph->urg = 0;
 	tcph->psh = 0;
 	if (mode == 0) {
-		tcph->seq = 0;
-		tcph->ack_seq = 0;
+		tcph->seq = htonl(0);
+		tcph->ack_seq = htonl(0);
 		tcph->rst = 0;
 		tcph->syn = 1;
 		tcph->ack = 0;
 	} else {
-		tcph->seq = 0;
-		tcph->ack_seq = 1;
+		tcph->seq = htonl(0);
+		tcph->ack_seq = htonl(1);
 		tcph->rst = 1;
 		tcph->syn = 0;
 		tcph->ack = 1;
