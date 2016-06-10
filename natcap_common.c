@@ -432,7 +432,6 @@ int natcap_udp_encode(struct sk_buff *skb, int mode)
 
 	iph->tot_len = htons(ntohs(iph->tot_len) + nuosz);
 	iph->protocol = IPPROTO_TCP;
-	iph->id = __constant_htons(0xDEAD);
 
 	tcph->source = sport;
 	tcph->dest = dport;
