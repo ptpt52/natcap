@@ -165,6 +165,10 @@ static inline void natcap_server_select(__be32 ip, __be16 port, struct tuple *ds
 	} else if (dst->port == __constant_htons(65535)) {
 		dst->port = ((jiffies^ip) & 0xFFFF);
 	}
+
+	if (port == __constant_htons(443) || port == __constant_htons(22)) {
+		dst->encryption = 0;
+	}
 }
 
 static inline int is_natcap_server(__be32 ip)
@@ -272,14 +276,9 @@ static unsigned int natcap_client_out_hook(void *priv,
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
-
 		nto.port = tcph->dest;
 		nto.ip = iph->daddr;
 		nto.encryption = server.encryption;
-		if (tcph->dest == __constant_htons(443) ||
-				tcph->dest == __constant_htons(22)) {
-			nto.encryption = 0;
-		}
 		NATCAP_INFO("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT ": new natcaped connection out, before encode, server=" TUPLE_FMT "\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 	} else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -294,15 +293,15 @@ static unsigned int natcap_client_out_hook(void *priv,
 
 	if (tcph->syn && !tcph->ack) {
 		if (!test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
-			NATCAP_DEBUG(DEBUG_FMT_PREFIX DEBUG_FMT ": natcaped syn1\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
+			NATCAP_DEBUG("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcaped syn1\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 			goto start_natcap;
 		}
 		if (!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
-			NATCAP_DEBUG(DEBUG_FMT_PREFIX DEBUG_FMT ": natcaped syn2\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
+			NATCAP_DEBUG("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcaped syn2\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 			goto start_natcap;
 		}
 		if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
-			NATCAP_INFO(DEBUG_FMT_PREFIX DEBUG_FMT ": natcaped syn3 del target from gfwlist\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
+			NATCAP_INFO("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcaped syn3 del target from gfwlist\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 			ip_set_del_dst_ip(in, out, skb, "gfwlist");
 			goto start_natcap;
 		}

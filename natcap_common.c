@@ -311,10 +311,8 @@ do_encode:
 	if (nto->encryption) {
 		skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
 	}
-
-	if (skb_rcsum_tcpudp(skb) != 0) {
-		return -8;
-	}
+	
+	skb_rcsum_tcpudp(skb);
 
 	return 0;
 }
@@ -373,9 +371,7 @@ do_decode:
 		skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, natcap_data_decode);
 	}
 
-	if (skb_rcsum_tcpudp(skb) != 0) {
-		return -32;
-	}
+	skb_rcsum_tcpudp(skb);
 	//skb->ip_summed = CHECKSUM_UNNECESSARY;
 
 	return 0;
