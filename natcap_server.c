@@ -38,8 +38,19 @@ static inline int natcap_auth(const struct net_device *in,
 		ret = ip_set_test_src_mac(in, out, skb, "vclist");
 		memcpy(eth->h_source, old_mac, ETH_ALEN);
 		if (ret <= 0) {
-			goto auth_fail;
+			set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+			NATCAP_WARN("(%s)" DEBUG_FMT ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth failed\n",
+					__FUNCTION__, DEBUG_ARG(iph,tcph),
+					tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
+					tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
+					ntohl(tcpopt->all.data.u_hash));
+			return -1;
 		}
+		NATCAP_INFO("(%s)" DEBUG_FMT ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
+				__FUNCTION__, DEBUG_ARG(iph,tcph),
+				tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
+				tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
+				ntohl(tcpopt->all.data.u_hash));
 		if (!server) {
 			return -EINVAL;
 		}
@@ -53,8 +64,19 @@ static inline int natcap_auth(const struct net_device *in,
 		ret = ip_set_test_src_mac(in, out, skb, "vclist");
 		memcpy(eth->h_source, old_mac, ETH_ALEN);
 		if (ret <= 0) {
-			goto auth_fail;
+			set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+			NATCAP_WARN("(%s)" DEBUG_FMT ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth failed\n",
+					__FUNCTION__, DEBUG_ARG(iph,tcph),
+					tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
+					tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
+					ntohl(tcpopt->user.data.u_hash));
+			return -1;
 		}
+		NATCAP_INFO("(%s)" DEBUG_FMT ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
+				__FUNCTION__, DEBUG_ARG(iph,tcph),
+				tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
+				tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
+				ntohl(tcpopt->user.data.u_hash));
 		if (server) {
 			return -EINVAL;
 		}
@@ -69,15 +91,6 @@ static inline int natcap_auth(const struct net_device *in,
 		return -EINVAL;
 	}
 	return 0;
-
-auth_fail:
-	set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-	NATCAP_WARN("(%s)" DEBUG_FMT ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth failed\n",
-			__FUNCTION__, DEBUG_ARG(iph,tcph),
-			tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
-			tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
-			ntohl(tcpopt->all.data.u_hash));
-	return -1;
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
