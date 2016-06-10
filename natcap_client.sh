@@ -18,8 +18,11 @@ iptables -t nat -A POSTROUTING -s 192.168.0.0/16 -j MASQUERADE
 
 ipset destroy cniplist
 ipset destroy gfwlist
+ipset destroy udproxylist
 ipset restore -f cniplist.set
 ipset create gfwlist iphash
+ipset create udproxylist iphash
+ipset add udproxylist 8.8.8.8
 
 SERVER=45.32.63.59
 iptables -t nat -A OUTPUT -d 8.8.8.8 -p udp --dport 53 -j DNAT --to-destination $SERVER:5353
@@ -33,9 +36,10 @@ insmod ./natcap.ko && {
 cat <<EOF >>/dev/natcap_ctl
 
 clean
-debug=15
+debug=7
 client_forward_mode=1
-server_persist_timeout=60
+
+server_persist_timeout=6
 server 45.32.63.59:65535-e
 EOF
 }
