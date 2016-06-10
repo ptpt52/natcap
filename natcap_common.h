@@ -74,16 +74,16 @@ extern const char *const hooknames[];
 	(t)->rst ? 'R' : '.', \
 	(t)->syn ? 'S' : '.', \
 	(t)->fin ? 'F' : '.'
-#define UDP_ST_FMT "len:%u,check:%04x"
+#define UDP_ST_FMT "UL:%u,UC:%04x"
 #define UDP_ST_ARG(u) ntohs((u)->len), ntohs((u)->check)
 
 #define DEBUG_FMT_PREFIX "[%s](%s)"
 #define DEBUG_ARG_PREFIX hooknames[hooknum], __FUNCTION__
 
-#define DEBUG_FMT "[" IP_TCPUDP_FMT "][ID=0x%x,TL=%u][" TCP_ST_FMT "]"
+#define DEBUG_FMT "[" IP_TCPUDP_FMT "][ID:%04x,IL:%u][" TCP_ST_FMT "]"
 #define DEBUG_ARG(i, t) IP_TCPUDP_ARG(i,t), ntohs((i)->id), ntohs((i)->tot_len), TCP_ST_ARG(t)
 
-#define DEBUG_FMT_UDP "[" IP_TCPUDP_FMT "][ID=0x%x,TL=%u][" UDP_ST_FMT "]"
+#define DEBUG_FMT_UDP "[" IP_TCPUDP_FMT "][ID:%04x,IL:%u][" UDP_ST_FMT "]"
 #define DEBUG_ARG_UDP(i, u) IP_TCPUDP_ARG(i,u), ntohs((i)->id), ntohs((i)->tot_len), UDP_ST_ARG(u)
 
 #define TUPLE_FMT "%pI4:%u-%c"
