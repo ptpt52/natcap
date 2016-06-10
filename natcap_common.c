@@ -253,13 +253,15 @@ static inline int skb_rcsum_tcpudp(struct sk_buff *skb)
 	return 0;
 }
 
-int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_tcp_tcpopt *nto)
+int natcap_tcp_encode(struct sk_buff *skb, unsigned long status)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
 	struct natcap_tcp_tcpopt *pnto = NULL;
 	int ntosz = ALIGN(sizeof(struct natcap_tcp_tcpopt), sizeof(unsigned int));
 	int offlen;
+	__be32 dip;
+	__be16 dport;
 
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
@@ -291,14 +293,17 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_tcp_tcpopt *nto)
 		return -4;
 	}
 
+	dport = tcph->dest;
+	dip = iph->daddr;
+
 	pnto = (struct natcap_tcp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
 	memmove((void *)tcph + sizeof(struct tcphdr) + ntosz, (void *)tcph + sizeof(struct tcphdr), offlen);
 
 	pnto->opcode = TCPOPT_NATCAP;
 	pnto->opsize = ALIGN(sizeof(struct natcap_tcp_tcpopt), sizeof(unsigned int));
-	pnto->encryption = !!nto->encryption;
-	pnto->port = nto->port;
-	pnto->ip = nto->ip;
+	pnto->encryption = (!!(status & NATCAP_NEED_ENC));
+	pnto->port = dport;
+	pnto->ip = dip;
 	memcpy(pnto->mac_addr, default_mac_addr, ETH_ALEN);
 	pnto->u_hash = default_u_hash;
 
@@ -308,11 +313,12 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_tcp_tcpopt *nto)
 	skb->tail += ntosz;
 
 do_encode:
-	if (nto->encryption) {
+	if ((status & NATCAP_NEED_ENC)) {
 		skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
 	}
-	
-	skb_rcsum_tcpudp(skb);
+	if ((status & NATCAP_NEED_ENC) || pnto) {
+		skb_rcsum_tcpudp(skb);
+	}
 
 	return 0;
 }
@@ -370,14 +376,15 @@ do_decode:
 	if (nto->encryption) {
 		skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - iph->ihl * 4 - tcph->doff * 4, natcap_data_decode);
 	}
-
-	skb_rcsum_tcpudp(skb);
-	//skb->ip_summed = CHECKSUM_UNNECESSARY;
+	if (nto->encryption || pnto) {
+		skb_rcsum_tcpudp(skb);
+		//skb->ip_summed = CHECKSUM_UNNECESSARY;
+	}
 
 	return 0;
 }
 
-int natcap_udp_encode(struct sk_buff *skb, int mode)
+int natcap_udp_encode(struct sk_buff *skb, unsigned long status)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
@@ -437,7 +444,7 @@ int natcap_udp_encode(struct sk_buff *skb, int mode)
 	tcph->ece = 0;
 	tcph->urg = 0;
 	tcph->psh = 0;
-	if (mode == 0) {
+	if ((status & NATCAP_CLIENT_MODE)) {
 		tcph->seq = htonl(0);
 		tcph->ack_seq = htonl(0);
 		tcph->rst = 0;

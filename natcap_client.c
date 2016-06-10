@@ -222,7 +222,7 @@ static unsigned int natcap_client_out_hook(void *priv,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_tcp_tcpopt nto;
+	unsigned long status = NATCAP_CLIENT_MODE;
 	struct tuple server;
 
 	iph = ip_hdr(skb);
@@ -266,9 +266,9 @@ static unsigned int natcap_client_out_hook(void *priv,
 
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		NATCAP_DEBUG("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT ": before encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
-		nto.port = tcph->dest;
-		nto.ip = iph->daddr;
-		nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+			status |= NATCAP_NEED_ENC;
+		}
 	} else if (ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
 		natcap_server_select(iph->daddr, tcph->dest, &server);
 		if (server.ip == 0) {
@@ -276,9 +276,9 @@ static unsigned int natcap_client_out_hook(void *priv,
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
-		nto.port = tcph->dest;
-		nto.ip = iph->daddr;
-		nto.encryption = server.encryption;
+		if (server.encryption) {
+			status |= NATCAP_NEED_ENC;
+		}
 		NATCAP_INFO("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT ": new natcaped connection out, before encode, server=" TUPLE_FMT "\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
 	} else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -308,7 +308,7 @@ static unsigned int natcap_client_out_hook(void *priv,
 	}
 
 start_natcap:
-	ret = natcap_tcp_encode(skb, &nto);
+	ret = natcap_tcp_encode(skb, status);
 	//reload
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
@@ -326,7 +326,7 @@ start_natcap:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
 		}
-		if (nto.encryption) {
+		if (status & NATCAP_NEED_ENC) {
 			set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 		}
 	}
@@ -455,6 +455,7 @@ static unsigned int natcap_client_udp_proxy_out(void *priv,
 	struct iphdr *iph;
 	struct tcphdr *tcph;
 	struct udphdr *udph;
+	unsigned long status = NATCAP_CLIENT_MODE;
 	struct tuple server;
 	struct net *net = &init_net;
 	if (in)
@@ -477,7 +478,7 @@ static unsigned int natcap_client_udp_proxy_out(void *priv,
 
 	NATCAP_DEBUG("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": before encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph));
 
-	ret = natcap_udp_encode(skb, 0);
+	ret = natcap_udp_encode(skb, status);
 	if (ret != 0) {
 		NATCAP_ERROR("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": natcap_udp_encode@client ret=%d\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph), ret);
 		return NF_ACCEPT;

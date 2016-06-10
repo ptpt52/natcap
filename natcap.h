@@ -16,6 +16,9 @@
 #pragma pack(push)
 #pragma pack(1)
 
+#define NATCAP_CLIENT_MODE (1<<0)
+#define NATCAP_NEED_ENC    (1<<1)
+
 struct natcap_tcp_tcpopt {
 	u8 opcode;
 #define TCPOPT_NATCAP 0x99

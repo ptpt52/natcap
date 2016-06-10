@@ -199,7 +199,7 @@ static unsigned int natcap_server_out_hook(void *priv,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_tcp_tcpopt nto;
+	unsigned long status = 0;
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_TCP)
@@ -226,9 +226,9 @@ static unsigned int natcap_server_out_hook(void *priv,
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	NATCAP_DEBUG("(SO)" DEBUG_FMT_PREFIX DEBUG_FMT ": before encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
-	nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-	nto.port = tcph->source;
-	nto.ip = iph->saddr;
+	if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+		status |= NATCAP_NEED_ENC;
+	}
 
 	/* XXX I just confirm it first  */
 	ret = nf_conntrack_confirm(skb);
@@ -239,7 +239,7 @@ static unsigned int natcap_server_out_hook(void *priv,
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	ret = natcap_tcp_encode(skb, &nto);
+	ret = natcap_tcp_encode(skb, status);
 	if (ret != 0) {
 		NATCAP_ERROR("(SO)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcap_tcp_encode@server ret=%d\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), ret);
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -362,6 +362,7 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 	struct iphdr *iph;
 	struct tcphdr *tcph;
 	struct udphdr *udph;
+	unsigned long status = 0;
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_UDP)
@@ -389,7 +390,7 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 		return ret;
 	}
 
-	ret = natcap_udp_encode(skb, 1);
+	ret = natcap_udp_encode(skb, status);
 	if (ret != 0) {
 		NATCAP_ERROR("(SO)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": natcap_udp_encode@server ret=%d\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph), ret);
 		return NF_DROP;
