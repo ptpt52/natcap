@@ -523,6 +523,11 @@ int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out
 	struct ip_set *set;
 	struct ip_set_adt_opt opt;
 	struct xt_action_param par;
+	struct net *net = &init_net;
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
 
 	memset(&opt, 0, sizeof(opt));
 	opt.family = NFPROTO_IPV4;
@@ -534,10 +539,10 @@ int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out
 	par.in = in;
 	par.out = out;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
-	par.net = dev_net(in ? in : out);
+	par.net = net;
 #endif
 
-	id = ip_set_get_byname(dev_net(in ? in : out), ip_set_name, &set);
+	id = ip_set_get_byname(net, ip_set_name, &set);
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
 		return 0;
@@ -545,7 +550,7 @@ int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out
 
 	ret = ip_set_test(id, skb, &par, &opt);
 
-	ip_set_put_byindex(dev_net(in ? in : out), id);
+	ip_set_put_byindex(net, id);
 
 	return ret;
 }

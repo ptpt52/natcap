@@ -448,6 +448,11 @@ static unsigned int natcap_client_udp_proxy_out(void *priv,
 	struct tcphdr *tcph;
 	struct udphdr *udph;
 	struct tuple server;
+	struct net *net = &init_net;
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_UDP)
@@ -471,7 +476,7 @@ static unsigned int natcap_client_udp_proxy_out(void *priv,
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 
-	ret = nf_conntrack_in(dev_net(in), pf, hooknum, skb);
+	ret = nf_conntrack_in(net, pf, hooknum, skb);
 	if (ret != NF_ACCEPT) {
 		return ret;
 	}
