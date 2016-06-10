@@ -328,17 +328,17 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt)
 
 	if (skb->len != ntohs(iph->tot_len)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb->len, ntohs(iph->tot_len));
-		return -EINVAL;
+		return -1;
 	}
 
 	if (tcpopt->header.type == NATCAP_TCPOPT_NONE) {
 		goto do_encode;
 	}
 	if (tcph->doff * 4 + tcpopt->header.opsize > 60)
-		return -EINVAL;
+		return -2;
 	if (skb->end - skb->tail < tcpopt->header.opsize && pskb_expand_head(skb, 0, tcpopt->header.opsize, GFP_ATOMIC)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": pskb_expand_head failed\n", __FUNCTION__, DEBUG_ARG(iph,tcph));
-		return -ENOMEM;
+		return -3;
 	}
 
 	iph = ip_hdr(skb);
@@ -346,7 +346,7 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt)
 	offlen = skb_tail_pointer(skb) - (unsigned char *)tcph - sizeof(struct tcphdr);
 	if (offlen < 0) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
-		return -EINVAL;
+		return -4;
 	}
 	memmove((void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize, (void *)tcph + sizeof(struct tcphdr), offlen);
 	memcpy((void *)tcph + sizeof(struct tcphdr), (void *)tcpopt, tcpopt->header.opsize);
@@ -379,7 +379,7 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 
 	if (skb->len != ntohs(iph->tot_len)) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb->len, ntohs(iph->tot_len));
-		return -EINVAL;
+		return -1;
 	}
 
 	tcpopt->header.opcode = 0;
@@ -400,11 +400,11 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 			 )
 	   )
 	{
-		return -EINVAL;
+		return -2;
 	}
 
 	if (tcph->doff * 4 < sizeof(struct tcphdr) + opt->header.opsize) {
-		return -EINVAL;
+		return -3;
 	}
 
 	memcpy((void *)tcpopt, (void *)opt, opt->header.opsize);
@@ -412,7 +412,7 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)tcph + sizeof(struct tcphdr)) - tcpopt->header.opsize;
 	if (offlen < 0) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb tcp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
-		return -EINVAL;
+		return -4;
 	}
 	memmove((void *)tcph + sizeof(struct tcphdr), (void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize, offlen);
 
@@ -536,14 +536,13 @@ int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo)
 	}
 
 	if (!((tcph->syn && !tcph->ack) || (tcph->rst && tcph->ack))) {
-		//not (syn or rst-ack)
-		return -1;
+		return -2;
 	}
 
 	pnuo = (struct natcap_udp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
 	if (pnuo->opcode != TCPOPT_NATCAP_UDP ||
 			pnuo->opsize != ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int))) {
-		return -2;
+		return -3;
 	}
 	if (tcph->doff * 4 < sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int))) {
 		return -4;
@@ -554,7 +553,7 @@ int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo)
 	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)udph + sizeof(struct udphdr)) - nuosz;
 	if (offlen < 0) {
 		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb udp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
-		return -8;
+		return -5;
 	}
 
 	nuo->port = pnuo->port;
