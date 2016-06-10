@@ -443,26 +443,20 @@ int natcap_udp_encode(struct sk_buff *skb, unsigned long status)
 	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
 
 	if (skb->len != ntohs(iph->tot_len)) {
-		NATCAP_ERROR("(%s)" DEBUG_FMT_UDP ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG_UDP(iph,udph), skb->len, ntohs(iph->tot_len));
 		return -1;
 	}
 
-	//XXX do use skb_tailroom here!!
 	if (skb->end - skb->tail < nuosz && pskb_expand_head(skb, 0, nuosz, GFP_ATOMIC)) {
-		/* no memory */
-		NATCAP_ERROR("(%s)" DEBUG_FMT_UDP ": pskb_expand_head failed\n", __FUNCTION__, DEBUG_ARG_UDP(iph,udph));
 		return -2;
 	}
 
-	//reload
 	iph = ip_hdr(skb);
 	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
 	tcph = (struct tcphdr *)udph;
 
 	offlen = skb_tail_pointer(skb) - (unsigned char *)udph - sizeof(struct udphdr);
 	if (offlen < 0) {
-		NATCAP_ERROR("(%s)" DEBUG_FMT_UDP ": skb udp offlen = %d\n", __FUNCTION__, DEBUG_ARG_UDP(iph,udph), offlen);
-		return -4;
+		return -3;
 	}
 
 	dip = iph->daddr;
@@ -506,7 +500,7 @@ int natcap_udp_encode(struct sk_buff *skb, unsigned long status)
 	skb->len += nuosz;
 	skb->tail += nuosz;
 
-	skb->ip_summed = CHECKSUM_NONE;
+	//skb->ip_summed = CHECKSUM_NONE;
 	skb_rcsum_tcpudp(skb);
 
 	return 0;
@@ -526,7 +520,6 @@ int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo)
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	if (skb->len != ntohs(iph->tot_len)) {
-		NATCAP_ERROR("(%s)" DEBUG_FMT ": bad skb, SL=%d, TL=%d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), skb->len, ntohs(iph->tot_len));
 		return -1;
 	}
 
@@ -547,7 +540,6 @@ int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo)
 
 	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)udph + sizeof(struct udphdr)) - nuosz;
 	if (offlen < 0) {
-		NATCAP_ERROR("(%s)" DEBUG_FMT ": skb udp offlen = %d\n", __FUNCTION__, DEBUG_ARG(iph,tcph), offlen);
 		return -5;
 	}
 
@@ -567,7 +559,7 @@ int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo)
 	skb->len -= nuosz;
 	skb->tail -= nuosz;
 
-	skb->ip_summed = CHECKSUM_NONE;
+	//skb->ip_summed = CHECKSUM_NONE;
 	skb_rcsum_tcpudp(skb);
 
 	return 0;
