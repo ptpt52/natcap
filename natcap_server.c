@@ -323,6 +323,8 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 
 	skb->mark = XT_MARK_NATCAP;
 
+	NATCAP_DEBUG("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": after decode\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph));
+
 	return NF_ACCEPT;
 }
 

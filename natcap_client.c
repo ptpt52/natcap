@@ -241,17 +241,17 @@ static unsigned int natcap_client_out_hook(void *priv,
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		if (tcph->syn && !tcph->ack) {
 			if (!test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
-				NATCAP_DEBUG(DEBUG_FMT_PREFIX DEBUG_FMT ": bypass syn1\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
+				NATCAP_DEBUG("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT ": bypass syn1\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 				return NF_ACCEPT;
 			}
 			if (!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
-				NATCAP_DEBUG(DEBUG_FMT_PREFIX DEBUG_FMT ": bypass syn2\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
+				NATCAP_DEBUG("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT ": bypass syn2\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 				return NF_ACCEPT;
 			}
 			if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
 				if (!is_natcap_server(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) &&
 						ip_set_test_dst_ip(in, out, skb, "cniplist") <= 0) {
-					NATCAP_INFO(DEBUG_FMT_PREFIX DEBUG_FMT ": bypass syn3 add target to gfwlist\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
+					NATCAP_INFO("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT ": bypass syn3 add target to gfwlist\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 					ip_set_add_dst_ip(in, out, skb, "gfwlist");
 				}
 				return NF_ACCEPT;
@@ -397,8 +397,8 @@ static unsigned int natcap_client_in_hook(void *priv,
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	NATCAP_DEBUG("(CI)" DEBUG_FMT_PREFIX DEBUG_FMT ": before decode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
-	nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 
+	nto.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 	ret = natcap_tcp_decode(skb, &nto);
 	//reload
 	iph = ip_hdr(skb);
@@ -476,6 +476,8 @@ static unsigned int natcap_client_udp_proxy_out(void *priv,
 		return NF_ACCEPT;
 	}
 
+	NATCAP_DEBUG("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": before encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph));
+
 	ret = natcap_udp_encode(skb, 0);
 	if (ret != 0) {
 		NATCAP_ERROR("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": natcap_udp_encode@client ret=%d\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph), ret);
@@ -501,6 +503,8 @@ static unsigned int natcap_client_udp_proxy_out(void *priv,
 			return NF_DROP;
 		}
 	}
+
+	NATCAP_DEBUG("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT ": after encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 
 	return NF_ACCEPT;
 }
