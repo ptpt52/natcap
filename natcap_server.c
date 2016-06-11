@@ -157,10 +157,6 @@ static unsigned int natcap_server_in_hook(void *priv,
 		if (test_bit(IPS_NATCAP_DROP_BIT, &ct->status)) {
 			return NF_DROP;
 		}
-		if (skb_csum_test(skb) != 0) {
-			NATCAP_ERROR("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT ": checksum failed\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
-			return NF_DROP;
-		}
 		NATCAP_DEBUG("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT ": before decode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 		tcpopt.header.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 		ret = natcap_tcp_decode(skb, &tcpopt);

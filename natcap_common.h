@@ -89,8 +89,6 @@ extern const char *const hooknames[];
 #define TUPLE_FMT "%pI4:%u-%c"
 #define TUPLE_ARG(t) &(t)->ip, ntohs((t)->port), (t)->encryption ? 'e' : 'o'
 
-int skb_csum_test(struct sk_buff *skb);
-
 int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_conn *ct, struct natcap_TCPOPT *tcpopt);
 int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt);
 int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt);

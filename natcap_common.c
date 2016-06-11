@@ -97,7 +97,6 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 	struct sk_buff *frag_iter;
 	int pos = 0;
 
-	/* Checksum header. */
 	if (copy > 0) {
 		if (copy > len)
 			copy = len;
@@ -151,48 +150,6 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 	BUG_ON(len);
 
 	return;
-}
-
-int skb_csum_test(struct sk_buff *skb)
-{
-	struct iphdr *iph = ip_hdr(skb);
-	int len = ntohs(iph->tot_len);
-
-	if (skb->len < len) {
-		return -1;
-	} else if (len < (iph->ihl * 4)) {
-		return -1;
-	}
-
-	if (iph->protocol == IPPROTO_TCP) {
-		if (skb->ip_summed == CHECKSUM_PARTIAL) {
-			return 0;
-		} else {
-			__sum16 old_check, new_check;
-			__wsum csum;
-			struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
-
-			old_check = iph->check;
-			iph->check = 0;
-			new_check = ip_fast_csum(iph, iph->ihl);
-			iph->check = old_check;
-			if (old_check != new_check) {
-				return -1;
-			}
-
-			old_check = tcph->check;
-			tcph->check = 0;
-			csum = skb_checksum(skb, iph->ihl * 4, len - iph->ihl * 4, 0);
-			new_check = csum_tcpudp_magic(iph->saddr, iph->daddr, len - iph->ihl * 4, iph->protocol, csum);
-			tcph->check = old_check;
-			if (old_check != new_check) {
-				return -1;
-			}
-			return 0;
-		}
-	}
-
-	return -1;
 }
 
 static inline int skb_rcsum_tcpudp(struct sk_buff *skb)
@@ -499,8 +456,6 @@ int natcap_udp_encode(struct sk_buff *skb, unsigned long status)
 
 	skb->len += nuosz;
 	skb->tail += nuosz;
-
-	//skb->ip_summed = CHECKSUM_NONE;
 	skb_rcsum_tcpudp(skb);
 
 	return 0;
@@ -558,8 +513,6 @@ int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo)
 	udph->len = htons(sizeof(struct udphdr) + offlen);
 	skb->len -= nuosz;
 	skb->tail -= nuosz;
-
-	//skb->ip_summed = CHECKSUM_NONE;
 	skb_rcsum_tcpudp(skb);
 
 	return 0;
@@ -611,6 +564,11 @@ int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out,
 	struct ip_set *set;
 	struct ip_set_adt_opt opt;
 	struct xt_action_param par;
+	struct net *net = &init_net;
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
 
 	memset(&opt, 0, sizeof(opt));
 	opt.family = NFPROTO_IPV4;
@@ -622,10 +580,10 @@ int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out,
 	par.in = in;
 	par.out = out;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
-	par.net = dev_net(in ? in : out);
+	par.net = net;
 #endif
 
-	id = ip_set_get_byname(dev_net(in ? in : out), ip_set_name, &set);
+	id = ip_set_get_byname(net, ip_set_name, &set);
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
 		return 0;
@@ -633,7 +591,7 @@ int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out,
 
 	ret = ip_set_add(id, skb, &par, &opt);
 
-	ip_set_put_byindex(dev_net(in ? in : out), id);
+	ip_set_put_byindex(net, id);
 
 	return ret;
 }
@@ -645,6 +603,11 @@ int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out,
 	struct ip_set *set;
 	struct ip_set_adt_opt opt;
 	struct xt_action_param par;
+	struct net *net = &init_net;
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
 
 	memset(&opt, 0, sizeof(opt));
 	opt.family = NFPROTO_IPV4;
@@ -656,10 +619,10 @@ int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out,
 	par.in = in;
 	par.out = out;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
-	par.net = dev_net(in ? in : out);
+	par.net = net;
 #endif
 
-	id = ip_set_get_byname(dev_net(in ? in : out), ip_set_name, &set);
+	id = ip_set_get_byname(net, ip_set_name, &set);
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
 		return 0;
@@ -667,7 +630,7 @@ int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out,
 
 	ret = ip_set_del(id, skb, &par, &opt);
 
-	ip_set_put_byindex(dev_net(in ? in : out), id);
+	ip_set_put_byindex(net, id);
 
 	return ret;
 }
@@ -679,6 +642,11 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 	struct ip_set *set;
 	struct ip_set_adt_opt opt;
 	struct xt_action_param par;
+	struct net *net = &init_net;
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
 
 	memset(&opt, 0, sizeof(opt));
 	opt.family = NFPROTO_UNSPEC;
@@ -690,10 +658,10 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 	par.in = in;
 	par.out = out;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
-	par.net = dev_net(in ? in : out);
+	par.net = net;
 #endif
 
-	id = ip_set_get_byname(dev_net(in ? in : out), ip_set_name, &set);
+	id = ip_set_get_byname(net, ip_set_name, &set);
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
 		return 0;
@@ -701,7 +669,7 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 
 	ret = ip_set_test(id, skb, &par, &opt);
 
-	ip_set_put_byindex(dev_net(in ? in : out), id);
+	ip_set_put_byindex(net, id);
 
 	return ret;
 }
@@ -721,7 +689,7 @@ unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, __be16 port)
 	range.min.tcp.port = port;
 	range.max.tcp.port = port;
 	return nf_nat_setup_info(ct, &range, IP_NAT_MANIP_DST);
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
 	struct nf_nat_ipv4_range range;
 	if (nf_nat_initialized(ct, NF_NAT_MANIP_DST)) {
 		return NF_ACCEPT;
