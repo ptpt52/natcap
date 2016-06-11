@@ -275,7 +275,7 @@ static unsigned int natcap_client_out_hook(void *priv,
 		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
 			status |= NATCAP_NEED_ENC;
 		}
-	} else if (ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
+	} else if ((tcph->syn && !tcph->ack) && ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
 		natcap_server_select(iph->daddr, tcph->dest, &server);
 		if (server.ip == 0) {
 			NATCAP_DEBUG("(CO)" DEBUG_FMT_PREFIX DEBUG_FMT ": no server found\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
