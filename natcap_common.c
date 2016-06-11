@@ -237,7 +237,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 				memcpy(tcpopt->user.data.mac_addr, default_mac_addr, ETH_ALEN);
 				tcpopt->user.data.u_hash = default_u_hash;
 				set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
-				return size;
+				return 0;
 			}
 			tcpopt->header.type = NATCAP_TCPOPT_NONE;
 			tcpopt->header.opsize = 0;
@@ -255,7 +255,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			memcpy(tcpopt->all.data.mac_addr, default_mac_addr, ETH_ALEN);
 			tcpopt->all.data.u_hash = default_u_hash;
 			set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
-			return size;
+			return 0;
 		}
 		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int));
 		if (tcph->doff * 4 + size <= 60) {
@@ -264,7 +264,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			tcpopt->header.opsize = size;
 			tcpopt->dst.data.ip = iph->daddr;
 			tcpopt->dst.data.port = tcph->dest;
-			return size;
+			return 0;
 		}
 		return -1;
 	} else {
@@ -283,25 +283,20 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt)
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	if (skb->len != ntohs(iph->tot_len)) {
-		return -1;
-	}
-
 	if (tcpopt->header.type == NATCAP_TCPOPT_NONE) {
 		goto do_encode;
 	}
-	if (tcph->doff * 4 + tcpopt->header.opsize > 60)
-		return -2;
-	if (skb->end - skb->tail < tcpopt->header.opsize && pskb_expand_head(skb, 0, tcpopt->header.opsize, GFP_ATOMIC)) {
-		return -3;
-	}
 
+	if (tcph->doff * 4 + tcpopt->header.opsize > 60)
+		return -1;
+	if (skb->end - skb->tail < tcpopt->header.opsize && pskb_expand_head(skb, 0, tcpopt->header.opsize, GFP_ATOMIC)) {
+		return -2;
+	}
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+
 	offlen = skb_tail_pointer(skb) - (unsigned char *)tcph - sizeof(struct tcphdr);
-	if (offlen < 0) {
-		return -4;
-	}
+	BUG_ON(offlen < 0);
 	memmove((void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize, (void *)tcph + sizeof(struct tcphdr), offlen);
 	memcpy((void *)tcph + sizeof(struct tcphdr), (void *)tcpopt, tcpopt->header.opsize);
 
@@ -331,41 +326,32 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	if (skb->len != ntohs(iph->tot_len)) {
-		return -1;
-	}
-
 	tcpopt->header.opcode = 0;
 	tcpopt->header.opsize = 0;
 	tcpopt->header.type = NATCAP_TCPOPT_NONE;
 	opt = (struct natcap_TCPOPT *)((void *)tcph + sizeof(struct tcphdr));
-	if (opt->header.opcode != TCPOPT_NATCAP) {
-		goto do_decode;
-	}
 	if (
 			!(
-				(opt->header.type == NATCAP_TCPOPT_ALL &&
+				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data), sizeof(unsigned int)) &&
+				 opt->header.opcode == TCPOPT_NATCAP &&
+				 opt->header.type == NATCAP_TCPOPT_ALL &&
 				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data), sizeof(unsigned int))) ||
-				(opt->header.type == NATCAP_TCPOPT_DST &&
+				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int)) &&
+				 opt->header.opcode == TCPOPT_NATCAP &&
+				 opt->header.type == NATCAP_TCPOPT_DST &&
 				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int))) ||
-				(opt->header.type == NATCAP_TCPOPT_USER &&
+				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int)) &&
+				 opt->header.opcode == TCPOPT_NATCAP &&
+				 opt->header.type == NATCAP_TCPOPT_USER &&
 				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int)))
 			 )
 	   )
 	{
-		return -2;
+		goto do_decode;
 	}
-
-	if (tcph->doff * 4 < sizeof(struct tcphdr) + opt->header.opsize) {
-		return -3;
-	}
-
+	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)tcph + sizeof(struct tcphdr)) - opt->header.opsize;
+	BUG_ON(offlen < 0);
 	memcpy((void *)tcpopt, (void *)opt, opt->header.opsize);
-
-	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)tcph + sizeof(struct tcphdr)) - tcpopt->header.opsize;
-	if (offlen < 0) {
-		return -4;
-	}
 	memmove((void *)tcph + sizeof(struct tcphdr), (void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize, offlen);
 
 	tcph->doff = (tcph->doff * 4 - tcpopt->header.opsize) / 4;
@@ -379,7 +365,6 @@ do_decode:
 	}
 	if (tcpopt->header.encryption || tcpopt->header.type != NATCAP_TCPOPT_NONE) {
 		skb_rcsum_tcpudp(skb);
-		//skb->ip_summed = CHECKSUM_UNNECESSARY;
 	}
 
 	return 0;
@@ -396,26 +381,15 @@ int natcap_udp_encode(struct sk_buff *skb, unsigned long status)
 	__be32 dip;
 	__be16 sport, dport;
 
-	iph = ip_hdr(skb);
-	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
-
-	if (skb->len != ntohs(iph->tot_len)) {
+	if (skb->end - skb->tail < nuosz && pskb_expand_head(skb, 0, nuosz, GFP_ATOMIC)) {
 		return -1;
 	}
-
-	if (skb->end - skb->tail < nuosz && pskb_expand_head(skb, 0, nuosz, GFP_ATOMIC)) {
-		return -2;
-	}
-
 	iph = ip_hdr(skb);
 	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
 	tcph = (struct tcphdr *)udph;
 
 	offlen = skb_tail_pointer(skb) - (unsigned char *)udph - sizeof(struct udphdr);
-	if (offlen < 0) {
-		return -3;
-	}
-
+	BUG_ON(offlen < 0);
 	dip = iph->daddr;
 	dport = udph->dest;
 	sport = udph->source;
@@ -474,29 +448,26 @@ int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo)
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	if (skb->len != ntohs(iph->tot_len)) {
+	if (!((tcph->syn && !tcph->ack) || (tcph->rst && tcph->ack))) {
 		return -1;
 	}
 
-	if (!((tcph->syn && !tcph->ack) || (tcph->rst && tcph->ack))) {
-		return -2;
-	}
-
 	pnuo = (struct natcap_udp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
-	if (pnuo->opcode != TCPOPT_NATCAP_UDP ||
-			pnuo->opsize != ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int))) {
-		return -3;
-	}
-	if (tcph->doff * 4 < sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int))) {
-		return -4;
+	if (
+			!(
+				tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int)) &&
+				pnuo->opcode == TCPOPT_NATCAP_UDP &&
+				pnuo->opsize == ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int))
+			 )
+	   )
+	{
+		return -2;
 	}
 
 	udph = (struct udphdr *)tcph;
 
 	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)udph + sizeof(struct udphdr)) - nuosz;
-	if (offlen < 0) {
-		return -5;
-	}
+	BUG_ON(offlen < 0);
 
 	nuo->port = pnuo->port;
 	nuo->ip = pnuo->ip;

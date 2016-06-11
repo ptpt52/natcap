@@ -151,13 +151,24 @@ static unsigned int natcap_server_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
+	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
+		return NF_DROP;
+	iph = ip_hdr(skb);
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+	if (tcph->doff * 4 < sizeof(struct tcphdr))
+		return NF_DROP;
+	if (!pskb_may_pull(skb, iph->ihl * 4 + tcph->doff * 4))
+		return NF_DROP;
+	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		if (test_bit(IPS_NATCAP_DROP_BIT, &ct->status)) {
 			return NF_DROP;
 		}
+
 		NATCAP_DEBUG("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT ": before decode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
+
 		tcpopt.header.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 		ret = natcap_tcp_decode(skb, &tcpopt);
 		if (ret != 0) {
@@ -169,9 +180,6 @@ static unsigned int natcap_server_in_hook(void *priv,
 			NATCAP_WARN("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcap_auth() ret = %d\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), ret);
 			return NF_DROP;
 		}
-		//reload
-		iph = ip_hdr(skb);
-		tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 	} else {
 		if (!tcph->syn || tcph->ack) {
 			NATCAP_WARN("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT ": first packet in but not syn\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
@@ -189,9 +197,6 @@ static unsigned int natcap_server_in_hook(void *priv,
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
-		//reload
-		iph = ip_hdr(skb);
-		tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 
 		ret = natcap_auth(in, out, skb, ct, &tcpopt, &server);
 		if (ret != 0) {
@@ -282,13 +287,17 @@ static unsigned int natcap_server_out_hook(void *priv,
 		return NF_DROP;
 	}
 
+	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
+		return NF_DROP;
+	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+	if (tcph->doff * 4 < sizeof(struct tcphdr))
+		return NF_DROP;
 
 	NATCAP_DEBUG("(SO)" DEBUG_FMT_PREFIX DEBUG_FMT ": before encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
 	if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
 		status |= NATCAP_NEED_ENC;
 	}
-
 	/* XXX I just confirm it first  */
 	ret = nf_conntrack_confirm(skb);
 	if (ret != NF_ACCEPT) {
@@ -299,8 +308,10 @@ static unsigned int natcap_server_out_hook(void *priv,
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
-	if (ret >= 0) {
+	if (ret == 0) {
 		ret = natcap_tcp_encode(skb, &tcpopt);
+		iph = ip_hdr(skb);
+		tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 	}
 	if (ret != 0) {
 		NATCAP_ERROR("(SO)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcap_tcp_encode() ret=%d\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), ret);
@@ -351,6 +362,7 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
+	struct tcphdr *tcph;
 	struct udphdr *udph;
 	struct natcap_udp_tcpopt nuo;
 
@@ -358,13 +370,22 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 	if (iph->protocol != IPPROTO_TCP)
 		return NF_ACCEPT;
 
+	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
+		return NF_DROP;
+	iph = ip_hdr(skb);
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+	if (tcph->doff * 4 < sizeof(struct tcphdr))
+		return NF_DROP;
+	if (!pskb_may_pull(skb, iph->ihl * 4 + tcph->doff * 4))
+		return NF_DROP;
+	iph = ip_hdr(skb);
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+
 	ret = natcap_udp_decode(skb, &nuo);
 	if (ret != 0) {
 		return NF_ACCEPT;
 	}
-	//reload
-	iph = ip_hdr(skb);
-	udph = (struct udphdr *)((void *)iph + iph->ihl*4);
+	udph = (struct udphdr *)tcph;
 
 	ret = nf_conntrack_in(dev_net(in), pf, hooknum, skb);
 	if (ret != NF_ACCEPT) {
@@ -437,11 +458,13 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
-
 	if (!test_bit(IPS_NATCAP_UDP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 
+	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct udphdr)))
+		return NF_DROP;
+	iph = ip_hdr(skb);
 	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
 
 	NATCAP_DEBUG("(SO)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": before encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph));
@@ -457,7 +480,6 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 		NATCAP_ERROR("(SO)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": natcap_udp_encode() ret=%d\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph), ret);
 		return NF_DROP;
 	}
-
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
