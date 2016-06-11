@@ -222,13 +222,13 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		tcpopt->header.encryption = 0;
 
 	if ((status & NATCAP_CLIENT_MODE)) {
-		if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
-			tcpopt->header.type = NATCAP_TCPOPT_NONE;
-			tcpopt->header.opsize = 0;
-			return 0;
-		}
 		//not syn
 		if (!(tcph->syn && !tcph->ack)) {
+			if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
+				tcpopt->header.type = NATCAP_TCPOPT_NONE;
+				tcpopt->header.opsize = 0;
+				return 0;
+			}
 			size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int));
 			if (tcph->doff * 4 + size <= 60) {
 				tcpopt->header.type = NATCAP_TCPOPT_USER;
