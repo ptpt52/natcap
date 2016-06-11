@@ -279,7 +279,6 @@ static unsigned int natcap_server_out_hook(void *priv,
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
-
 	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
