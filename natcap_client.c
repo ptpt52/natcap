@@ -241,7 +241,7 @@ static unsigned int natcap_client_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
+	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
 		return NF_DROP;
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
@@ -399,13 +399,13 @@ static unsigned int natcap_client_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
+	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
 		return NF_DROP;
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 	if (tcph->doff * 4 < sizeof(struct tcphdr))
 		return NF_DROP;
-	if (!pskb_may_pull(skb, iph->ihl * 4 + tcph->doff * 4))
+	if (!skb_make_writable(skb, iph->ihl * 4 + tcph->doff * 4))
 		return NF_DROP;
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
@@ -482,7 +482,7 @@ static unsigned int natcap_client_udp_proxy_out(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct udphdr)))
+	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr)))
 		return NF_DROP;
 	iph = ip_hdr(skb);
 	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
@@ -575,13 +575,13 @@ static unsigned int natcap_client_udp_proxy_in(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
+	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
 		return NF_DROP;
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 	if (tcph->doff * 4 < sizeof(struct tcphdr))
 		return NF_DROP;
-	if (!pskb_may_pull(skb, iph->ihl * 4 + tcph->doff * 4))
+	if (!skb_make_writable(skb, iph->ihl * 4 + tcph->doff * 4))
 		return NF_DROP;
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
