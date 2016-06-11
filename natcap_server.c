@@ -52,7 +52,7 @@ static inline int natcap_auth(const struct net_device *in,
 				tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
 				ntohl(tcpopt->all.data.u_hash));
 		if (!server) {
-			return -2;
+			return 0;
 		}
 		server->ip = tcpopt->all.data.ip;
 		server->port = tcpopt->all.data.port;
@@ -70,7 +70,7 @@ static inline int natcap_auth(const struct net_device *in,
 					tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
 					tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
 					ntohl(tcpopt->user.data.u_hash));
-			return -3;
+			return -2;
 		}
 		NATCAP_INFO("(%s)" DEBUG_FMT ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
 				__FUNCTION__, DEBUG_ARG(iph,tcph),
@@ -78,17 +78,17 @@ static inline int natcap_auth(const struct net_device *in,
 				tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
 				ntohl(tcpopt->user.data.u_hash));
 		if (server) {
-			return -4;
+			return -3;
 		}
 	} else if (tcpopt->header.type == NATCAP_TCPOPT_DST) {
 		if (!server) {
-			return -5;
+			return 0;
 		}
 		server->ip = tcpopt->dst.data.ip;
 		server->port = tcpopt->dst.data.port;
 		server->encryption = tcpopt->header.encryption;
 	} else if (server) {
-		return -6;
+		return -4;
 	}
 	return 0;
 }
