@@ -36,10 +36,12 @@ insmod ./natcap.ko && {
 cat <<EOF >>/dev/natcap_ctl
 
 clean
-debug=7
+debug=3
 client_forward_mode=1
 
 server_persist_timeout=6
+server 192.241.223.185:65535-e
 server 45.32.63.59:65535-e
+server 139.59.15.70:65535-e
 EOF
 }

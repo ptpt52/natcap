@@ -39,15 +39,15 @@ static inline int natcap_auth(const struct net_device *in,
 		memcpy(eth->h_source, old_mac, ETH_ALEN);
 		if (ret <= 0) {
 			set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-			NATCAP_WARN("(%s)" DEBUG_FMT ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth failed\n",
-					__FUNCTION__, DEBUG_ARG(iph,tcph),
+			NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth failed\n",
+					__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
 					tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
 					tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
 					ntohl(tcpopt->all.data.u_hash));
 			return -1;
 		}
-		NATCAP_INFO("(%s)" DEBUG_FMT ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
-				__FUNCTION__, DEBUG_ARG(iph,tcph),
+		NATCAP_INFO("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
+				__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
 				tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
 				tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
 				ntohl(tcpopt->all.data.u_hash));
@@ -65,15 +65,15 @@ static inline int natcap_auth(const struct net_device *in,
 		memcpy(eth->h_source, old_mac, ETH_ALEN);
 		if (ret <= 0) {
 			set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-			NATCAP_WARN("(%s)" DEBUG_FMT ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth failed\n",
-					__FUNCTION__, DEBUG_ARG(iph,tcph),
+			NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth failed\n",
+					__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
 					tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
 					tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
 					ntohl(tcpopt->user.data.u_hash));
 			return -2;
 		}
-		NATCAP_INFO("(%s)" DEBUG_FMT ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
-				__FUNCTION__, DEBUG_ARG(iph,tcph),
+		NATCAP_INFO("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
+				__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
 				tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
 				tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
 				ntohl(tcpopt->user.data.u_hash));
@@ -167,22 +167,22 @@ static unsigned int natcap_server_in_hook(void *priv,
 			return NF_DROP;
 		}
 
-		NATCAP_DEBUG("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT ": before decode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
+		NATCAP_DEBUG("(SI)" DEBUG_TCP_FMT ": before decode\n", DEBUG_TCP_ARG(iph,tcph));
 
 		tcpopt.header.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 		ret = natcap_tcp_decode(skb, &tcpopt);
 		if (ret != 0) {
-			NATCAP_ERROR("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), ret);
+			NATCAP_ERROR("(SI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,tcph), ret);
 			return NF_DROP;
 		}
 		ret = natcap_auth(in, out, skb, ct, &tcpopt, NULL);
 		if (ret != 0) {
-			NATCAP_WARN("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcap_auth() ret = %d\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), ret);
+			NATCAP_WARN("(SI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,tcph), ret);
 			return NF_DROP;
 		}
 	} else {
 		if (!tcph->syn || tcph->ack) {
-			NATCAP_WARN("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT ": first packet in but not syn\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
+			NATCAP_WARN("(SI)" DEBUG_TCP_FMT ": first packet in but not syn\n", DEBUG_TCP_ARG(iph,tcph));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
@@ -200,15 +200,15 @@ static unsigned int natcap_server_in_hook(void *priv,
 
 		ret = natcap_auth(in, out, skb, ct, &tcpopt, &server);
 		if (ret != 0) {
-			NATCAP_WARN("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcap_auth() ret = %d\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), ret);
+			NATCAP_WARN("(SI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,tcph), ret);
 			return NF_DROP;
 		}
 
 		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
-			NATCAP_INFO("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
+			NATCAP_INFO("(SI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,tcph), TUPLE_ARG(&server));
 
 			if (natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
-				NATCAP_ERROR("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcap_tcp_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), TUPLE_ARG(&server));
+				NATCAP_ERROR("(SI)" DEBUG_TCP_FMT ": natcap_tcp_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,tcph), TUPLE_ARG(&server));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_DROP;
 			}
@@ -220,7 +220,7 @@ static unsigned int natcap_server_in_hook(void *priv,
 
 	skb->mark = XT_MARK_NATCAP;
 
-	NATCAP_DEBUG("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT ": after decode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
+	NATCAP_DEBUG("(SI)" DEBUG_TCP_FMT ": after decode\n", DEBUG_TCP_ARG(iph,tcph));
 
 	return NF_ACCEPT;
 }
@@ -293,7 +293,7 @@ static unsigned int natcap_server_out_hook(void *priv,
 	if (tcph->doff * 4 < sizeof(struct tcphdr))
 		return NF_DROP;
 
-	NATCAP_DEBUG("(SO)" DEBUG_FMT_PREFIX DEBUG_FMT ": before encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
+	NATCAP_DEBUG("(SO)" DEBUG_TCP_FMT ": before encode\n", DEBUG_TCP_ARG(iph,tcph));
 	if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
 		status |= NATCAP_NEED_ENC;
 	}
@@ -313,12 +313,12 @@ static unsigned int natcap_server_out_hook(void *priv,
 		tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 	}
 	if (ret != 0) {
-		NATCAP_ERROR("(SO)" DEBUG_FMT_PREFIX DEBUG_FMT ": natcap_tcp_encode() ret=%d\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph), ret);
+		NATCAP_ERROR("(SO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d\n", DEBUG_TCP_ARG(iph,tcph), ret);
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_DROP;
 	}
 
-	NATCAP_DEBUG("(SO)" DEBUG_FMT_PREFIX DEBUG_FMT ":after encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
+	NATCAP_DEBUG("(SO)" DEBUG_TCP_FMT ":after encode\n", DEBUG_TCP_ARG(iph,tcph));
 
 	return NF_ACCEPT;
 }
@@ -396,16 +396,16 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 	}
 
 	if (!test_and_set_bit(IPS_NATCAP_UDP_BIT, &ct->status)) { /* first time in */
-		NATCAP_INFO("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": new connection, after decode, target=%pI4:%u\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph), &nuo.ip, ntohs(nuo.port));
+		NATCAP_INFO("(SI)" DEBUG_UDP_FMT ": new connection, after decode, target=%pI4:%u\n", DEBUG_UDP_ARG(iph,udph), &nuo.ip, ntohs(nuo.port));
 		if (natcap_tcp_dnat_setup(ct, nuo.ip, nuo.port) != NF_ACCEPT) {
-			NATCAP_ERROR("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": natcap_tcp_dnat_setup failed, target=%pI4:%u\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph), &nuo.ip, ntohs(nuo.port));
+			NATCAP_ERROR("(SI)" DEBUG_UDP_FMT ": natcap_tcp_dnat_setup failed, target=%pI4:%u\n", DEBUG_UDP_ARG(iph,udph), &nuo.ip, ntohs(nuo.port));
 			return NF_DROP;
 		}
 	}
 
 	skb->mark = XT_MARK_NATCAP;
 
-	NATCAP_DEBUG("(SI)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": after decode\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph));
+	NATCAP_DEBUG("(SI)" DEBUG_UDP_FMT ": after decode\n", DEBUG_UDP_ARG(iph,udph));
 
 	return NF_ACCEPT;
 }
@@ -466,7 +466,7 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 	iph = ip_hdr(skb);
 	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
 
-	NATCAP_DEBUG("(SO)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": before encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph));
+	NATCAP_DEBUG("(SO)" DEBUG_UDP_FMT ": before encode\n", DEBUG_UDP_ARG(iph,udph));
 
 	/* XXX I just confirm it first  */
 	ret = nf_conntrack_confirm(skb);
@@ -476,13 +476,13 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 
 	ret = natcap_udp_encode(skb, status);
 	if (ret != 0) {
-		NATCAP_ERROR("(SO)" DEBUG_FMT_PREFIX DEBUG_FMT_UDP ": natcap_udp_encode() ret=%d\n", DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(iph,udph), ret);
+		NATCAP_ERROR("(SO)" DEBUG_UDP_FMT ": natcap_udp_encode() ret=%d\n", DEBUG_UDP_ARG(iph,udph), ret);
 		return NF_DROP;
 	}
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	NATCAP_DEBUG("(SO)" DEBUG_FMT_PREFIX DEBUG_FMT ":after encode\n", DEBUG_ARG_PREFIX, DEBUG_ARG(iph,tcph));
+	NATCAP_DEBUG("(SO)" DEBUG_TCP_FMT ":after encode\n", DEBUG_TCP_ARG(iph,tcph));
 
 	return NF_ACCEPT;
 }
