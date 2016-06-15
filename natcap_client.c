@@ -55,12 +55,12 @@ struct natcap_server_info {
 
 static struct natcap_server_info natcap_server_info;
 
-static inline void natcap_server_init(void)
+static inline void natcap_server_info_init(void)
 {
 	memset(&natcap_server_info, 0, sizeof(natcap_server_info));
 }
 
-void natcap_server_cleanup(void)
+void natcap_server_info_cleanup(void)
 {
 	struct natcap_server_info *nsi = &natcap_server_info;
 	unsigned int m = nsi->active_index;
@@ -681,7 +681,7 @@ int natcap_client_init(void)
 
 	need_conntrack();
 
-	natcap_server_init();
+	natcap_server_info_init();
 	default_mac_addr_init();
 	ret = nf_register_hooks(client_hooks, ARRAY_SIZE(client_hooks));
 	return ret;
@@ -690,5 +690,5 @@ int natcap_client_init(void)
 void natcap_client_exit(void)
 {
 	nf_unregister_hooks(client_hooks, ARRAY_SIZE(client_hooks));
-	natcap_server_cleanup();
+	natcap_server_info_cleanup();
 }
