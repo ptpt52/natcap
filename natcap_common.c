@@ -27,7 +27,7 @@ MODULE_PARM_DESC(debug, "Debug level (0=none,1=error,2=warn,4=info,8=debug,16=fi
 
 unsigned int mode = 0;
 module_param(mode, int, 0);
-MODULE_PARM_DESC(debug, "Working mode (0=client,1=server) default=0");
+MODULE_PARM_DESC(debug, "Working mode (0=client,1=server,2=forward) default=0");
 
 unsigned int server_seed = 0;
 module_param(server_seed, int, 0);

@@ -9,7 +9,6 @@
 #include <linux/if_ether.h>
 #include "natcap.h"
 
-extern unsigned int client_forward_mode;
 extern unsigned int server_persist_timeout;
 
 extern u32 default_u_hash;

@@ -23,10 +23,6 @@
 #include "natcap_common.h"
 #include "natcap_client.h"
 
-unsigned int client_forward_mode = 0;
-module_param(client_forward_mode, int, 0);
-MODULE_PARM_DESC(client_forward_mode, "Client forward mode (1=enable, 0=disable) default=0");
-
 unsigned int server_persist_timeout = 0;
 module_param(server_persist_timeout, int, 0);
 MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");

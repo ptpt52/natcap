@@ -55,18 +55,16 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				sizeof(natcap_ctl_buffer) - 1,
 				"# Usage:\n"
 				"#    debug=Number -- set debug value\n"
-				"#    client_forward_mode=Number -- set client forward mode value\n"
 				"#    server [ip]:[port]-[e/o] -- add one server\n"
 				"#    delete [ip]:[port]-[e/o] -- delete one server\n"
 				"#    clean -- remove all existing server(s)\n"
 				"#\n"
 				"# Info:\n"
-				"#    mode=%s\n"
+				"#    mode=%u\n"
 				"#    default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n"
 				"#    default_u_hash=%u\n"
 				"#    server_seed=%u\n"
 				"#    debug=%u\n"
-				"#    client_forward_mode=%u\n"
 				"#    server_persist_timeout=%u\n"
 				"#\n"
 				"# Reload cmd:\n"
@@ -74,14 +72,13 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"clean\n"
 				"debug=%u\n"
 				"u_hash=%u\n"
-				"client_forward_mode=%u\n"
 				"server_persist_timeout=%u\n"
 				"\n",
-				mode == 0 ? "client" : "server",
+				mode,
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
-				server_seed, debug, client_forward_mode, server_persist_timeout,
-				debug, ntohl(default_u_hash), client_forward_mode, server_persist_timeout);
+				server_seed, debug, server_persist_timeout,
+				debug, ntohl(default_u_hash), server_persist_timeout);
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -232,13 +229,6 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		n = sscanf(data, "u_hash=%u", &d);
 		if (n == 1) {
 			default_u_hash = htonl(d);
-			goto done;
-		}
-	} else if (strncmp(data, "client_forward_mode=", 20) == 0) {
-		int d;
-		n = sscanf(data, "client_forward_mode=%u", &d);
-		if (n == 1) {
-			client_forward_mode = d;
 			goto done;
 		}
 	} else if (strncmp(data, "server_persist_timeout=", 23) == 0) {
