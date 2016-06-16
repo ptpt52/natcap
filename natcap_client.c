@@ -71,7 +71,7 @@ void natcap_server_info_cleanup(void)
 	nsi->active_index = n;
 }
 
-int natcap_server_add(const struct tuple *dst)
+int natcap_server_info_add(const struct tuple *dst)
 {
 	struct natcap_server_info *nsi = &natcap_server_info;
 	unsigned int m = nsi->active_index;
@@ -103,7 +103,7 @@ int natcap_server_add(const struct tuple *dst)
 	return 0;
 }
 
-int natcap_server_delete(const struct tuple *dst)
+int natcap_server_info_delete(const struct tuple *dst)
 {
 	struct natcap_server_info *nsi = &natcap_server_info;
 	unsigned int m = nsi->active_index;
@@ -127,7 +127,7 @@ int natcap_server_delete(const struct tuple *dst)
 	return 0;
 }
 
-void *natcap_server_get(loff_t idx)
+void *natcap_server_info_get(loff_t idx)
 {
 	if (idx < natcap_server_info.server_count[natcap_server_info.active_index])
 		return &natcap_server_info.server[natcap_server_info.active_index][idx];

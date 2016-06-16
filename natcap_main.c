@@ -85,7 +85,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
-		struct tuple *dst = (struct tuple *)natcap_server_get((*pos) - 1);
+		struct tuple *dst = (struct tuple *)natcap_server_info_get((*pos) - 1);
 
 		if (dst) {
 			n = snprintf(natcap_ctl_buffer,
@@ -107,7 +107,7 @@ static void *natcap_next(struct seq_file *m, void *v, loff_t *pos)
 
 	(*pos)++;
 	if ((*pos) > 0) {
-		dst = (struct tuple *)natcap_server_get((*pos) - 1);
+		dst = (struct tuple *)natcap_server_info_get((*pos) - 1);
 		if (dst) {
 			n = snprintf(natcap_ctl_buffer,
 					sizeof(natcap_ctl_buffer) - 1,
@@ -184,7 +184,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	}
 
 	if (strncmp(data, "clean", 5) == 0) {
-		natcap_server_cleanup();
+		natcap_server_info_cleanup();
 		goto done;
 	} else if (strncmp(data, "server ", 7) == 0) {
 		unsigned int a, b, c, d, e;
@@ -199,7 +199,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 			dst.port = htons(e);
 			dst.encryption = !!(f == 'e');
-			if ((err = natcap_server_add(&dst)) == 0)
+			if ((err = natcap_server_info_add(&dst)) == 0)
 				goto done;
 			NATCAP_println("natcap_server_add() failed ret=%d", err);
 		}
@@ -216,7 +216,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 			dst.port = htons(e);
 			dst.encryption = !!(f == 'e');
-			if ((err = natcap_server_delete(&dst)) == 0)
+			if ((err = natcap_server_info_delete(&dst)) == 0)
 				goto done;
 			NATCAP_println("natcap_server_delete() failed ret=%d", err);
 		}

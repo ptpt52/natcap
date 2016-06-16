@@ -15,10 +15,10 @@ extern unsigned int server_persist_timeout;
 extern u32 default_u_hash;
 extern unsigned char default_mac_addr[ETH_ALEN];
 
-void natcap_server_cleanup(void);
-int natcap_server_add(const struct tuple *dst);
-int natcap_server_delete(const struct tuple *dst);
-void *natcap_server_get(loff_t idx);
+void natcap_server_info_cleanup(void);
+int natcap_server_info_add(const struct tuple *dst);
+int natcap_server_info_delete(const struct tuple *dst);
+void *natcap_server_info_get(loff_t idx);
 
 int natcap_client_init(void);
 void natcap_client_exit(void);
