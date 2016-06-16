@@ -36,6 +36,7 @@
 #include "natcap_common.h"
 #include "natcap_client.h"
 #include "natcap_server.h"
+#include "natcap_forward.h"
 
 static int natcap_major = 0;
 static int natcap_minor = 0;
@@ -277,19 +278,31 @@ static struct file_operations natcap_fops = {
 
 static int natcap_mode_init(void)
 {
-	if (mode == 0) {
-		return natcap_client_init();
+	switch (mode) {
+		case 0:
+			return natcap_client_init();
+		case 1:
+			return natcap_server_init();
+		case 2:
+			return natcap_forward_init();
+		default:
+			break;
 	}
-	return natcap_server_init();
+	return -1;
 }
 
 static void natcap_mode_exit(void)
 {
-	if (mode == 0) {
-		natcap_client_exit();
-		return;
+	switch (mode) {
+		case 0:
+			return natcap_client_exit();
+		case 1:
+			return natcap_server_exit();
+		case 2:
+			return natcap_forward_exit();
+		default:
+			break;
 	}
-	natcap_server_exit();
 }
 
 static int __init natcap_init(void) {
