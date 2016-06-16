@@ -51,11 +51,6 @@ struct natcap_server_info {
 
 static struct natcap_server_info natcap_server_info;
 
-static inline void natcap_server_info_init(void)
-{
-	memset(&natcap_server_info, 0, sizeof(natcap_server_info));
-}
-
 void natcap_server_info_cleanup(void)
 {
 	struct natcap_server_info *nsi = &natcap_server_info;
@@ -130,7 +125,7 @@ void *natcap_server_info_get(loff_t idx)
 	return NULL;
 }
 
-static inline void natcap_server_select(__be32 ip, __be16 port, struct tuple *dst)
+void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 {
 	static unsigned int server_index = 0;
 	static unsigned long server_jiffies = 0;
@@ -272,7 +267,7 @@ static unsigned int natcap_client_out_hook(void *priv,
 			status |= NATCAP_NEED_ENC;
 		}
 	} else if ((tcph->syn && !tcph->ack) && ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
-		natcap_server_select(iph->daddr, tcph->dest, &server);
+		natcap_server_info_select(iph->daddr, tcph->dest, &server);
 		if (server.ip == 0) {
 			NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,tcph));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -483,7 +478,7 @@ static unsigned int natcap_client_udp_proxy_out(void *priv,
 	iph = ip_hdr(skb);
 	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
 
-	natcap_server_select(iph->daddr, udph->dest, &server);
+	natcap_server_info_select(iph->daddr, udph->dest, &server);
 	if (server.ip == 0) {
 		return NF_ACCEPT;
 	}
@@ -677,7 +672,7 @@ int natcap_client_init(void)
 
 	need_conntrack();
 
-	natcap_server_info_init();
+	natcap_server_info_cleanup();
 	default_mac_addr_init();
 	ret = nf_register_hooks(client_hooks, ARRAY_SIZE(client_hooks));
 	return ret;
@@ -686,5 +681,4 @@ int natcap_client_init(void)
 void natcap_client_exit(void)
 {
 	nf_unregister_hooks(client_hooks, ARRAY_SIZE(client_hooks));
-	natcap_server_info_cleanup();
 }

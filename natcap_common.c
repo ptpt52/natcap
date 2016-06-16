@@ -349,9 +349,12 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 	{
 		goto do_decode;
 	}
-	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)tcph + sizeof(struct tcphdr)) - opt->header.opsize;
-	BUG_ON(offlen < 0);
+
 	memcpy((void *)tcpopt, (void *)opt, opt->header.opsize);
+	if (mode == 2)
+		goto done;
+	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize);
+	BUG_ON(offlen < 0);
 	memmove((void *)tcph + sizeof(struct tcphdr), (void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize, offlen);
 
 	tcph->doff = (tcph->doff * 4 - tcpopt->header.opsize) / 4;
@@ -366,7 +369,7 @@ do_decode:
 	if (tcpopt->header.encryption || tcpopt->header.type != NATCAP_TCPOPT_NONE) {
 		skb_rcsum_tcpudp(skb);
 	}
-
+done:
 	return 0;
 }
 
@@ -378,8 +381,6 @@ int natcap_udp_encode(struct sk_buff *skb, unsigned long status)
 	struct natcap_udp_tcpopt *pnuo = NULL;
 	int nuosz = ALIGN(sizeof(struct tcphdr) + sizeof(struct natcap_udp_tcpopt) - sizeof(struct udphdr), sizeof(unsigned int));
 	int offlen;
-	__be32 dip;
-	__be16 sport, dport;
 
 	if (skb->end - skb->tail < nuosz && pskb_expand_head(skb, 0, nuosz, GFP_ATOMIC)) {
 		return -1;
@@ -390,23 +391,17 @@ int natcap_udp_encode(struct sk_buff *skb, unsigned long status)
 
 	offlen = skb_tail_pointer(skb) - (unsigned char *)udph - sizeof(struct udphdr);
 	BUG_ON(offlen < 0);
-	dip = iph->daddr;
-	dport = udph->dest;
-	sport = udph->source;
-
 	pnuo = (struct natcap_udp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
 	memmove((void *)udph + sizeof(struct udphdr) + nuosz, (void *)udph + sizeof(struct udphdr), offlen);
 
 	pnuo->opcode = TCPOPT_NATCAP_UDP;
 	pnuo->opsize = ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int));
-	pnuo->port = dport;
-	pnuo->ip = dip;
+	pnuo->port = udph->dest;
+	pnuo->ip = iph->daddr;
 
 	iph->tot_len = htons(ntohs(iph->tot_len) + nuosz);
 	iph->protocol = IPPROTO_TCP;
 
-	tcph->source = sport;
-	tcph->dest = dport;
 	tcph->doff = (sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int))) / 4;
 	tcph->res1 = 0;
 	tcph->cwr = 0;
@@ -443,7 +438,6 @@ int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo)
 	struct natcap_udp_tcpopt *pnuo = NULL;
 	int nuosz = ALIGN(sizeof(struct tcphdr) + sizeof(struct natcap_udp_tcpopt) - sizeof(struct udphdr), sizeof(unsigned int));
 	int offlen;
-	__be16 sport, dport;
 
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
@@ -464,28 +458,22 @@ int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo)
 		return -2;
 	}
 
+	memcpy((void *)nuo, (void *)pnuo, pnuo->opsize);
+	if (mode == 2)
+		goto done;
 	udph = (struct udphdr *)tcph;
-
-	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)udph + sizeof(struct udphdr)) - nuosz;
+	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)udph + sizeof(struct udphdr) + nuosz);
 	BUG_ON(offlen < 0);
-
-	nuo->port = pnuo->port;
-	nuo->ip = pnuo->ip;
-	dport = tcph->dest;
-	sport = tcph->source;
-
 	memmove((void *)udph + sizeof(struct udphdr), (void *)udph + sizeof(struct udphdr) + nuosz, offlen);
 
 	iph->tot_len = htons(ntohs(iph->tot_len) - nuosz);
 	iph->protocol = IPPROTO_UDP;
 
-	udph->source = sport;
-	udph->dest = dport;
 	udph->len = htons(sizeof(struct udphdr) + offlen);
 	skb->len -= nuosz;
 	skb->tail -= nuosz;
 	skb_rcsum_tcpudp(skb);
-
+done:
 	return 0;
 }
 
