@@ -14,6 +14,8 @@
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_core.h>
+#include <net/ip.h>
+#include <net/tcp.h>
 #include "natcap.h"
 #include "natcap_common.h"
 #include "natcap_server.h"
@@ -38,13 +40,12 @@ static inline int natcap_auth(const struct net_device *in,
 		ret = ip_set_test_src_mac(in, out, skb, "vclist");
 		memcpy(eth->h_source, old_mac, ETH_ALEN);
 		if (ret <= 0) {
-			set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
 			NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth failed\n",
 					__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
 					tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
 					tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
 					ntohl(tcpopt->all.data.u_hash));
-			return -1;
+			return E_NATCAP_FAIL;
 		}
 		NATCAP_INFO("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
 				__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
@@ -52,7 +53,7 @@ static inline int natcap_auth(const struct net_device *in,
 				tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
 				ntohl(tcpopt->all.data.u_hash));
 		if (!server) {
-			return 0;
+			return E_NATCAP_OK;
 		}
 		server->ip = tcpopt->all.data.ip;
 		server->port = tcpopt->all.data.port;
@@ -64,13 +65,12 @@ static inline int natcap_auth(const struct net_device *in,
 		ret = ip_set_test_src_mac(in, out, skb, "vclist");
 		memcpy(eth->h_source, old_mac, ETH_ALEN);
 		if (ret <= 0) {
-			set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
 			NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth failed\n",
 					__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
 					tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
 					tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
 					ntohl(tcpopt->user.data.u_hash));
-			return -2;
+			return E_NATCAP_FAIL;
 		}
 		NATCAP_INFO("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
 				__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
@@ -78,19 +78,129 @@ static inline int natcap_auth(const struct net_device *in,
 				tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
 				ntohl(tcpopt->user.data.u_hash));
 		if (server) {
-			return -3;
+			return E_NATCAP_INVAL;
 		}
 	} else if (tcpopt->header.type == NATCAP_TCPOPT_DST) {
 		if (!server) {
-			return 0;
+			return E_NATCAP_INVAL;
 		}
 		server->ip = tcpopt->dst.data.ip;
 		server->port = tcpopt->dst.data.port;
 		server->encryption = tcpopt->header.encryption;
 	} else if (server) {
-		return -4;
+		return E_NATCAP_INVAL;
 	}
-	return 0;
+	return E_NATCAP_OK;
+}
+
+static inline void natcap_auth_reply_payload(const char *payload, int payload_len, struct sk_buff *oskb, const struct net_device *dev)
+{
+	struct sk_buff *nskb;
+	struct ethhdr *neth, *oeth;
+	struct iphdr *niph, *oiph;
+	struct tcphdr *otcph, *ntcph;
+	int len;
+	unsigned int csum;
+	int offset, header_len;
+	char *data;
+
+	oeth = (struct ethhdr *)skb_mac_header(oskb);
+	oiph = ip_hdr(oskb);
+	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl*4);
+
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len - oskb->len;
+	header_len = offset < 0 ? 0 : offset;
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
+	if (!nskb) {
+		printk("alloc_skb fail\n");
+		return;
+	}
+
+	data = (char *)ip_hdr(nskb) + sizeof(struct iphdr) + sizeof(struct tcphdr);
+	memcpy(data, payload, payload_len);
+
+	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
+	memset(ntcph, 0, sizeof(struct tcphdr));
+	ntcph->source = otcph->dest;
+	ntcph->dest = otcph->source;
+	ntcph->seq = otcph->ack_seq;
+	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - (oiph->ihl<<2) - (otcph->doff<<2));
+	ntcph->doff = 5;
+	ntcph->ack = 1;
+	ntcph->psh = 1;
+	ntcph->fin = 1;
+	ntcph->window = 65535;
+
+	niph = ip_hdr(nskb);
+	memset(niph, 0, sizeof(struct iphdr));
+	niph->saddr = oiph->daddr;
+	niph->daddr = oiph->saddr;
+	niph->version = oiph->version;
+	niph->ihl = 5;
+	niph->tos = 0;
+	niph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len);
+	niph->ttl = 0x80;
+	niph->protocol = oiph->protocol;
+	niph->id = __constant_htons(0xDEAD);
+	niph->frag_off = 0x0;
+	ip_send_check(niph);
+
+	len = ntohs(niph->tot_len) - (niph->ihl<<2);
+	csum = csum_partial((char*)ntcph, len, 0);
+	ntcph->check = tcp_v4_check(len, niph->saddr, niph->daddr, csum);
+
+	neth = eth_hdr(nskb);
+	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+	neth->h_proto = htons(ETH_P_IP);
+	nskb->len += offset;
+	skb_push(nskb, (char *)niph - (char *)neth);
+	nskb->dev = (struct net_device *)dev;
+	nskb->ip_summed = CHECKSUM_NONE;
+
+	dev_queue_xmit(nskb);
+}
+
+static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_buff *skb, struct nf_conn *ct)
+{
+	const char *http_header_fmt = ""
+		"HTTP/1.1 302 Moved Temporarily\r\n"
+		"Connection: close\r\n"
+		"Cache-Control: no-cache\r\n"
+		"Content-Type: text/html; charset=UTF-8\r\n"
+		"Location: %s\r\n"
+		"Content-Length: %u\r\n"
+		"\r\n";
+	const char *http_data_fmt = ""
+		"<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\r\n"
+		"<TITLE>302 Moved</TITLE></HEAD><BODY>\r\n"
+		"<H1>302 Moved</H1>\r\n"
+		"The document has moved\r\n"
+		"<A HREF=\"%s\">here</A>.\r\n"
+		"</BODY></HTML>\r\n";
+	int n = 0;
+	struct {
+		char location[128];
+		char data[384];
+		char header[384];
+		char payload[0];
+	} *http = kmalloc(2048, GFP_ATOMIC);
+	if (!http)
+		return;
+
+	snprintf(http->location, sizeof(http->location), "http://router-sh.ptpt52.com/index.html?_t=%lu", jiffies);
+	http->location[sizeof(http->location) - 1] = 0;
+	n = snprintf(http->data, sizeof(http->data), http_data_fmt, http->location);
+	http->data[sizeof(http->data) - 1] = 0;
+	snprintf(http->header, sizeof(http->header), http_header_fmt, http->location, n);
+	http->header[sizeof(http->header) - 1] = 0;
+	n = sprintf(http->payload, "%s%s", http->header, http->data);
+
+	if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+		natcap_data_encode(http->payload, n);
+	}
+
+	natcap_auth_reply_payload(http->payload, n, skb, dev);
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
@@ -176,9 +286,14 @@ static unsigned int natcap_server_in_hook(void *priv,
 			return NF_DROP;
 		}
 		ret = natcap_auth(in, out, skb, ct, &tcpopt, NULL);
-		if (ret != 0) {
+		if (ret != E_NATCAP_OK) {
 			NATCAP_WARN("(SI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,tcph), ret);
-			return NF_DROP;
+			if (ret == E_NATCAP_FAIL) {
+				set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
+			} else {
+				set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+				return NF_DROP;
+			}
 		}
 	} else {
 		if (!tcph->syn || tcph->ack) {
@@ -199,9 +314,14 @@ static unsigned int natcap_server_in_hook(void *priv,
 		}
 
 		ret = natcap_auth(in, out, skb, ct, &tcpopt, &server);
-		if (ret != 0) {
+		if (ret != E_NATCAP_OK) {
 			NATCAP_WARN("(SI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,tcph), ret);
-			return NF_DROP;
+			if (ret == E_NATCAP_FAIL) {
+				set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
+			} else {
+				set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+				return NF_DROP;
+			}
 		}
 
 		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
@@ -221,6 +341,24 @@ static unsigned int natcap_server_in_hook(void *priv,
 	skb->mark = XT_MARK_NATCAP;
 
 	NATCAP_DEBUG("(SI)" DEBUG_TCP_FMT ": after decode\n", DEBUG_TCP_ARG(iph,tcph));
+
+	if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
+		int data_len;
+		unsigned char *data;
+		data = skb->data + (iph->ihl << 2) + (tcph->doff << 2);
+		data_len = ntohs(iph->tot_len) - ((iph->ihl << 2) + (tcph->doff << 2));
+		if ((data_len > 4 && strncasecmp(data, "GET ", 4) == 0) ||
+				(data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
+			natcap_auth_http_302(in, skb, ct);
+			set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+			return NF_DROP;
+		} else if (data_len > 0) {
+			set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+			return NF_DROP;
+		} else {
+			return NF_ACCEPT;
+		}
+	}
 
 	return NF_ACCEPT;
 }

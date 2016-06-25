@@ -74,7 +74,7 @@ static void dnatcap_map_init(void)
 	}
 }
 
-static void natcap_data_encode(unsigned char *buf, int len)
+void natcap_data_encode(unsigned char *buf, int len)
 {
 	int i;
 	for (i = 0; i < len; i++) {
@@ -82,7 +82,7 @@ static void natcap_data_encode(unsigned char *buf, int len)
 	}
 }
 
-static void natcap_data_decode(unsigned char *buf, int len)
+void natcap_data_decode(unsigned char *buf, int len)
 {
 	int i;
 	for (i = 0; i < len; i++) {

@@ -37,7 +37,6 @@ cat <<EOF >>/dev/natcap_ctl
 
 clean
 debug=3
-client_forward_mode=1
 
 server_persist_timeout=6
 server 192.241.223.185:65535-e
