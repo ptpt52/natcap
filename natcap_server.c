@@ -34,6 +34,11 @@ static inline int natcap_auth(const struct net_device *in,
 	struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	if (tcpopt->header.type == NATCAP_TCPOPT_ALL) {
+		if (server) {
+			server->ip = tcpopt->all.data.ip;
+			server->port = tcpopt->all.data.port;
+			server->encryption = tcpopt->header.encryption;
+		}
 		eth = eth_hdr(skb);
 		memcpy(old_mac, eth->h_source, ETH_ALEN);
 		memcpy(eth->h_source, tcpopt->all.data.mac_addr, ETH_ALEN);
@@ -52,13 +57,10 @@ static inline int natcap_auth(const struct net_device *in,
 				tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
 				tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
 				ntohl(tcpopt->all.data.u_hash));
-		if (!server) {
-			return E_NATCAP_OK;
-		}
-		server->ip = tcpopt->all.data.ip;
-		server->port = tcpopt->all.data.port;
-		server->encryption = tcpopt->header.encryption;
 	} else if (tcpopt->header.type == NATCAP_TCPOPT_USER) {
+		if (server) {
+			return E_NATCAP_INVAL;
+		}
 		eth = eth_hdr(skb);
 		memcpy(old_mac, eth->h_source, ETH_ALEN);
 		memcpy(eth->h_source, tcpopt->user.data.mac_addr, ETH_ALEN);
@@ -77,9 +79,6 @@ static inline int natcap_auth(const struct net_device *in,
 				tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
 				tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
 				ntohl(tcpopt->user.data.u_hash));
-		if (server) {
-			return E_NATCAP_INVAL;
-		}
 	} else if (tcpopt->header.type == NATCAP_TCPOPT_DST) {
 		if (!server) {
 			return E_NATCAP_INVAL;
