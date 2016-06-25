@@ -98,6 +98,8 @@ extern const char *const hooknames[];
 void natcap_data_encode(unsigned char *buf, int len);
 void natcap_data_decode(unsigned char *buf, int len);
 
+int skb_rcsum_tcpudp(struct sk_buff *skb);
+
 int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_conn *ct, struct natcap_TCPOPT *tcpopt);
 int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt);
 int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt);

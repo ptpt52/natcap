@@ -152,7 +152,7 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 	return;
 }
 
-static inline int skb_rcsum_tcpudp(struct sk_buff *skb)
+int skb_rcsum_tcpudp(struct sk_buff *skb)
 {
 	struct iphdr *iph = ip_hdr(skb);
 	int len = ntohs(iph->tot_len);

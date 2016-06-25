@@ -202,6 +202,34 @@ static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_
 	natcap_auth_reply_payload(http->payload, n, skb, dev);
 }
 
+static inline void natcap_auth_convert_tcprst(struct sk_buff *skb)
+{
+	int offset = 0;
+	struct iphdr *iph;
+	struct tcphdr *tcph;
+
+	iph = ip_hdr(skb);
+	if (iph->protocol != IPPROTO_TCP)
+		return;
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+	offset = ntohs(iph->tot_len) - ((iph->ihl << 2) + sizeof(struct tcphdr));
+	tcph->ack = 0;
+	tcph->psh = 0;
+	tcph->rst = 1;
+	tcph->fin = 0;
+	tcph->window = htons(0);
+	tcph->doff = sizeof(struct tcphdr) / 4;
+
+	iph->tot_len = htons(ntohs(iph->tot_len) - offset);
+	iph->id = __constant_htons(0xDEAD);
+	iph->frag_off = 0;
+
+	skb->tail -= offset;
+	skb->len -= offset;
+
+	skb_rcsum_tcpudp(skb);
+}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_server_in_hook(unsigned int hooknum,
 		struct sk_buff *skb,
@@ -354,7 +382,8 @@ static unsigned int natcap_server_in_hook(void *priv,
 		} else if (data_len > 0) {
 			set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
 			return NF_DROP;
-		} else {
+		} else if (tcph->ack && !tcph->syn) {
+			natcap_auth_convert_tcprst(skb);
 			return NF_ACCEPT;
 		}
 	}
