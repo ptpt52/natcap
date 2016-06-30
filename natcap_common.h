@@ -77,8 +77,8 @@ extern const char *const hooknames[];
 #define UDP_ST_FMT "UL:%u,UC:%04X"
 #define UDP_ST_ARG(u) ntohs((u)->len), ntohs((u)->check)
 
-#define DEBUG_FMT_PREFIX "[%s](%s)"
-#define DEBUG_ARG_PREFIX hooknames[hooknum], __FUNCTION__
+#define DEBUG_FMT_PREFIX "[%s](%s:%u)"
+#define DEBUG_ARG_PREFIX hooknames[hooknum], __FUNCTION__, __LINE__
 
 #define DEBUG_FMT_TCP "[" IP_TCPUDP_FMT "|ID:%04X,IL:%u|" TCP_ST_FMT "]"
 #define DEBUG_ARG_TCP(i, t) IP_TCPUDP_ARG(i,t), ntohs((i)->id), ntohs((i)->tot_len), TCP_ST_ARG(t)
