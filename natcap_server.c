@@ -155,7 +155,11 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	nskb->len += offset;
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
-	nskb->ip_summed = CHECKSUM_NONE;
+
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_shinfo(nskb)->gso_size = 0;
+	skb_shinfo(nskb)->gso_segs = 0;
+	skb_shinfo(nskb)->gso_type = 0;
 
 	dev_queue_xmit(nskb);
 }
