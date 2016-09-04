@@ -458,6 +458,7 @@ static unsigned int natcap_client_udp_proxy_out(void *priv,
 	struct tcphdr *tcph;
 	struct udphdr *udph;
 	unsigned long status = NATCAP_CLIENT_MODE;
+	unsigned int opcode = TCPOPT_NATCAP_UDP_ENC;
 	struct tuple server;
 	struct net *net = &init_net;
 	if (in)
@@ -485,7 +486,7 @@ static unsigned int natcap_client_udp_proxy_out(void *priv,
 
 	NATCAP_DEBUG("(CO)" DEBUG_UDP_FMT ": before encode\n", DEBUG_UDP_ARG(iph,udph));
 
-	ret = natcap_udp_encode(skb, status);
+	ret = natcap_udp_encode(skb, status, opcode);
 	if (ret != 0) {
 		NATCAP_ERROR("(CO)" DEBUG_UDP_FMT ": natcap_udp_encode() ret=%d\n", DEBUG_UDP_ARG(iph,udph), ret);
 		return NF_ACCEPT;

@@ -104,7 +104,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt);
 int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt);
 
-int natcap_udp_encode(struct sk_buff *skb, unsigned long status);
+int natcap_udp_encode(struct sk_buff *skb, unsigned long status, unsigned int opcode);
 int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo);
 
 int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);

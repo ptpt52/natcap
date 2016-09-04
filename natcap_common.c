@@ -369,7 +369,7 @@ done:
 	return 0;
 }
 
-int natcap_udp_encode(struct sk_buff *skb, unsigned long status)
+int natcap_udp_encode(struct sk_buff *skb, unsigned long status, unsigned int opcode)
 {
 	struct iphdr *iph;
 	struct tcphdr *tcph;
@@ -387,11 +387,12 @@ int natcap_udp_encode(struct sk_buff *skb, unsigned long status)
 
 	offlen = skb_tail_pointer(skb) - (unsigned char *)udph - sizeof(struct udphdr);
 	BUG_ON(offlen < 0);
-	skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode);
+	if (opcode == TCPOPT_NATCAP_UDP_ENC)
+		skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode);
 	pnuo = (struct natcap_udp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
 	memmove((void *)udph + sizeof(struct udphdr) + nuosz, (void *)udph + sizeof(struct udphdr), offlen);
 
-	pnuo->opcode = TCPOPT_NATCAP_UDP_ENC;
+	pnuo->opcode = opcode;
 	pnuo->opsize = ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int));
 	pnuo->port = udph->dest;
 	pnuo->ip = iph->daddr;

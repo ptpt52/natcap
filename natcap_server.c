@@ -567,6 +567,9 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 
 	if (!test_and_set_bit(IPS_NATCAP_UDP_BIT, &ct->status)) { /* first time in */
 		NATCAP_INFO("(SI)" DEBUG_UDP_FMT ": new connection, after decode, target=%pI4:%u\n", DEBUG_UDP_ARG(iph,udph), &nuo.ip, ntohs(nuo.port));
+		if (nuo.opcode == TCPOPT_NATCAP_UDP_ENC) {
+			set_bit(IPS_NATCAP_UDP_ENC_BIT, &ct->status);
+		}
 		if (natcap_tcp_dnat_setup(ct, nuo.ip, nuo.port) != NF_ACCEPT) {
 			NATCAP_ERROR("(SI)" DEBUG_UDP_FMT ": natcap_tcp_dnat_setup failed, target=%pI4:%u\n", DEBUG_UDP_ARG(iph,udph), &nuo.ip, ntohs(nuo.port));
 			return NF_DROP;
@@ -615,6 +618,7 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 	struct tcphdr *tcph;
 	struct udphdr *udph;
 	unsigned long status = 0;
+	unsigned int opcode = TCPOPT_NATCAP_UDP;
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_UDP)
@@ -644,7 +648,10 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 		return ret;
 	}
 
-	ret = natcap_udp_encode(skb, status);
+	if (test_bit(IPS_NATCAP_UDP_ENC_BIT, &ct->status)) {
+		opcode = TCPOPT_NATCAP_UDP_ENC;
+	}
+	ret = natcap_udp_encode(skb, status, opcode);
 	if (ret != 0) {
 		NATCAP_ERROR("(SO)" DEBUG_UDP_FMT ": natcap_udp_encode() ret=%d\n", DEBUG_UDP_ARG(iph,udph), ret);
 		return NF_DROP;
