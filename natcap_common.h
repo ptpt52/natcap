@@ -103,9 +103,58 @@ int skb_rcsum_tcpudp(struct sk_buff *skb);
 int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_conn *ct, struct natcap_TCPOPT *tcpopt);
 int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt);
 int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt);
+static inline struct natcap_TCPOPT *natcap_tcp_decode_header(struct tcphdr *tcph)
+{
+	struct natcap_TCPOPT *opt;
+
+	opt = (struct natcap_TCPOPT *)((void *)tcph + sizeof(struct tcphdr));
+	if (
+			!(
+				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data), sizeof(unsigned int)) &&
+				 opt->header.opcode == TCPOPT_NATCAP &&
+				 opt->header.type == NATCAP_TCPOPT_ALL &&
+				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data), sizeof(unsigned int))) ||
+				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int)) &&
+				 opt->header.opcode == TCPOPT_NATCAP &&
+				 opt->header.type == NATCAP_TCPOPT_DST &&
+				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int))) ||
+				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int)) &&
+				 opt->header.opcode == TCPOPT_NATCAP &&
+				 opt->header.type == NATCAP_TCPOPT_USER &&
+				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int)))
+			 )
+	   )
+	{
+		return NULL;
+	}
+
+	return opt;
+}
 
 int natcap_udp_encode(struct sk_buff *skb, unsigned long status, unsigned int opcode);
 int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo);
+static inline struct natcap_udp_tcpopt *natcap_udp_decode_header(struct tcphdr *tcph)
+{
+	struct natcap_udp_tcpopt *pnuo = NULL;
+
+	if (!((tcph->syn && !tcph->ack) || (tcph->rst && tcph->ack))) {
+		return NULL;
+	}
+
+	pnuo = (struct natcap_udp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
+	if (
+			!(
+				tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int)) &&
+				(pnuo->opcode == TCPOPT_NATCAP_UDP || pnuo->opcode == TCPOPT_NATCAP_UDP_ENC) &&
+				pnuo->opsize == ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int))
+			 )
+	   )
+	{
+		return NULL;
+	}
+
+	return pnuo;
+}
 
 int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
 int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);

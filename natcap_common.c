@@ -325,24 +325,8 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 	tcpopt->header.opcode = 0;
 	tcpopt->header.opsize = 0;
 	tcpopt->header.type = NATCAP_TCPOPT_NONE;
-	opt = (struct natcap_TCPOPT *)((void *)tcph + sizeof(struct tcphdr));
-	if (
-			!(
-				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data), sizeof(unsigned int)) &&
-				 opt->header.opcode == TCPOPT_NATCAP &&
-				 opt->header.type == NATCAP_TCPOPT_ALL &&
-				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data), sizeof(unsigned int))) ||
-				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int)) &&
-				 opt->header.opcode == TCPOPT_NATCAP &&
-				 opt->header.type == NATCAP_TCPOPT_DST &&
-				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int))) ||
-				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int)) &&
-				 opt->header.opcode == TCPOPT_NATCAP &&
-				 opt->header.type == NATCAP_TCPOPT_USER &&
-				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int)))
-			 )
-	   )
-	{
+	opt = natcap_tcp_decode_header(tcph);
+	if (opt == NULL) {
 		goto do_decode;
 	}
 
@@ -439,22 +423,9 @@ int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo)
 
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-
-	if (!((tcph->syn && !tcph->ack) || (tcph->rst && tcph->ack))) {
+	pnuo = natcap_udp_decode_header(tcph);
+	if (pnuo == NULL)
 		return -1;
-	}
-
-	pnuo = (struct natcap_udp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
-	if (
-			!(
-				tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int)) &&
-				(pnuo->opcode == TCPOPT_NATCAP_UDP || pnuo->opcode == TCPOPT_NATCAP_UDP_ENC) &&
-				pnuo->opsize == ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int))
-			 )
-	   )
-	{
-		return -2;
-	}
 
 	memcpy((void *)nuo, (void *)pnuo, pnuo->opsize);
 	if (mode == 2)

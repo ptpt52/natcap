@@ -47,12 +47,10 @@ static unsigned int natcap_forward_in_hook(void *priv,
 {
 	unsigned int hooknum = state->hook;
 #endif
-	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
-	struct natcap_TCPOPT tcpopt;
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_TCP)
@@ -92,15 +90,10 @@ static unsigned int natcap_forward_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	tcpopt.header.encryption = 0;
-	ret = natcap_tcp_decode(skb, &tcpopt);
-	if (ret != 0 || tcpopt.header.opcode != TCPOPT_NATCAP) {
-		struct natcap_udp_tcpopt nuo;
-		ret = natcap_udp_decode(skb, &nuo);
-		if (ret != 0) {
-			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-			return NF_ACCEPT;
-		}
+	if (natcap_tcp_decode_header(tcph) == NULL &&
+			natcap_udp_decode_header(tcph) == NULL) {
+		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+		return NF_ACCEPT;
 	}
 
 	if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
