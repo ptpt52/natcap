@@ -39,7 +39,6 @@ clean
 debug=3
 
 server_persist_timeout=6
-server 192.241.223.185:65535-e
-server 45.32.63.59:65535-e
+server 45.76.97.203:65535-e
 EOF
 }
