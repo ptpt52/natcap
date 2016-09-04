@@ -90,7 +90,7 @@ void natcap_data_decode(unsigned char *buf, int len)
 	}
 }
 
-static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*update)(unsigned char *, int))
+static void skb_data_hook(struct sk_buff *skb, int offset, int len, void (*update)(unsigned char *, int))
 {
 	int start = skb_headlen(skb);
 	int i, copy = start - offset;
@@ -139,7 +139,7 @@ static void skb_tcp_data_hook(struct sk_buff *skb, int offset, int len, void (*u
 		if ((copy = end - offset) > 0) {
 			if (copy > len)
 				copy = len;
-			skb_tcp_data_hook(frag_iter, offset - start, copy, update);
+			skb_data_hook(frag_iter, offset - start, copy, update);
 			if ((len -= copy) == 0)
 				return;
 			offset += copy;
@@ -303,7 +303,7 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt)
 
 do_encode:
 	if (tcpopt->header.encryption) {
-		skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
+		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
 	}
 	if (tcpopt->header.encryption || tcpopt->header.type != NATCAP_TCPOPT_NONE) {
 		skb_rcsum_tcpudp(skb);
@@ -360,7 +360,7 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 
 do_decode:
 	if (tcpopt->header.encryption) {
-		skb_tcp_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_decode);
+		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_decode);
 	}
 	if (tcpopt->header.encryption || tcpopt->header.type != NATCAP_TCPOPT_NONE) {
 		skb_rcsum_tcpudp(skb);
@@ -387,7 +387,7 @@ int natcap_udp_encode(struct sk_buff *skb, unsigned long status)
 
 	offlen = skb_tail_pointer(skb) - (unsigned char *)udph - sizeof(struct udphdr);
 	BUG_ON(offlen < 0);
-	skb_tcp_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode);
+	skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode);
 	pnuo = (struct natcap_udp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
 	memmove((void *)udph + sizeof(struct udphdr) + nuosz, (void *)udph + sizeof(struct udphdr), offlen);
 
@@ -470,7 +470,7 @@ int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo)
 	skb->len -= nuosz;
 	skb->tail -= nuosz;
 	if (nuo->opcode == TCPOPT_NATCAP_UDP_ENC)
-		skb_tcp_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_decode);
+		skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_decode);
 	skb_rcsum_tcpudp(skb);
 done:
 	return 0;
