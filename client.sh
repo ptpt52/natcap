@@ -36,7 +36,7 @@ insmod ./natcap.ko mode=0 && {
 cat <<EOF >>/dev/natcap_ctl
 
 clean
-debug=3
+debug=7
 
 server_persist_timeout=6
 server 45.76.97.203:65535-e
