@@ -387,9 +387,6 @@ static unsigned int natcap_client_in_hook(void *priv,
 	if (test_bit(IPS_NATCAP_UDP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
-		return NF_ACCEPT;
-	}
 
 	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
 		return NF_DROP;
@@ -402,6 +399,10 @@ static unsigned int natcap_client_in_hook(void *priv,
 			ip_set_add_src_ip(in, out, skb, "gfwlist");
 		}
 
+		return NF_ACCEPT;
+	}
+
+	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 
