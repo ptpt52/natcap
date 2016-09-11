@@ -55,6 +55,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		n = snprintf(natcap_ctl_buffer,
 				sizeof(natcap_ctl_buffer) - 1,
 				"# Usage:\n"
+				"#    disabled=Number -- set disable/enable\n"
 				"#    debug=Number -- set debug value\n"
 				"#    server [ip]:[port]-[e/o] -- add one server\n"
 				"#    delete [ip]:[port]-[e/o] -- delete one server\n"
@@ -65,12 +66,14 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n"
 				"#    default_u_hash=%u\n"
 				"#    server_seed=%u\n"
+				"#    disabled=%u\n"
 				"#    debug=%u\n"
 				"#    server_persist_timeout=%u\n"
 				"#\n"
 				"# Reload cmd:\n"
 				"\n"
 				"clean\n"
+				"disabled=%u\n"
 				"debug=%u\n"
 				"u_hash=%u\n"
 				"server_persist_timeout=%u\n"
@@ -78,8 +81,8 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				mode,
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
-				server_seed, debug, server_persist_timeout,
-				debug, ntohl(default_u_hash), server_persist_timeout);
+				server_seed, disabled, debug, server_persist_timeout,
+				disabled, debug, ntohl(default_u_hash), server_persist_timeout);
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -223,6 +226,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		n = sscanf(data, "debug=%u", &d);
 		if (n == 1) {
 			debug = d;
+			goto done;
+		}
+	} else if (strncmp(data, "disabled=", 9) == 0) {
+		int d;
+		n = sscanf(data, "disabled=%u", &d);
+		if (n == 1) {
+			disabled = d;
 			goto done;
 		}
 	} else if (strncmp(data, "u_hash=", 7) == 0) {

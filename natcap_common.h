@@ -16,6 +16,7 @@
 #include <net/netfilter/nf_nat_core.h>
 #include "natcap.h"
 
+extern unsigned int disabled;
 extern unsigned int debug;
 extern unsigned int mode;
 extern unsigned int server_seed;

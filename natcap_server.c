@@ -274,6 +274,9 @@ static unsigned int natcap_server_in_hook(void *priv,
 	struct natcap_TCPOPT tcpopt;
 	struct tuple server;
 
+	if (disabled)
+		return NF_ACCEPT;
+
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_TCP)
 		return NF_ACCEPT;
@@ -432,6 +435,9 @@ static unsigned int natcap_server_out_hook(void *priv,
 	struct natcap_TCPOPT tcpopt;
 	unsigned long status = 0;
 
+	if (disabled)
+		return NF_ACCEPT;
+
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_TCP)
 		return NF_ACCEPT;
@@ -535,6 +541,9 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 	struct udphdr *udph;
 	struct natcap_udp_tcpopt nuo;
 
+	if (disabled)
+		return NF_ACCEPT;
+
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_TCP)
 		return NF_ACCEPT;
@@ -619,6 +628,9 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 	struct udphdr *udph;
 	unsigned long status = 0;
 	unsigned int opcode = TCPOPT_NATCAP_UDP;
+
+	if (disabled)
+		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_UDP)

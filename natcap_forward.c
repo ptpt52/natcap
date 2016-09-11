@@ -52,6 +52,9 @@ static unsigned int natcap_forward_in_hook(void *priv,
 	struct iphdr *iph;
 	struct tcphdr *tcph;
 
+	if (disabled)
+		return NF_ACCEPT;
+
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_TCP)
 		return NF_ACCEPT;
