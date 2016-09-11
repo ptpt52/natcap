@@ -355,12 +355,16 @@ static unsigned int natcap_client_in_hook(const struct nf_hook_ops *ops,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_client_in_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
 #endif
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
@@ -383,9 +387,6 @@ static unsigned int natcap_client_in_hook(void *priv,
 	if (test_bit(IPS_NATCAP_UDP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
-		return NF_ACCEPT;
-	}
 	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
@@ -394,6 +395,16 @@ static unsigned int natcap_client_in_hook(void *priv,
 		return NF_DROP;
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+		if (tcph->rst && tcph->source == __constant_htons(80)
+				&& ip_set_test_src_ip(in, out, skb, "cniplist") <= 0) {
+			NATCAP_INFO("(CO)" DEBUG_TCP_FMT ": bypass get reset add target to gfwlist\n", DEBUG_TCP_ARG(iph,tcph));
+			ip_set_add_src_ip(in, out, skb, "gfwlist");
+		}
+
+		return NF_ACCEPT;
+	}
+
 	if (tcph->doff * 4 < sizeof(struct tcphdr))
 		return NF_DROP;
 	if (!skb_make_writable(skb, iph->ihl * 4 + tcph->doff * 4))

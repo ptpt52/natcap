@@ -448,6 +448,45 @@ done:
 	return 0;
 }
 
+int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+{
+	int ret = 0;
+	ip_set_id_t id;
+	struct ip_set *set;
+	struct ip_set_adt_opt opt;
+	struct xt_action_param par;
+	struct net *net = &init_net;
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
+
+	memset(&opt, 0, sizeof(opt));
+	opt.family = NFPROTO_IPV4;
+	opt.dim = IPSET_DIM_ONE;
+	opt.flags = IPSET_DIM_ONE_SRC;
+	opt.cmdflags = 0;
+	opt.ext.timeout = UINT_MAX;
+
+	par.in = in;
+	par.out = out;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
+	par.net = net;
+#endif
+
+	id = ip_set_get_byname(net, ip_set_name, &set);
+	if (id == IPSET_INVALID_ID) {
+		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
+		return 0;
+	}
+
+	ret = ip_set_test(id, skb, &par, &opt);
+
+	ip_set_put_byindex(net, id);
+
+	return ret;
+}
+
 int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
 {
 	int ret = 0;
@@ -487,6 +526,45 @@ int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out
 	return ret;
 }
 
+int ip_set_add_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+{
+	int ret = 0;
+	ip_set_id_t id;
+	struct ip_set *set;
+	struct ip_set_adt_opt opt;
+	struct xt_action_param par;
+	struct net *net = &init_net;
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
+
+	memset(&opt, 0, sizeof(opt));
+	opt.family = NFPROTO_IPV4;
+	opt.dim = IPSET_DIM_ONE;
+	opt.flags = IPSET_DIM_ONE_SRC;
+	opt.cmdflags = 0;
+	opt.ext.timeout = UINT_MAX;
+
+	par.in = in;
+	par.out = out;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
+	par.net = net;
+#endif
+
+	id = ip_set_get_byname(net, ip_set_name, &set);
+	if (id == IPSET_INVALID_ID) {
+		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
+		return 0;
+	}
+
+	ret = ip_set_add(id, skb, &par, &opt);
+
+	ip_set_put_byindex(net, id);
+
+	return ret;
+}
+
 int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
 {
 	int ret = 0;
@@ -520,6 +598,45 @@ int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out,
 	}
 
 	ret = ip_set_add(id, skb, &par, &opt);
+
+	ip_set_put_byindex(net, id);
+
+	return ret;
+}
+
+int ip_set_del_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+{
+	int ret = 0;
+	ip_set_id_t id;
+	struct ip_set *set;
+	struct ip_set_adt_opt opt;
+	struct xt_action_param par;
+	struct net *net = &init_net;
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
+
+	memset(&opt, 0, sizeof(opt));
+	opt.family = NFPROTO_IPV4;
+	opt.dim = IPSET_DIM_ONE;
+	opt.flags = IPSET_DIM_ONE_SRC;
+	opt.cmdflags = 0;
+	opt.ext.timeout = UINT_MAX;
+
+	par.in = in;
+	par.out = out;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
+	par.net = net;
+#endif
+
+	id = ip_set_get_byname(net, ip_set_name, &set);
+	if (id == IPSET_INVALID_ID) {
+		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
+		return 0;
+	}
+
+	ret = ip_set_del(id, skb, &par, &opt);
 
 	ip_set_put_byindex(net, id);
 
