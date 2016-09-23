@@ -32,12 +32,11 @@ cp accelerated-domains.gfwlist.dnsmasq.conf /etc/dnsmasq.d/
 service dnsmasq restart
 
 rmmod natcap >/dev/null 2>&1
-insmod ./natcap.ko mode=0 && {
+( modprobe natcap mode=0 || insmod ./natcap.ko mode=0 ) && {
 cat <<EOF >>/dev/natcap_ctl
-
 clean
-debug=7
-
+debug=3
+disabled=0
 server_persist_timeout=6
 server 45.76.97.203:65535-e
 EOF

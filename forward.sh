@@ -17,12 +17,10 @@ iptables -t nat -A POSTROUTING -m mark --mark 0x99 -j MASQUERADE
 rmmod natcap >/dev/null 2>&1
 ( modprobe natcap mode=2 || insmod ./natcap.ko mode=2 ) && {
 cat <<EOF >>/dev/natcap_ctl
-
 clean
 debug=3
-
+disabled=0
 server_persist_timeout=6
-server 192.241.223.185:65535-e
-server 45.32.63.59:65535-e
+server 45.76.97.203:65535-e
 EOF
 }
