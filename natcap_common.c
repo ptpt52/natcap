@@ -21,7 +21,7 @@
 #include "natcap_common.h"
 #include "natcap_client.h"
 
-unsigned int disabled = 0;
+unsigned int disabled = 1;
 
 unsigned int debug = 0;
 module_param(debug, int, 0);
