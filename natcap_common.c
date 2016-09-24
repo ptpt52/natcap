@@ -27,7 +27,7 @@ unsigned int debug = 0;
 module_param(debug, int, 0);
 MODULE_PARM_DESC(debug, "Debug level (0=none,1=error,2=warn,4=info,8=debug,16=fixme,...,31=all) default=0");
 
-unsigned int mode = 0;
+unsigned int mode = CLIENT_MODE;
 module_param(mode, int, 0);
 MODULE_PARM_DESC(mode, "Working mode (0=client,1=server,2=forward) default=0");
 
@@ -333,7 +333,7 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 	}
 
 	memcpy((void *)tcpopt, (void *)opt, opt->header.opsize);
-	if (mode == 2)
+	if (mode == FORWARD_MODE)
 		goto done;
 	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize);
 	BUG_ON(offlen < 0);
@@ -430,7 +430,7 @@ int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo)
 		return -1;
 
 	memcpy((void *)nuo, (void *)pnuo, pnuo->opsize);
-	if (mode == 2)
+	if (mode == FORWARD_MODE)
 		goto done;
 	udph = (struct udphdr *)tcph;
 	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)udph + sizeof(struct udphdr) + nuosz);

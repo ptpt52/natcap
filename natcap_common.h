@@ -16,6 +16,12 @@
 #include <net/netfilter/nf_nat_core.h>
 #include "natcap.h"
 
+enum {
+	CLIENT_MODE = 0,
+	SERVER_MODE = 1,
+	FORWARD_MODE = 2,
+};
+
 extern unsigned int disabled;
 extern unsigned int debug;
 extern unsigned int mode;

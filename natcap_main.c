@@ -289,11 +289,11 @@ static struct file_operations natcap_fops = {
 static int natcap_mode_init(void)
 {
 	switch (mode) {
-		case 0:
+		case CLIENT_MODE:
 			return natcap_client_init();
-		case 1:
+		case SERVER_MODE:
 			return natcap_server_init();
-		case 2:
+		case FORWARD_MODE:
 			return natcap_forward_init();
 		default:
 			break;
