@@ -204,6 +204,7 @@ static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_
 	}
 
 	natcap_auth_reply_payload(http->payload, n, skb, dev);
+	kfree(http);
 }
 
 static inline void natcap_auth_convert_tcprst(struct sk_buff *skb)
