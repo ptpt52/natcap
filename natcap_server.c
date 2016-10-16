@@ -193,7 +193,7 @@ static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_
 
 	snprintf(http->location, sizeof(http->location), "http://router-sh.ptpt52.com/index.html?_t=%lu", jiffies);
 	http->location[sizeof(http->location) - 1] = 0;
-	n = snprintf(http->data, sizeof(http->data), http_data_fmt, http->location);
+	snprintf(http->data, sizeof(http->data), http_data_fmt, http->location);
 	http->data[sizeof(http->data) - 1] = 0;
 	snprintf(http->header, sizeof(http->header), http_header_fmt, http->location, n);
 	http->header[sizeof(http->header) - 1] = 0;
