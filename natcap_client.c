@@ -625,7 +625,7 @@ static struct nf_hook_ops client_hooks[] = {
 		.hook = natcap_client_out_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_CONNTRACK + 1,
+		.priority = NF_IP_PRI_NAT_DST - 35,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -634,7 +634,7 @@ static struct nf_hook_ops client_hooks[] = {
 		.hook = natcap_client_out_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_LOCAL_OUT,
-		.priority = NF_IP_PRI_CONNTRACK + 1,
+		.priority = NF_IP_PRI_NAT_DST - 35,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -661,7 +661,7 @@ static struct nf_hook_ops client_hooks[] = {
 		.hook = natcap_client_udp_proxy_out,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_CONNTRACK - 1,
+		.priority = NF_IP_PRI_NAT_DST - 35,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -670,7 +670,7 @@ static struct nf_hook_ops client_hooks[] = {
 		.hook = natcap_client_udp_proxy_out,
 		.pf = PF_INET,
 		.hooknum = NF_INET_LOCAL_OUT,
-		.priority = NF_IP_PRI_CONNTRACK - 1,
+		.priority = NF_IP_PRI_NAT_DST - 35,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)

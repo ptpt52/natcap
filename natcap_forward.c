@@ -130,7 +130,7 @@ static struct nf_hook_ops forward_hooks[] = {
 		.hook = natcap_forward_in_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_CONNTRACK + 1,
+		.priority = NF_IP_PRI_NAT_DST - 35,
 	},
 };
 
