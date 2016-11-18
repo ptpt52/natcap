@@ -703,7 +703,7 @@ static struct nf_hook_ops server_hooks[] = {
 		.hook = natcap_server_udp_proxy_in,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_NAT_DST - 35,
+		.priority = NF_IP_PRI_CONNTRACK - 1,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
