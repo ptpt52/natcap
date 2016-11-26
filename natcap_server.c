@@ -118,7 +118,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	neth = eth_hdr(nskb);
 	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
 	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	neth->h_proto = htons(ETH_P_IP);
+	//neth->h_proto = htons(ETH_P_IP);
 	nskb->len += offset;
 
 	niph = ip_hdr(nskb);
