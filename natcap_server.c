@@ -115,20 +115,11 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 		return;
 	}
 
-	data = (char *)ip_hdr(nskb) + sizeof(struct iphdr) + sizeof(struct tcphdr);
-	memcpy(data, payload, payload_len);
-
-	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
-	memset(ntcph, 0, sizeof(struct tcphdr));
-	ntcph->source = otcph->dest;
-	ntcph->dest = otcph->source;
-	ntcph->seq = otcph->ack_seq;
-	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - (oiph->ihl<<2) - (otcph->doff<<2));
-	ntcph->doff = 5;
-	ntcph->ack = 1;
-	ntcph->psh = 1;
-	ntcph->fin = 1;
-	ntcph->window = 65535;
+	neth = eth_hdr(nskb);
+	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+	neth->h_proto = htons(ETH_P_IP);
+	nskb->len += offset;
 
 	niph = ip_hdr(nskb);
 	memset(niph, 0, sizeof(struct iphdr));
@@ -144,15 +135,24 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	niph->frag_off = 0x0;
 	ip_send_check(niph);
 
+	data = (char *)ip_hdr(nskb) + sizeof(struct iphdr) + sizeof(struct tcphdr);
+	memcpy(data, payload, payload_len);
+	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
+	memset(ntcph, 0, sizeof(struct tcphdr));
+	ntcph->source = otcph->dest;
+	ntcph->dest = otcph->source;
+	ntcph->seq = otcph->ack_seq;
+	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - (oiph->ihl<<2) - (otcph->doff<<2));
+	ntcph->doff = 5;
+	ntcph->ack = 1;
+	ntcph->psh = 1;
+	ntcph->fin = 1;
+	ntcph->window = 65535;
+
 	len = ntohs(niph->tot_len) - (niph->ihl<<2);
 	csum = csum_partial((char*)ntcph, len, 0);
 	ntcph->check = tcp_v4_check(len, niph->saddr, niph->daddr, csum);
 
-	neth = eth_hdr(nskb);
-	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	neth->h_proto = htons(ETH_P_IP);
-	nskb->len += offset;
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
 
