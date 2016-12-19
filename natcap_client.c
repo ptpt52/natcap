@@ -40,6 +40,15 @@ static void default_mac_addr_init(void)
 		}
 		dev = next_net_device(dev);
 	}
+
+	dev = first_net_device(&init_net);
+	while (dev) {
+		if (strcmp("eth0", dev->name) == 0) {
+			memcpy(default_mac_addr, dev->dev_addr, ETH_ALEN);
+			break;
+		}
+		dev = next_net_device(dev);
+	}
 }
 
 #define MAX_NATCAP_SERVER 256
