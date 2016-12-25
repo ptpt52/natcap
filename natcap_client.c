@@ -23,6 +23,9 @@
 #include "natcap_common.h"
 #include "natcap_client.h"
 
+unsigned long long flow_total_tx_bytes = 0;
+unsigned long long flow_total_rx_bytes = 0;
+
 unsigned int server_persist_timeout = 0;
 module_param(server_persist_timeout, int, 0);
 MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
@@ -397,6 +400,10 @@ static unsigned int natcap_client_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
+		if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+			flow_total_tx_bytes += skb->len;
+			return NF_ACCEPT;
+		}
 		return NF_ACCEPT;
 	}
 	if (test_bit(IPS_NATCAP_UDP_BIT, &ct->status)) {
@@ -420,6 +427,8 @@ static unsigned int natcap_client_in_hook(void *priv,
 	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
+
+	flow_total_rx_bytes += skb->len;
 
 	if (tcph->doff * 4 < sizeof(struct tcphdr))
 		return NF_DROP;

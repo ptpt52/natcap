@@ -9,6 +9,9 @@
 #include <linux/if_ether.h>
 #include "natcap.h"
 
+extern unsigned long long flow_total_tx_bytes;
+extern unsigned long long flow_total_rx_bytes;
+
 extern unsigned int server_persist_timeout;
 
 extern u32 default_u_hash;

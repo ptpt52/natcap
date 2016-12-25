@@ -69,6 +69,8 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    disabled=%u\n"
 				"#    debug=%u\n"
 				"#    server_persist_timeout=%u\n"
+				"#    flow_total_tx_bytes=%llu\n"
+				"#    flow_total_rx_bytes=%llu\n"
 				"#\n"
 				"# Reload cmd:\n"
 				"\n"
@@ -82,6 +84,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
 				server_seed, disabled, debug, server_persist_timeout,
+				flow_total_tx_bytes, flow_total_rx_bytes,
 				disabled, debug, ntohl(default_u_hash), server_persist_timeout);
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
