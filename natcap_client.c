@@ -476,7 +476,7 @@ static unsigned int natcap_client_pre_in_hook(const struct nf_hook_ops *ops,
 		const struct nf_hook_state *state)
 {
 	//u_int8_t pf = state->pf;
-	//unsigned int hooknum = state->hook;
+	unsigned int hooknum = state->hook;
 	//const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #else
@@ -485,7 +485,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		const struct nf_hook_state *state)
 {
 	//u_int8_t pf = state->pf;
-	//unsigned int hooknum = state->hook;
+	unsigned int hooknum = state->hook;
 	//const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #endif
@@ -499,12 +499,17 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 	if (iph->protocol != IPPROTO_UDP)
 		return NF_ACCEPT;
 
-	if (skb_is_gso(skb)) {
-		printk("bug natcap_client_pre_in_hook skb_is_gso\n");
+	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 4)) {
 		return NF_ACCEPT;
 	}
 
+	iph = ip_hdr(skb);
 	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
+
+	if (skb_is_gso(skb)) {
+		NATCAP_ERROR("(CPI)" DEBUG_UDP_FMT ": skb_is_gso\n", DEBUG_UDP_ARG(iph,udph));
+		return NF_ACCEPT;
+	}
 
 	if (*((unsigned int *)((void *)udph + 8)) == htonl(0xFFFF0099)) {
 		int offlen;
@@ -588,7 +593,6 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 	if (skb_is_gso(skb)) {
 		struct sk_buff *segs;
 
-		printk("skb_is_gso %p\n", skb);
 		segs = skb_gso_segment(skb, 0);
 		if (IS_ERR(segs)) {
 			return NF_DROP;

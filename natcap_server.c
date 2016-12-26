@@ -111,7 +111,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	header_len = offset < 0 ? 0 : offset;
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
 	if (!nskb) {
-		printk("alloc_skb fail\n");
+		NATCAP_ERROR("alloc_skb fail\n");
 		return;
 	}
 
@@ -548,12 +548,17 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 	if (iph->protocol != IPPROTO_UDP)
 		return NF_ACCEPT;
 
-	if (skb_is_gso(skb)) {
-		printk("bug natcap_client_pre_in_hook skb_is_gso\n");
+	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 4)) {
 		return NF_ACCEPT;
 	}
 
+	iph = ip_hdr(skb);
 	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
+
+	if (skb_is_gso(skb)) {
+		NATCAP_ERROR("(SPI)" DEBUG_UDP_FMT ": skb_is_gso\n", DEBUG_UDP_ARG(iph,udph));
+		return NF_ACCEPT;
+	}
 
 	if (*((unsigned int *)((void *)udph + 8)) == htonl(0xFFFF0099)) {
 		int offlen;
