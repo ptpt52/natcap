@@ -9,6 +9,9 @@
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
+#include <net/ip.h>
+#include <net/tcp.h>
+#include <net/udp.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
@@ -21,6 +24,14 @@ enum {
 	SERVER_MODE = 1,
 	FORWARD_MODE = 2,
 };
+
+enum {
+	TCP_ENCODE = 0,
+	UDP_ENCODE = 1,
+};
+
+extern unsigned int encode_mode;
+extern const char *const encode_mode_str[];
 
 extern unsigned int disabled;
 extern unsigned int debug;
@@ -161,6 +172,47 @@ static inline struct natcap_udp_tcpopt *natcap_udp_decode_header(struct tcphdr *
 	}
 
 	return pnuo;
+}
+
+static inline void natcap_adjust_tcp_mss(struct tcphdr *tcph, int delta)
+{
+	unsigned int optlen, i;
+	__be16 oldmss, newmss;
+	unsigned char *op;
+
+	if (tcph->doff * 4 < sizeof(struct tcphdr))
+		return;
+
+	optlen = tcph->doff * 4 - sizeof(struct tcphdr);
+	if (!optlen)
+		return;
+
+	op = (unsigned char *)tcph + sizeof(struct tcphdr);
+
+	for (i = 0; i < optlen; ) {
+		if (op[i] == TCPOPT_MSS && (optlen - i) >= TCPOLEN_MSS &&
+		        op[i+1] == TCPOLEN_MSS) {
+			__be32 diff[2];
+
+			oldmss = *((unsigned short *)(op + i + 2));
+			newmss = htons(ntohs(oldmss) + delta);
+
+			*((unsigned short *)(op + i + 2)) = newmss;
+
+			diff[0] =~((__force __be32)oldmss);
+			diff[1] = (__force __be32)newmss;
+			tcph->check = csum_fold(csum_partial(diff, sizeof(diff),
+			                                     ~csum_unfold(tcph->check)));
+
+			NATCAP_INFO("Change TCP MSS %d to %d\n", ntohs(oldmss), ntohs(newmss));
+		}
+
+		if (op[i] < 2) {
+			i++;
+		} else {
+			i += op[i+1] ? : 1;
+		}
+	}
 }
 
 int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);

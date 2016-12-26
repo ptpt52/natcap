@@ -35,6 +35,12 @@ unsigned int server_seed = 0;
 module_param(server_seed, int, 0);
 MODULE_PARM_DESC(server_seed, "Server side seed number for encode");
 
+unsigned int encode_mode = TCP_ENCODE;
+const char *const encode_mode_str[] = {
+	[TCP_ENCODE] = "TCP",
+	[UDP_ENCODE] = "UDP",
+};
+
 const char *const hooknames[] = {
 	[NF_INET_PRE_ROUTING] = "PRE",
 	[NF_INET_LOCAL_IN] = "IN",

@@ -501,6 +501,202 @@ static unsigned int natcap_server_out_hook(void *priv,
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned natcap_server_pre_in_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_server_pre_in_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+	u_int8_t pf = state->pf;
+	unsigned int hooknum = ops->hooknum;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+static unsigned int natcap_server_pre_in_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	u_int8_t pf = state->pf;
+	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	//const struct net_device *out = state->out;
+#else
+static unsigned int natcap_server_pre_in_hook(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	u_int8_t pf = state->pf;
+	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	//const struct net_device *out = state->out;
+#endif
+	int ret = 0;
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
+	struct iphdr *iph;
+	struct udphdr *udph;
+
+	if (disabled)
+		return NF_ACCEPT;
+
+	iph = ip_hdr(skb);
+	if (iph->protocol != IPPROTO_UDP)
+		return NF_ACCEPT;
+
+	if (skb_is_gso(skb)) {
+		printk("bug natcap_client_pre_in_hook skb_is_gso\n");
+		return NF_ACCEPT;
+	}
+
+	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
+
+	if (*((unsigned int *)((void *)udph + 8)) == htonl(0xFFFF0099)) {
+		int offlen;
+
+		offlen = skb_tail_pointer(skb) - (unsigned char *)udph - 4 - 8;
+		BUG_ON(offlen < 0);
+		memmove((void *)udph + 4, (void *)udph + 4 + 8, offlen);
+
+		iph->tot_len = htons(ntohs(iph->tot_len) - 8);
+		skb->len -= 8;
+		skb->tail -= 8;
+
+		iph->protocol = IPPROTO_TCP;
+
+		skb_rcsum_tcpudp(skb);
+
+		ret = nf_conntrack_in(dev_net(in), pf, hooknum, skb);
+		if (ret != NF_ACCEPT) {
+			return ret;
+		}
+		ct = nf_ct_get(skb, &ctinfo);
+		if (!ct) {
+			return NF_DROP;
+		}
+
+		if (!test_and_set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) { /* first time in */
+			return NF_ACCEPT;
+		}
+	}
+
+	return NF_ACCEPT;
+}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned natcap_server_post_out_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_server_post_out_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+	unsigned int hooknum = ops->hooknum;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+static unsigned int natcap_server_post_out_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	//unsigned int hooknum = state->hook;
+	//const struct net_device *in = state->in;
+	//const struct net_device *out = state->out;
+#else
+static unsigned int natcap_server_post_out_hook(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	//unsigned int hooknum = state->hook;
+	//const struct net_device *in = state->in;
+	//const struct net_device *out = state->out;
+#endif
+	//int ret = 0;
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
+	struct iphdr *iph;
+
+	if (disabled)
+		return NF_ACCEPT;
+
+	iph = ip_hdr(skb);
+	if (iph->protocol != IPPROTO_TCP)
+		return NF_ACCEPT;
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
+		return NF_ACCEPT;
+	}
+	if (!test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
+		return NF_ACCEPT;
+	}
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
+		struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+		natcap_adjust_tcp_mss(tcph, -8);
+		return NF_ACCEPT;
+	}
+
+	if (skb_is_gso(skb)) {
+		struct sk_buff *segs;
+
+		segs = skb_gso_segment(skb, 0);
+		if (IS_ERR(segs)) {
+			return NF_DROP;
+		}
+
+		skb_morph(skb, segs);
+		skb->next = segs->next;
+		segs->next = NULL;
+		skb->prev = segs->prev;
+		segs->prev = NULL;
+		skb->next->prev = skb;
+		consume_skb(segs);
+	}
+
+	do {
+		int offlen;
+		struct udphdr *udph;
+		struct sk_buff *nskb = skb->next;
+
+		if (skb->end - skb->tail < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
+			return NF_DROP;
+		}
+
+		iph = ip_hdr(skb);
+		udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
+
+		offlen = skb_tail_pointer(skb) - (unsigned char *)udph - 4;
+		BUG_ON(offlen < 0);
+		memmove((void *)udph + 4 + 8, (void *)udph + 4, offlen);
+		udph->len = htons(ntohs(iph->tot_len) - iph->ihl * 4 + 8);
+		iph->tot_len = htons(ntohs(iph->tot_len) + 8);
+		skb->len += 8;
+		skb->tail += 8;
+
+		*((unsigned int *)((void *)udph + 8)) = htonl(0xFFFF0099);
+
+		iph->protocol = IPPROTO_UDP;
+
+		skb_rcsum_tcpudp(skb);
+
+		skb = nskb;
+	} while (skb);
+
+	return NF_ACCEPT;
+}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned natcap_server_udp_proxy_in(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
@@ -682,6 +878,15 @@ static struct nf_hook_ops server_hooks[] = {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 		.owner = THIS_MODULE,
 #endif
+		.hook = natcap_server_pre_in_hook,
+		.pf = PF_INET,
+		.hooknum = NF_INET_PRE_ROUTING,
+		.priority = NF_IP_PRI_CONNTRACK - 5,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
 		.hook = natcap_server_in_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
@@ -692,6 +897,15 @@ static struct nf_hook_ops server_hooks[] = {
 		.owner = THIS_MODULE,
 #endif
 		.hook = natcap_server_out_hook,
+		.pf = PF_INET,
+		.hooknum = NF_INET_POST_ROUTING,
+		.priority = NF_IP_PRI_LAST,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
+		.hook = natcap_server_post_out_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_POST_ROUTING,
 		.priority = NF_IP_PRI_LAST,

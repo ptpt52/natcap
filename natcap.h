@@ -134,6 +134,8 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 
 #define IPS_NATCAP_UDP_BIT 23
 #define IPS_NATCAP_UDP (1 << IPS_NATCAP_UDP_BIT)
+#define IPS_NATCAP_UDPENC_BIT 22
+#define IPS_NATCAP_UDPENC (1 << IPS_NATCAP_UDPENC_BIT)
 
 enum {
 	E_NATCAP_OK = 0,

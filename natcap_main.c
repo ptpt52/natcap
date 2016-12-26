@@ -57,6 +57,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"# Usage:\n"
 				"#    disabled=Number -- set disable/enable\n"
 				"#    debug=Number -- set debug value\n"
+				"#    encode_mode=[TCP/UDP] -- set encode mode\n"
 				"#    server [ip]:[port]-[e/o] -- add one server\n"
 				"#    delete [ip]:[port]-[e/o] -- delete one server\n"
 				"#    clean -- remove all existing server(s)\n"
@@ -68,6 +69,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    server_seed=%u\n"
 				"#    disabled=%u\n"
 				"#    debug=%u\n"
+				"#    encode_mode=%s\n"
 				"#    server_persist_timeout=%u\n"
 				"#    flow_total_tx_bytes=%llu\n"
 				"#    flow_total_rx_bytes=%llu\n"
@@ -77,15 +79,16 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"clean\n"
 				"disabled=%u\n"
 				"debug=%u\n"
+				"encode_mode=%s\n"
 				"u_hash=%u\n"
 				"server_persist_timeout=%u\n"
 				"\n",
 				mode,
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
-				server_seed, disabled, debug, server_persist_timeout,
+				server_seed, disabled, debug, encode_mode_str[encode_mode], server_persist_timeout,
 				flow_total_tx_bytes, flow_total_rx_bytes,
-				disabled, debug, ntohl(default_u_hash), server_persist_timeout);
+				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout);
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -250,6 +253,14 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		n = sscanf(data, "server_persist_timeout=%u", &d);
 		if (n == 1) {
 			server_persist_timeout = d;
+			goto done;
+		}
+	} else if (strncmp(data, "encode_mode=", 12) == 0) {
+		if (strncmp(data + 12, encode_mode_str[TCP_ENCODE], strlen(encode_mode_str[TCP_ENCODE])) == 0) {
+			encode_mode = TCP_ENCODE;
+			goto done;
+		} else if (strncmp(data + 12, encode_mode_str[UDP_ENCODE], strlen(encode_mode_str[UDP_ENCODE])) == 0) {
+			encode_mode = UDP_ENCODE;
 			goto done;
 		}
 	}
