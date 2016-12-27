@@ -137,7 +137,7 @@ static unsigned int natcap_forward_pre_in_hook(const struct nf_hook_ops *ops,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
 {
-	u_int8_t pf = state->pf;
+	u_int8_t pf = ops->pf;
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_forward_pre_in_hook(const struct nf_hook_ops *ops,
@@ -229,7 +229,7 @@ static unsigned int natcap_forward_post_out_hook(const struct nf_hook_ops *ops,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
 {
-	unsigned int hooknum = ops->hooknum;
+	//unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_forward_post_out_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,

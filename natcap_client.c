@@ -469,7 +469,7 @@ static unsigned int natcap_client_pre_in_hook(const struct nf_hook_ops *ops,
 		int (*okfn)(struct sk_buff *))
 {
 	//u_int8_t pf = state->pf;
-	//unsigned int hooknum = ops->hooknum;
+	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_client_pre_in_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
