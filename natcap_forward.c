@@ -315,10 +315,13 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 
 		skb_rcsum_tcpudp(skb);
 
+		skb->next = NULL;
+		NF_OKFN(skb);
+
 		skb = nskb;
 	} while (skb);
 
-	return NF_ACCEPT;
+	return NF_STOLEN;
 }
 
 static struct nf_hook_ops forward_hooks[] = {

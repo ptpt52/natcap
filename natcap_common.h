@@ -229,4 +229,34 @@ int natcap_common_init(void);
 
 void natcap_common_exit(void);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+#define NF_OKFN(skb) do { \
+	okfn(skb); \
+} while (0)
+
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+#define NF_OKFN(skb) do { \
+	okfn(skb); \
+} while (0)
+
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+#define NF_OKFN(skb) do { \
+	if (state->net && state->okfn) { \
+		state->okfn(state->net, state->sk, skb); \
+	} else { \
+		kfree_skb(skb); \
+	} \
+} while (0)
+
+#else
+#define NF_OKFN(skb) do { \
+	if (state->net && state->okfn) { \
+		state->okfn(state->net, state->sk, skb); \
+	} else { \
+		kfree_skb(skb); \
+	} \
+} while (0)
+
+#endif
+
 #endif /* _NATCAP_COMMON_H_ */

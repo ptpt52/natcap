@@ -632,10 +632,13 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 		NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT, DEBUG_UDP_ARG(iph,udph));
 
+		skb->next = NULL;
+		NF_OKFN(skb);
+
 		skb = nskb;
 	} while (skb);
 
-	return NF_ACCEPT;
+	return NF_STOLEN;
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
