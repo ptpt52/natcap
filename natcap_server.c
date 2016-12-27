@@ -660,10 +660,8 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			return NF_DROP;
 		}
 
-		skb_morph(skb, segs);
-		skb->next = segs->next;
-		skb->prev = segs->prev == segs ? skb : segs->prev;
-		consume_skb(segs);
+		consume_skb(skb);
+		skb = segs;
 	}
 
 	do {

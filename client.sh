@@ -22,9 +22,9 @@ ipset destroy udproxylist
 ipset restore -f cniplist.set
 ipset create gfwlist iphash
 ipset create udproxylist iphash
-ipset add udproxylist 8.8.8.8
+#ipset add udproxylist 8.8.8.8
 
-SERVER=45.32.63.59
+SERVER=45.32.40.68
 iptables -t nat -A OUTPUT -d 8.8.8.8 -p udp --dport 53 -j DNAT --to-destination $SERVER:5353
 iptables -t nat -A PREROUTING -d 8.8.8.8 -p udp --dport 53 -j DNAT --to-destination $SERVER:5353
 
@@ -37,7 +37,8 @@ cat <<EOF >>/dev/natcap_ctl
 clean
 debug=3
 disabled=0
+encode_mode=UDP
 server_persist_timeout=6
-server 45.76.97.203:65535-e
+server 192.168.15.192:65535-e
 EOF
 }
