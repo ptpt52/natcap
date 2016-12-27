@@ -599,7 +599,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		}
 
 		skb_morph(skb, segs);
-		skb->next = segs->next == segs ? skb : segs->next;
+		skb->next = segs->next;
 		skb->prev = segs->prev == segs ? skb : segs->prev;
 		consume_skb(segs);
 	}
