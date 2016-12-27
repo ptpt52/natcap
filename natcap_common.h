@@ -241,8 +241,8 @@ void natcap_common_exit(void);
 
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 #define NF_OKFN(skb) do { \
-	if (state->net && state->okfn) { \
-		state->okfn(state->net, state->sk, skb); \
+	if (state->okfn) { \
+		state->okfn(state->sk, skb); \
 	} else { \
 		kfree_skb(skb); \
 	} \
