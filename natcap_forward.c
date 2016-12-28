@@ -302,11 +302,6 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 		struct udphdr *udph;
 		struct sk_buff *nskb = skb->next;
 
-		if (skb->ip_summed == CHECKSUM_PARTIAL) {
-			skb->ip_summed = CHECKSUM_NONE;
-			skb_rcsum_tcpudp(skb);
-		}
-
 		if (skb->end - skb->tail < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 			return NF_DROP;
 		}
