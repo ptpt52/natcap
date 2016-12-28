@@ -186,6 +186,16 @@ static unsigned int natcap_forward_pre_in_hook(void *priv,
 	if (*((unsigned int *)((void *)udph + 8)) == htonl(0xFFFF0099)) {
 		int offlen;
 
+		if (skb->ip_summed == CHECKSUM_NONE) {
+			//verify
+			if (skb_rcsum_verify(skb) != 0) {
+				NATCAP_WARN("(FPI)" DEBUG_UDP_FMT ": skb_rcsum_verify fail\n", DEBUG_UDP_ARG(iph,udph));
+				return NF_DROP;
+			}
+			skb->csum = 0;
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+		}
+
 		offlen = skb_tail_pointer(skb) - (unsigned char *)udph - 4 - 8;
 		BUG_ON(offlen < 0);
 		memmove((void *)udph + 4, (void *)udph + 4 + 8, offlen);

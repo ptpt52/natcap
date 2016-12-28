@@ -113,14 +113,15 @@ extern const char *const hooknames[];
 #define TUPLE_FMT "%pI4:%u-%c"
 #define TUPLE_ARG(t) &(t)->ip, ntohs((t)->port), (t)->encryption ? 'e' : 'o'
 
-void natcap_data_encode(unsigned char *buf, int len);
-void natcap_data_decode(unsigned char *buf, int len);
+extern void natcap_data_encode(unsigned char *buf, int len);
+extern void natcap_data_decode(unsigned char *buf, int len);
 
-int skb_rcsum_tcpudp(struct sk_buff *skb);
+extern int skb_rcsum_verify(struct sk_buff *skb);
+extern int skb_rcsum_tcpudp(struct sk_buff *skb);
 
-int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_conn *ct, struct natcap_TCPOPT *tcpopt);
-int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt);
-int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt);
+extern int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_conn *ct, struct natcap_TCPOPT *tcpopt);
+extern int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt);
+extern int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt);
 static inline struct natcap_TCPOPT *natcap_tcp_decode_header(struct tcphdr *tcph)
 {
 	struct natcap_TCPOPT *opt;
@@ -149,8 +150,8 @@ static inline struct natcap_TCPOPT *natcap_tcp_decode_header(struct tcphdr *tcph
 	return opt;
 }
 
-int natcap_udp_encode(struct sk_buff *skb, unsigned long status, unsigned int opcode);
-int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo);
+extern int natcap_udp_encode(struct sk_buff *skb, unsigned long status, unsigned int opcode);
+extern int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo);
 static inline struct natcap_udp_tcpopt *natcap_udp_decode_header(struct tcphdr *tcph)
 {
 	struct natcap_udp_tcpopt *pnuo = NULL;
@@ -215,19 +216,19 @@ static inline void natcap_adjust_tcp_mss(struct tcphdr *tcph, int delta)
 	}
 }
 
-int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
-int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
-int ip_set_add_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
-int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
-int ip_set_del_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
-int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
-int ip_set_test_src_mac(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
+extern int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
+extern int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
+extern int ip_set_add_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
+extern int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
+extern int ip_set_del_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
+extern int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
+extern int ip_set_test_src_mac(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
 
-unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, __be16 port);
+extern unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, __be16 port);
 
-int natcap_common_init(void);
+extern int natcap_common_init(void);
 
-void natcap_common_exit(void);
+extern void natcap_common_exit(void);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 #define NF_OKFN(skb) do { \

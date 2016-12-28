@@ -160,6 +160,67 @@ static void skb_data_hook(struct sk_buff *skb, int offset, int len, void (*updat
 	return;
 }
 
+int skb_rcsum_verify(struct sk_buff *skb)
+{
+	struct iphdr *iph = ip_hdr(skb);
+	int len = ntohs(iph->tot_len);
+	int ret = 0;
+	__sum16 l3_sum, l4_sum;
+	__sum16 skbcsum;
+
+	if (skb->len < len) {
+		return -1;
+	} else if (len < (iph->ihl * 4)) {
+		return -1;
+	}
+
+	if (iph->protocol == IPPROTO_TCP) {
+		struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
+
+		skbcsum = skb->csum;
+		l3_sum = iph->check;
+		l4_sum = tcph->check;
+
+		iph->check = 0;
+		iph->check = ip_fast_csum(iph, iph->ihl);
+		skb->csum = 0;
+		tcph->check = 0;
+		skb->csum = skb_checksum(skb, iph->ihl * 4, len - iph->ihl * 4, 0);
+		tcph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, len - iph->ihl * 4, iph->protocol, skb->csum);
+
+		if (l3_sum != iph->check || l4_sum != tcph->check) {
+			ret = -1;
+			iph->check = l3_sum;
+			tcph->check = l4_sum;
+		}
+		skb->csum = skbcsum;
+	} else if (iph->protocol == IPPROTO_UDP) {
+		struct udphdr *udph = (struct udphdr *)((void *)iph + iph->ihl*4);
+
+		skbcsum = skb->csum;
+		l3_sum = iph->check;
+		l4_sum = udph->check;
+
+		iph->check = 0;
+		iph->check = ip_fast_csum(iph, iph->ihl);
+		skb->csum = 0;
+		udph->check = 0;
+		skb->csum = skb_checksum(skb, iph->ihl * 4, len - iph->ihl * 4, 0);
+		udph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, len - iph->ihl * 4, iph->protocol, skb->csum);
+
+		if (l3_sum != iph->check || l4_sum != udph->check) {
+			ret = -1;
+			iph->check = l3_sum;
+			udph->check = l4_sum;
+		}
+		skb->csum = skbcsum;
+	} else {
+		return -1;
+	}
+
+	return ret;
+}
+
 int skb_rcsum_tcpudp(struct sk_buff *skb)
 {
 	struct iphdr *iph = ip_hdr(skb);
