@@ -147,7 +147,7 @@ static unsigned int natcap_forward_pre_in_hook(const struct nf_hook_ops *ops,
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
-	//const struct net_device *out = state->out;
+	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_forward_pre_in_hook(void *priv,
 		struct sk_buff *skb,
@@ -156,13 +156,14 @@ static unsigned int natcap_forward_pre_in_hook(void *priv,
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
-	//const struct net_device *out = state->out;
+	const struct net_device *out = state->out;
 #endif
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct udphdr *udph;
+	struct net *net = &init_net;
 
 	if (disabled)
 		return NF_ACCEPT;
@@ -208,7 +209,11 @@ static unsigned int natcap_forward_pre_in_hook(void *priv,
 
 		skb_rcsum_tcpudp(skb);
 
-		ret = nf_conntrack_in(dev_net(in), pf, hooknum, skb);
+		if (in)
+			net = dev_net(in);
+		else if (out)
+			net = dev_net(out);
+		ret = nf_conntrack_in(net, pf, hooknum, skb);
 		if (ret != NF_ACCEPT) {
 			return ret;
 		}
@@ -257,7 +262,7 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 	//const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #endif
-	//int ret = 0;
+	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
@@ -283,6 +288,12 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 		struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 		natcap_adjust_tcp_mss(tcph, -8);
 		return NF_ACCEPT;
+	}
+
+	/* XXX I just confirm it first  */
+	ret = nf_conntrack_confirm(skb);
+	if (ret != NF_ACCEPT) {
+		return ret;
 	}
 
 	if (skb_is_gso(skb)) {

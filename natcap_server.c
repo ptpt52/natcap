@@ -474,14 +474,6 @@ static unsigned int natcap_server_out_hook(void *priv,
 	if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
 		status |= NATCAP_NEED_ENC;
 	}
-	/* XXX I just confirm it first  */
-	ret = nf_conntrack_confirm(skb);
-	if (ret != NF_ACCEPT) {
-		return ret;
-	}
-	//reload
-	iph = ip_hdr(skb);
-	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
 	if (ret == 0) {
@@ -524,7 +516,7 @@ static unsigned int natcap_server_pre_in_hook(const struct nf_hook_ops *ops,
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
-	//const struct net_device *out = state->out;
+	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_server_pre_in_hook(void *priv,
 		struct sk_buff *skb,
@@ -533,13 +525,14 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
-	//const struct net_device *out = state->out;
+	const struct net_device *out = state->out;
 #endif
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	struct udphdr *udph;
+	struct net *net = &init_net;
 
 	if (disabled)
 		return NF_ACCEPT;
@@ -585,7 +578,11 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 		skb_rcsum_tcpudp(skb);
 
-		ret = nf_conntrack_in(dev_net(in), pf, hooknum, skb);
+		if (in)
+			net = dev_net(in);
+		else if (out)
+			net = dev_net(out);
+		ret = nf_conntrack_in(net, pf, hooknum, skb);
 		if (ret != NF_ACCEPT) {
 			return ret;
 		}
@@ -634,7 +631,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	//const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #endif
-	//int ret = 0;
+	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
@@ -660,6 +657,12 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 		struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 		natcap_adjust_tcp_mss(tcph, -8);
 		return NF_ACCEPT;
+	}
+
+	/* XXX I just confirm it first  */
+	ret = nf_conntrack_confirm(skb);
+	if (ret != NF_ACCEPT) {
+		return ret;
 	}
 
 	if (skb_is_gso(skb)) {
@@ -734,6 +737,7 @@ static unsigned int natcap_server_udp_proxy_in(const struct nf_hook_ops *ops,
 	u_int8_t pf = ops->pf;
 	unsigned int hooknum = ops->hooknum;
 	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_server_udp_proxy_in(void *priv,
 		struct sk_buff *skb,
@@ -742,6 +746,7 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
 #endif
 	int ret;
 	enum ip_conntrack_info ctinfo;
@@ -749,6 +754,7 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 	struct iphdr *iph;
 	struct tcphdr *tcph;
 	struct udphdr *udph;
+	struct net *net = &init_net;
 	struct natcap_udp_tcpopt nuo;
 
 	if (disabled)
@@ -775,7 +781,11 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 	}
 	udph = (struct udphdr *)tcph;
 
-	ret = nf_conntrack_in(dev_net(in), pf, hooknum, skb);
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
+	ret = nf_conntrack_in(net, pf, hooknum, skb);
 	if (ret != NF_ACCEPT) {
 		return ret;
 	}
@@ -863,12 +873,6 @@ static unsigned int natcap_server_udp_proxy_out(void *priv,
 	udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
 
 	NATCAP_DEBUG("(SO)" DEBUG_UDP_FMT ": before encode\n", DEBUG_UDP_ARG(iph,udph));
-
-	/* XXX I just confirm it first  */
-	ret = nf_conntrack_confirm(skb);
-	if (ret != NF_ACCEPT) {
-		return ret;
-	}
 
 	if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
 		opcode = TCPOPT_NATCAP_UDP_ENC;

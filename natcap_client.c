@@ -572,7 +572,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 	//const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #endif
-	//int ret = 0;
+	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
@@ -598,6 +598,12 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 		natcap_adjust_tcp_mss(tcph, -8);
 		return NF_ACCEPT;
+	}
+
+	/* XXX I just confirm it first  */
+	ret = nf_conntrack_confirm(skb);
+	if (ret != NF_ACCEPT) {
+		return ret;
 	}
 
 	if (skb_is_gso(skb)) {
@@ -699,11 +705,6 @@ static unsigned int natcap_client_udp_proxy_out(void *priv,
 	if (disabled)
 		return NF_ACCEPT;
 
-	if (in)
-		net = dev_net(in);
-	else if (out)
-		net = dev_net(out);
-
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_UDP)
 		return NF_ACCEPT;
@@ -732,6 +733,10 @@ static unsigned int natcap_client_udp_proxy_out(void *priv,
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl*4);
 
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
 	ret = nf_conntrack_in(net, pf, hooknum, skb);
 	if (ret != NF_ACCEPT) {
 		return ret;
