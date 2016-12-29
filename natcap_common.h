@@ -9,9 +9,12 @@
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
+#include <linux/udp.h>
+#include <linux/icmp.h>
 #include <net/ip.h>
 #include <net/tcp.h>
 #include <net/udp.h>
+#include <net/icmp.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
@@ -81,25 +84,25 @@ extern const char *const hooknames[];
 	} while (0)
 
 #define IP_TCPUDP_FMT	"%pI4:%u->%pI4:%u"
-#define IP_TCPUDP_ARG(i,t)	&(i)->saddr, ntohs((t)->source), &(i)->daddr, ntohs((t)->dest)
+#define IP_TCPUDP_ARG(i,t)	&(i)->saddr, ntohs(((struct tcphdr *)(t))->source), &(i)->daddr, ntohs(((struct tcphdr *)(t))->dest)
 #define TCP_ST_FMT	"%c%c%c%c%c%c%c%c"
 #define TCP_ST_ARG(t) \
-	(t)->cwr ? 'C' : '.', \
-	(t)->ece ? 'E' : '.', \
-	(t)->urg ? 'U' : '.', \
-	(t)->ack ? 'A' : '.', \
-	(t)->psh ? 'P' : '.', \
-	(t)->rst ? 'R' : '.', \
-	(t)->syn ? 'S' : '.', \
-	(t)->fin ? 'F' : '.'
+	((struct tcphdr *)(t))->cwr ? 'C' : '.', \
+	((struct tcphdr *)(t))->ece ? 'E' : '.', \
+	((struct tcphdr *)(t))->urg ? 'U' : '.', \
+	((struct tcphdr *)(t))->ack ? 'A' : '.', \
+	((struct tcphdr *)(t))->psh ? 'P' : '.', \
+	((struct tcphdr *)(t))->rst ? 'R' : '.', \
+	((struct tcphdr *)(t))->syn ? 'S' : '.', \
+	((struct tcphdr *)(t))->fin ? 'F' : '.'
 #define UDP_ST_FMT "UL:%u,UC:%04X"
-#define UDP_ST_ARG(u) ntohs((u)->len), ntohs((u)->check)
+#define UDP_ST_ARG(u) ntohs(((struct udphdr *)(u))->len), ntohs(((struct udphdr *)(u))->check)
 
 #define DEBUG_FMT_PREFIX "[%s](%s:%u)"
 #define DEBUG_ARG_PREFIX hooknames[hooknum], __FUNCTION__, __LINE__
 
 #define DEBUG_FMT_TCP "[" IP_TCPUDP_FMT "|ID:%04X,IL:%u|" TCP_ST_FMT "]"
-#define DEBUG_ARG_TCP(i, t) IP_TCPUDP_ARG(i,t), ntohs((i)->id), ntohs((i)->tot_len), TCP_ST_ARG(t)
+#define DEBUG_ARG_TCP(i, t) IP_TCPUDP_ARG(i,t), ntohs(((struct iphdr *)(i))->id), ntohs(((struct iphdr *)(i))->tot_len), TCP_ST_ARG(t)
 
 #define DEBUG_FMT_UDP "[" IP_TCPUDP_FMT "|ID:%04X,IL:%u|" UDP_ST_FMT "]"
 #define DEBUG_ARG_UDP(i, u) IP_TCPUDP_ARG(i,u), ntohs((i)->id), ntohs((i)->tot_len), UDP_ST_ARG(u)
@@ -111,7 +114,11 @@ extern const char *const hooknames[];
 #define DEBUG_UDP_ARG(i, u) DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(i, u)
 
 #define TUPLE_FMT "%pI4:%u-%c"
-#define TUPLE_ARG(t) &(t)->ip, ntohs((t)->port), (t)->encryption ? 'e' : 'o'
+#define TUPLE_ARG(t) &((struct tuple *)(t))->ip, ntohs(((struct tuple *)(t))->port), ((struct tuple *)(t))->encryption ? 'e' : 'o'
+
+#define TCPH(t) ((struct tcphdr *)(t))
+#define UDPH(u) ((struct udphdr *)(u))
+#define ICMPH(i) ((struct icmphdr *)(i))
 
 extern void natcap_data_encode(unsigned char *buf, int len);
 extern void natcap_data_decode(unsigned char *buf, int len);
@@ -224,7 +231,7 @@ extern int ip_set_del_src_ip(const struct net_device *in, const struct net_devic
 extern int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
 extern int ip_set_test_src_mac(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
 
-extern unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, __be16 port);
+extern unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto);
 
 extern int natcap_common_init(void);
 

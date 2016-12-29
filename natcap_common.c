@@ -790,7 +790,7 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 	return ret;
 }
 
-unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, __be16 port)
+unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)
 	struct nf_nat_range range;
@@ -800,10 +800,10 @@ unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, __be16 port)
 	memset(&range.min_ip, 0, sizeof(range.min_ip));
 	memset(&range.max_ip, 0, sizeof(range.max_ip));
 	range.flags = IP_NAT_RANGE_MAP_IPS | IP_NAT_RANGE_PROTO_SPECIFIED;
-	range.min_ip = ip;
-	range.max_ip = ip;
-	range.min.tcp.port = port;
-	range.max.tcp.port = port;
+	range.min_ip = addr;
+	range.max_ip = addr;
+	range.min.all = man_proto;
+	range.max.all = man_proto;
 	return nf_nat_setup_info(ct, &range, IP_NAT_MANIP_DST);
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
 	struct nf_nat_ipv4_range range;
@@ -813,10 +813,10 @@ unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, __be16 port)
 	memset(&range.min_ip, 0, sizeof(range.min_ip));
 	memset(&range.max_ip, 0, sizeof(range.max_ip));
 	range.flags = NF_NAT_RANGE_MAP_IPS | NF_NAT_RANGE_PROTO_SPECIFIED;
-	range.min_ip = ip;
-	range.max_ip = ip;
-	range.min.tcp.port = port;
-	range.max.tcp.port = port;
+	range.min_ip = addr;
+	range.max_ip = addr;
+	range.min.all = man_proto;
+	range.max.all = man_proto;
 	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
 #else
 	struct nf_nat_range range;
@@ -826,10 +826,10 @@ unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 ip, __be16 port)
 	memset(&range.min_addr, 0, sizeof(range.min_addr));
 	memset(&range.max_addr, 0, sizeof(range.max_addr));
 	range.flags = NF_NAT_RANGE_MAP_IPS | NF_NAT_RANGE_PROTO_SPECIFIED;
-	range.min_addr.ip = ip;
-	range.max_addr.ip = ip;
-	range.min_proto.tcp.port = port;
-	range.max_proto.tcp.port = port;
+	range.min_addr.ip = addr;
+	range.max_addr.ip = addr;
+	range.min_proto.all = man_proto;
+	range.max_proto.all = man_proto;
 	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
 #endif
 }

@@ -224,7 +224,7 @@ static unsigned int natcap_client_out_hook(void *priv,
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
-	struct tcphdr *tcph;
+	void *l4;
 	unsigned long status = NATCAP_CLIENT_MODE;
 	struct natcap_TCPOPT tcpopt;
 	struct tuple server;
@@ -233,14 +233,11 @@ static unsigned int natcap_client_out_hook(void *priv,
 		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
-	if (iph->protocol != IPPROTO_TCP)
+	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP)
 		return NF_ACCEPT;
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
-		return NF_ACCEPT;
-	}
-	if (test_bit(IPS_NATCAP_UDP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
@@ -250,24 +247,25 @@ static unsigned int natcap_client_out_hook(void *priv,
 	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
 		return NF_DROP;
 	iph = ip_hdr(skb);
-	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-	if (tcph->doff * 4 < sizeof(struct tcphdr))
+	l4 = (void *)iph + iph->ihl * 4;
+
+	if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr))
 		return NF_DROP;
 
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
-		if (tcph->syn && !tcph->ack) {
+		if (TCPH(l4)->syn && !TCPH(l4)->ack) {
 			if (!test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
-				NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": bypass syn1\n", DEBUG_TCP_ARG(iph,tcph));
+				NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": bypass syn1\n", DEBUG_TCP_ARG(iph,l4));
 				return NF_ACCEPT;
 			}
 			if (!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
-				NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": bypass syn2\n", DEBUG_TCP_ARG(iph,tcph));
+				NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": bypass syn2\n", DEBUG_TCP_ARG(iph,l4));
 				return NF_ACCEPT;
 			}
 			if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
 				if (!is_natcap_server(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) &&
 						ip_set_test_dst_ip(in, out, skb, "cniplist") <= 0) {
-					NATCAP_INFO("(CO)" DEBUG_TCP_FMT ": bypass syn3 add target to gfwlist\n", DEBUG_TCP_ARG(iph,tcph));
+					NATCAP_INFO("(CO)" DEBUG_TCP_FMT ": bypass syn3 add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
 					ip_set_add_dst_ip(in, out, skb, "gfwlist");
 				}
 				return NF_ACCEPT;
@@ -277,43 +275,43 @@ static unsigned int natcap_client_out_hook(void *priv,
 	}
 
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
-		NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": before encode\n", DEBUG_TCP_ARG(iph,tcph));
+		NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": before encode\n", DEBUG_TCP_ARG(iph,l4));
 		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
 			status |= NATCAP_NEED_ENC;
 		}
-	} else if ((tcph->syn && !tcph->ack) && ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
-		natcap_server_info_select(iph->daddr, tcph->dest, &server);
+	} else if ((TCPH(l4)->syn && !TCPH(l4)->ack) && ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
+		natcap_server_info_select(iph->daddr, TCPH(l4)->dest, &server);
 		if (server.ip == 0) {
-			NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,tcph));
+			NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
 		if (server.encryption) {
 			status |= NATCAP_NEED_ENC;
 		}
-		NATCAP_INFO("(CO)" DEBUG_TCP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,tcph), TUPLE_ARG(&server));
+		NATCAP_INFO("(CO)" DEBUG_TCP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 	} else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		if (tcph->syn && !tcph->ack) {
+		if (TCPH(l4)->syn && !TCPH(l4)->ack) {
 			if (!test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
-				NATCAP_DEBUG(DEBUG_TCP_FMT ": bypass syn1\n", DEBUG_TCP_ARG(iph,tcph));
+				NATCAP_DEBUG(DEBUG_TCP_FMT ": bypass syn1\n", DEBUG_TCP_ARG(iph,l4));
 				return NF_ACCEPT;
 			}
 		}
 		return NF_ACCEPT;
 	}
 
-	if (tcph->syn && !tcph->ack) {
+	if (TCPH(l4)->syn && !TCPH(l4)->ack) {
 		if (!test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
-			NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": natcaped syn1\n", DEBUG_TCP_ARG(iph,tcph));
+			NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": natcaped syn1\n", DEBUG_TCP_ARG(iph,l4));
 			goto start_natcap;
 		}
 		if (!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
-			NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": natcaped syn2\n", DEBUG_TCP_ARG(iph,tcph));
+			NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": natcaped syn2\n", DEBUG_TCP_ARG(iph,l4));
 			goto start_natcap;
 		}
 		if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
-			NATCAP_INFO("(CO)" DEBUG_TCP_FMT ": natcaped syn3 del target from gfwlist\n", DEBUG_TCP_ARG(iph,tcph));
+			NATCAP_INFO("(CO)" DEBUG_TCP_FMT ": natcaped syn3 del target from gfwlist\n", DEBUG_TCP_ARG(iph,l4));
 			ip_set_del_dst_ip(in, out, skb, "gfwlist");
 			goto start_natcap;
 		}
@@ -324,18 +322,18 @@ start_natcap:
 	if (ret == 0) {
 		ret = natcap_tcp_encode(skb, &tcpopt);
 		iph = ip_hdr(skb);
-		tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+		l4 = (void *)iph + iph->ihl * 4;
 	}
 	if (ret != 0) {
-		NATCAP_ERROR("(CO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d\n", DEBUG_TCP_ARG(iph,tcph), ret);
+		NATCAP_ERROR("(CO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_DROP;
 	}
 
 	if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
-		NATCAP_INFO("(CO)" DEBUG_TCP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,tcph), TUPLE_ARG(&server));
+		NATCAP_INFO("(CO)" DEBUG_TCP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		if (natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
-			NATCAP_ERROR("(CO)" DEBUG_TCP_FMT ": natcap_tcp_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,tcph), TUPLE_ARG(&server));
+			NATCAP_ERROR("(CO)" DEBUG_TCP_FMT ": natcap_tcp_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
 		}
@@ -347,7 +345,7 @@ start_natcap:
 		}
 	}
 
-	NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": after encode\n", DEBUG_TCP_ARG(iph,tcph));
+	NATCAP_DEBUG("(CO)" DEBUG_TCP_FMT ": after encode\n", DEBUG_TCP_ARG(iph,l4));
 
 	return NF_ACCEPT;
 }
