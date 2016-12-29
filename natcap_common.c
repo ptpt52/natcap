@@ -315,8 +315,8 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			tcpopt->header.type = NATCAP_TCPOPT_ALL;
 			tcpopt->header.opcode = TCPOPT_NATCAP;
 			tcpopt->header.opsize = size;
-			tcpopt->all.data.ip = iph->daddr;
-			tcpopt->all.data.port = tcph->dest;
+			tcpopt->all.data.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+			tcpopt->all.data.port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
 			memcpy(tcpopt->all.data.mac_addr, default_mac_addr, ETH_ALEN);
 			tcpopt->all.data.u_hash = default_u_hash;
 			set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
@@ -327,8 +327,8 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			tcpopt->header.type = NATCAP_TCPOPT_DST;
 			tcpopt->header.opcode = TCPOPT_NATCAP;
 			tcpopt->header.opsize = size;
-			tcpopt->dst.data.ip = iph->daddr;
-			tcpopt->dst.data.port = tcph->dest;
+			tcpopt->dst.data.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+			tcpopt->dst.data.port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
 			return 0;
 		}
 		return -1;
