@@ -463,7 +463,7 @@ static unsigned int natcap_server_out_hook(void *priv,
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
-	struct tcphdr *tcph;
+	void *l4;
 	struct natcap_TCPOPT tcpopt;
 	unsigned long status = 0;
 
@@ -481,27 +481,25 @@ static unsigned int natcap_server_out_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_UDP_BIT, &ct->status)) {
-		return NF_ACCEPT;
-	}
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
-		return NF_ACCEPT;
-	}
-	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (test_bit(IPS_NATCAP_DROP_BIT, &ct->status)) {
 		return NF_DROP;
 	}
+	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
+		return NF_ACCEPT;
+	}
 
 	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
 		return NF_DROP;
 	iph = ip_hdr(skb);
-	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-	if (tcph->doff * 4 < sizeof(struct tcphdr))
+	l4 = (void *)iph + iph->ihl * 4;
+	if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr)) {
 		return NF_DROP;
+	}
 
-	NATCAP_DEBUG("(SO)" DEBUG_TCP_FMT ": before encode\n", DEBUG_TCP_ARG(iph,tcph));
+	NATCAP_DEBUG("(SO)" DEBUG_TCP_FMT ": before encode\n", DEBUG_TCP_ARG(iph,l4));
 	if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
 		status |= NATCAP_NEED_ENC;
 	}
@@ -510,15 +508,15 @@ static unsigned int natcap_server_out_hook(void *priv,
 	if (ret == 0) {
 		ret = natcap_tcp_encode(skb, &tcpopt);
 		iph = ip_hdr(skb);
-		tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+		l4 = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 	}
 	if (ret != 0) {
-		NATCAP_ERROR("(SO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d\n", DEBUG_TCP_ARG(iph,tcph), ret);
+		NATCAP_ERROR("(SO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_DROP;
 	}
 
-	NATCAP_DEBUG("(SO)" DEBUG_TCP_FMT ":after encode\n", DEBUG_TCP_ARG(iph,tcph));
+	NATCAP_DEBUG("(SO)" DEBUG_TCP_FMT ":after encode\n", DEBUG_TCP_ARG(iph,l4));
 
 	return NF_ACCEPT;
 }
@@ -569,8 +567,9 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
-	if (iph->protocol != IPPROTO_UDP)
+	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
 		return NF_ACCEPT;
+	}
 
 	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 4)) {
 		return NF_ACCEPT;
@@ -661,13 +660,15 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
+	void *l4;
 
 	if (disabled)
 		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
-	if (iph->protocol != IPPROTO_TCP)
+	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
 		return NF_ACCEPT;
+	}
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
@@ -676,12 +677,13 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
+
 	if (!test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
-		struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-		natcap_adjust_tcp_mss(tcph, -8);
+		l4 = (void *)iph + iph->ihl * 4;
+		natcap_adjust_tcp_mss(TCPH(l4), -8);
 		return NF_ACCEPT;
 	}
 
@@ -705,7 +707,6 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 	do {
 		int offlen;
-		struct udphdr *udph;
 		struct sk_buff *nskb = skb->next;
 
 		if (skb->end - skb->tail < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
@@ -713,20 +714,17 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 		}
 
 		iph = ip_hdr(skb);
-		udph = (struct udphdr *)((void *)iph + iph->ihl * 4);
+		l4 = (void *)iph + iph->ihl * 4;
 
-		offlen = skb_tail_pointer(skb) - (unsigned char *)udph - 4;
+		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4;
 		BUG_ON(offlen < 0);
-		memmove((void *)udph + 4 + 8, (void *)udph + 4, offlen);
-		udph->len = htons(ntohs(iph->tot_len) - iph->ihl * 4 + 8);
+		memmove((void *)UDPH(l4) + 4 + 8, (void *)UDPH(l4) + 4, offlen);
 		iph->tot_len = htons(ntohs(iph->tot_len) + 8);
+		UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
 		skb->len += 8;
 		skb->tail += 8;
-
-		*((unsigned int *)((void *)udph + 8)) = htonl(0xFFFF0099);
-
+		*((unsigned int *)((void *)UDPH(l4) + 8)) = htonl(0xFFFF0099);
 		iph->protocol = IPPROTO_UDP;
-
 		skb_rcsum_tcpudp(skb);
 
 		skb->next = NULL;

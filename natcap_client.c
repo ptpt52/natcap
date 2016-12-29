@@ -691,8 +691,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4;
 			BUG_ON(offlen < 0);
 			memmove((void *)UDPH(l4) + 4 + 8, (void *)UDPH(l4) + 4, offlen);
-			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4 + 8);
 			iph->tot_len = htons(ntohs(iph->tot_len) + 8);
+			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
 			skb->len += 8;
 			skb->tail += 8;
 			*((unsigned int *)((void *)UDPH(l4) + 8)) = htonl(0xFFFF0099);
