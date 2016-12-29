@@ -362,7 +362,7 @@ static unsigned int natcap_server_in_hook(void *priv,
 		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
 			NATCAP_INFO("(SI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,tcph), TUPLE_ARG(&server));
 
-			if (natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
+			if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 				NATCAP_ERROR("(SI)" DEBUG_TCP_FMT ": natcap_tcp_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,tcph), TUPLE_ARG(&server));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_DROP;
@@ -799,7 +799,7 @@ static unsigned int natcap_server_udp_proxy_in(void *priv,
 		if (nuo.opcode == TCPOPT_NATCAP_UDP_ENC) {
 			set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 		}
-		if (natcap_tcp_dnat_setup(ct, nuo.ip, nuo.port) != NF_ACCEPT) {
+		if (natcap_dnat_setup(ct, nuo.ip, nuo.port) != NF_ACCEPT) {
 			NATCAP_ERROR("(SI)" DEBUG_UDP_FMT ": natcap_tcp_dnat_setup failed, target=%pI4:%u\n", DEBUG_UDP_ARG(iph,udph), &nuo.ip, ntohs(nuo.port));
 			return NF_DROP;
 		}

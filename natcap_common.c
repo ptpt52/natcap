@@ -790,7 +790,7 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 	return ret;
 }
 
-unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto)
+unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)
 	struct nf_nat_range range;

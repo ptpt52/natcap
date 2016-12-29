@@ -108,7 +108,7 @@ static unsigned int natcap_forward_in_hook(void *priv,
 			return NF_ACCEPT;
 		}
 		NATCAP_INFO("(FI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,tcph), TUPLE_ARG(&server));
-		if (natcap_tcp_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
+		if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 			NATCAP_ERROR("(FI)" DEBUG_TCP_FMT ": natcap_tcp_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,tcph), TUPLE_ARG(&server));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;

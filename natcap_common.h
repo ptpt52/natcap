@@ -231,7 +231,7 @@ extern int ip_set_del_src_ip(const struct net_device *in, const struct net_devic
 extern int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
 extern int ip_set_test_src_mac(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
 
-extern unsigned int natcap_tcp_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto);
+extern unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto);
 
 extern int natcap_common_init(void);
 
