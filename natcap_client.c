@@ -278,7 +278,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
 			}
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-			return NF_ACCEPT;
+			goto bypass_out;
 		}
 		if (server.encryption) {
 			set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
@@ -446,9 +446,9 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
-
-		if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr))
+		if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr)) {
 			return NF_DROP;
+		}
 		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
 			return NF_DROP;
 		}
@@ -533,7 +533,6 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 4)) {
 		return NF_ACCEPT;
 	}
-
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
 
@@ -546,7 +545,6 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		int offlen;
 
 		if (skb->ip_summed == CHECKSUM_NONE) {
-			//verify
 			if (skb_rcsum_verify(skb) != 0) {
 				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": skb_rcsum_verify fail\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
@@ -558,13 +556,10 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4 - 8;
 		BUG_ON(offlen < 0);
 		memmove((void *)UDPH(l4) + 4, (void *)UDPH(l4) + 4 + 8, offlen);
-
 		iph->tot_len = htons(ntohs(iph->tot_len) - 8);
 		skb->len -= 8;
 		skb->tail -= 8;
-
 		iph->protocol = IPPROTO_TCP;
-
 		skb_rcsum_tcpudp(skb);
 	}
 
@@ -690,7 +685,6 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			if (skb->end - skb->tail < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 				return NF_DROP;
 			}
-
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 
@@ -701,11 +695,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			iph->tot_len = htons(ntohs(iph->tot_len) + 8);
 			skb->len += 8;
 			skb->tail += 8;
-
 			*((unsigned int *)((void *)UDPH(l4) + 8)) = htonl(0xFFFF0099);
-
 			iph->protocol = IPPROTO_UDP;
-
 			skb_rcsum_tcpudp(skb);
 
 			NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT, DEBUG_UDP_ARG(iph,l4));
