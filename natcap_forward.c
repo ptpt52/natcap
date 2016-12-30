@@ -102,7 +102,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
-		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
+		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in */
 			natcap_server_info_select(iph->daddr, TCPH(l4)->dest, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(FPCI)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
@@ -111,7 +111,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 			}
 			NATCAP_INFO("(FPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 			if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
-				NATCAP_ERROR("(FPCI)" DEBUG_TCP_FMT ": natcap_tcp_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+				NATCAP_ERROR("(FPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_DROP;
 			}
@@ -144,10 +144,13 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
 			}
 
-			server.ip = *((unsigned int *)(l4 + sizeof(struct udphdr) + 4));
-			server.port = *((unsigned short *)(l4 + sizeof(struct udphdr) + 8));
-
-			if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
+			if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in */
+				natcap_server_info_select(iph->daddr, UDPH(l4)->dest, &server);
+				if (server.ip == 0) {
+					NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
+					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+					return NF_ACCEPT;
+				}
 				NATCAP_INFO("(FPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
 				if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 					NATCAP_ERROR("(FPCI)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
