@@ -496,6 +496,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 				return NF_ACCEPT;
 			}
+
 bypass_out:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			NATCAP_DEBUG("(SPCI)" DEBUG_UDP_FMT ": first packet in but not ctrl code\n", DEBUG_UDP_ARG(iph,l4));

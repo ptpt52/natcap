@@ -127,9 +127,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12)) {
-			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-			NATCAP_WARN("(FPCI)" DEBUG_UDP_FMT ": first packet in but not ctrl code\n", DEBUG_UDP_ARG(iph,l4));
-			return NF_ACCEPT;
+			goto bypass_out;
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
@@ -161,10 +159,11 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 
 			skb->mark = XT_MARK_NATCAP;
 			NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
-		} else {
-			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-			NATCAP_WARN("(FPCI)" DEBUG_UDP_FMT ": first packet in but not ctrl code\n", DEBUG_UDP_ARG(iph,l4));
 		}
+
+bypass_out:
+		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+		NATCAP_WARN("(FPCI)" DEBUG_UDP_FMT ": first packet in but not ctrl code\n", DEBUG_UDP_ARG(iph,l4));
 	}
 
 	return NF_ACCEPT;
