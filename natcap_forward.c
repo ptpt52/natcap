@@ -126,13 +126,12 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
-		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12)) {
-			goto bypass_out;
-		}
-		iph = ip_hdr(skb);
-		l4 = (void *)iph + iph->ihl * 4;
 
-		if (*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == htonl(0xFFFE0099)) {
+		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
+				*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == __constant_htonl(0xFFFE0099)) {
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
+
 			if (skb->ip_summed == CHECKSUM_NONE) {
 				if (skb_rcsum_verify(skb) != 0) {
 					NATCAP_WARN("(FPCI)" DEBUG_UDP_FMT ": skb_rcsum_verify fail\n", DEBUG_UDP_ARG(iph,l4));
@@ -158,12 +157,18 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 			}
 
 			skb->mark = XT_MARK_NATCAP;
-			NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
+			NATCAP_INFO("(FPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
 		}
 
-bypass_out:
-		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": first packet in but not ctrl code\n", DEBUG_UDP_ARG(iph,l4));
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+
+		if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+			skb->mark = XT_MARK_NATCAP;
+		} else {
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": first packet in but not ctrl code\n", DEBUG_UDP_ARG(iph,l4));
+		}
 	}
 
 	return NF_ACCEPT;
@@ -230,7 +235,7 @@ static unsigned int natcap_forward_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (*((unsigned int *)((void *)UDPH(l4) + 8)) == htonl(0xFFFF0099)) {
+	if (*((unsigned int *)((void *)UDPH(l4) + 8)) == __constant_htonl(0xFFFF0099)) {
 		int offlen;
 
 		if (skb->ip_summed == CHECKSUM_NONE) {
@@ -379,7 +384,10 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 			struct sk_buff *nskb = skb->next;
 
 			if (skb->end - skb->tail < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
-				return NF_DROP;
+				consume_skb(skb);
+				skb = nskb;
+				NATCAP_ERROR("pskb_expand_head failed\n");
+				continue;
 			}
 
 			iph = ip_hdr(skb);
@@ -392,7 +400,7 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
 			skb->len += 8;
 			skb->tail += 8;
-			*((unsigned int *)((void *)UDPH(l4) + 8)) = htonl(0xFFFF0099);
+			*((unsigned int *)((void *)UDPH(l4) + 8)) = __constant_htonl(0xFFFF0099);
 			iph->protocol = IPPROTO_UDP;
 			skb_rcsum_tcpudp(skb);
 

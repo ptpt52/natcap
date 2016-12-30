@@ -472,7 +472,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == htonl(0xFFFE009A)) {
+		if (*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == __constant_htonl(0xFFFE009A)) {
 			if (!test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 				NATCAP_INFO("(CPCI)" DEBUG_UDP_FMT ": got CFM pkt\n", DEBUG_UDP_ARG(iph,l4));
 			}
@@ -541,7 +541,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (*((unsigned int *)((void *)UDPH(l4) + 8)) == htonl(0xFFFF0099)) {
+	if (*((unsigned int *)((void *)UDPH(l4) + 8)) == __constant_htonl(0xFFFF0099)) {
 		int offlen;
 
 		if (skb->ip_summed == CHECKSUM_NONE) {
@@ -683,7 +683,10 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			struct sk_buff *nskb = skb->next;
 
 			if (skb->end - skb->tail < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
-				return NF_DROP;
+				consume_skb(skb);
+				skb = nskb;
+				NATCAP_ERROR("pskb_expand_head failed\n");
+				continue;
 			}
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
@@ -695,11 +698,11 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
 			skb->len += 8;
 			skb->tail += 8;
-			*((unsigned int *)((void *)UDPH(l4) + 8)) = htonl(0xFFFF0099);
+			*((unsigned int *)((void *)UDPH(l4) + 8)) = __constant_htonl(0xFFFF0099);
 			iph->protocol = IPPROTO_UDP;
 			skb_rcsum_tcpudp(skb);
 
-			NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT, DEBUG_UDP_ARG(iph,l4));
+			NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT "\n", DEBUG_UDP_ARG(iph,l4));
 
 			flow_total_tx_bytes += skb->len;
 
@@ -712,31 +715,54 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		return NF_STOLEN;
 	} else if (iph->protocol == IPPROTO_UDP) {
 		if (!test_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
-			struct sk_buff *nskb;
-			int offset, header_len;
+			if (skb->len > 1280) {
+				struct sk_buff *nskb;
+				int offset, header_len;
 
-			offset = sizeof(struct iphdr) + sizeof(struct udphdr) + 12 - skb->len;
-			header_len = offset < 0 ? 0 : offset;
-			nskb = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
-			if (!nskb) {
-				NATCAP_ERROR("alloc_skb fail\n");
-				return NF_ACCEPT;
+				offset = sizeof(struct iphdr) + sizeof(struct udphdr) + 12 - skb->len;
+				header_len = offset < 0 ? 0 : offset;
+				nskb = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
+				if (!nskb) {
+					NATCAP_ERROR("alloc_skb fail\n");
+					return NF_ACCEPT;
+				}
+
+				nskb->len += offset;
+
+				iph = ip_hdr(nskb);
+				l4 = (void *)iph + iph->ihl * 4;
+				iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + 12);
+				UDPH(l4)->len = ntohs(sizeof(struct udphdr) + 12);
+				*((unsigned int *)(l4 + sizeof(struct udphdr))) = __constant_htonl(0xFFFE0099);
+				*((unsigned int *)(l4 + sizeof(struct udphdr) + 4)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+				*((unsigned short *)(l4 + sizeof(struct udphdr) + 8)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
+				*((unsigned short *)(l4 + sizeof(struct udphdr) + 10)) = __constant_htons(0x1);
+				skb_rcsum_tcpudp(nskb);
+
+				NF_OKFN(nskb);
+			} else {
+				int offlen;
+
+				if (skb->end - skb->tail < 12 && pskb_expand_head(skb, 0, 12, GFP_ATOMIC)) {
+					NATCAP_ERROR("pskb_expand_head failed\n");
+					return NF_ACCEPT;
+				}
+				iph = ip_hdr(skb);
+				l4 = (void *)iph + iph->ihl * 4;
+
+				offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct udphdr);
+				BUG_ON(offlen < 0);
+				memmove((void *)UDPH(l4) + sizeof(struct udphdr) + 12, (void *)UDPH(l4) + sizeof(struct udphdr), offlen);
+				iph->tot_len = htons(ntohs(iph->tot_len) + 12);
+				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
+				skb->len += 12;
+				skb->tail += 12;
+				*((unsigned int *)(l4 + sizeof(struct udphdr))) = __constant_htonl(0xFFFE0099);
+				*((unsigned int *)(l4 + sizeof(struct udphdr) + 4)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+				*((unsigned short *)(l4 + sizeof(struct udphdr) + 8)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
+				*((unsigned short *)(l4 + sizeof(struct udphdr) + 10)) = __constant_htons(0x2);
+				skb_rcsum_tcpudp(skb);
 			}
-
-			nskb->len += offset;
-
-			iph = ip_hdr(nskb);
-			l4 = (void *)iph + iph->ihl * 4;
-			iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + 12);
-			UDPH(l4)->len = ntohs(sizeof(struct udphdr) + 12);
-
-			*((unsigned int *)(l4 + sizeof(struct udphdr))) = htonl(0xFFFE0099);
-			*((unsigned int *)(l4 + sizeof(struct udphdr) + 4)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
-			*((unsigned short *)(l4 + sizeof(struct udphdr) + 8)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
-
-			skb_rcsum_tcpudp(nskb);
-
-			NF_OKFN(nskb);
 		}
 	}
 
