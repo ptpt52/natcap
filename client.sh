@@ -23,6 +23,9 @@ ipset restore -f cniplist.set
 ipset create gfwlist iphash
 ipset create udproxylist iphash
 #ipset add udproxylist 8.8.8.8
+ipset add gfwlist 163.177.151.109
+ipset add gfwlist 163.177.151.110
+ipset add gfwlist 114.114.114.114
 
 SERVER=45.32.40.68
 iptables -t nat -A OUTPUT -d 8.8.8.8 -p udp --dport 53 -j DNAT --to-destination $SERVER:5353
@@ -37,7 +40,7 @@ cat <<EOF >>/dev/natcap_ctl
 clean
 debug=3
 disabled=0
-encode_mode=UDP
+encode_mode=TCP
 server_persist_timeout=6
 server 192.168.15.192:65535-e
 EOF

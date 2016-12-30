@@ -92,7 +92,6 @@ static inline int natcap_auth(const struct net_device *in,
 	return E_NATCAP_OK;
 }
 
-
 static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_buff *oskb) {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
