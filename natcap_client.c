@@ -261,36 +261,44 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr)) {
 			return NF_DROP;
 		}
+
+		if (ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
+			natcap_server_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
+			if (server.ip == 0) {
+				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				goto bypass_out;
+			}
+			if (server.encryption) {
+				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+			}
+			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+		} else {
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			goto bypass_out;
+		}
 	} else {
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
 			return NF_DROP;
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
-	}
 
-	if (ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
-		natcap_server_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
-		if (server.ip == 0) {
-			if (iph->protocol == IPPROTO_TCP) {
-				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
-			} else {
+		if (ip_set_test_dst_ip(in, out, skb, "udproxylist") > 0) {
+			natcap_server_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
+			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				goto bypass_out;
 			}
+			if (server.encryption) {
+				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+			}
+			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			goto bypass_out;
 		}
-		if (server.encryption) {
-			set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-		}
-		if (iph->protocol == IPPROTO_TCP) {
-			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
-		} else {
-			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
-		}
-	} else {
-		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		goto bypass_out;
 	}
 
 	if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
