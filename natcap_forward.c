@@ -163,7 +163,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 
 bypass_out:
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		NATCAP_WARN("(FPCI)" DEBUG_UDP_FMT ": first packet in but not ctrl code\n", DEBUG_UDP_ARG(iph,l4));
+		NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": first packet in but not ctrl code\n", DEBUG_UDP_ARG(iph,l4));
 	}
 
 	return NF_ACCEPT;
