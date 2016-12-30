@@ -465,8 +465,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
 			}
 
-			server.ip = *((unsigned int *)(l4 + sizeof(struct udphdr) + 4));
-			server.port = *((unsigned short *)(l4 + sizeof(struct udphdr) + 8));
+			server.ip = *((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr) + 4));
+			server.port = *((unsigned short *)((void *)UDPH(l4) + sizeof(struct udphdr) + 8));
 
 			if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
 				NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
@@ -477,7 +477,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				}
 			}
 
-			if (*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == __constant_htonl(0x2)) {
+			if (*((unsigned short *)((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == __constant_htonl(0x2)) {
 				int offlen;
 
 				offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct udphdr) - 12;
@@ -579,7 +579,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 
 			if (*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == __constant_htonl(0xFFFE0099) &&
-					*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == __constant_htons(0x1)) {
+					*((unsigned short *)((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == __constant_htons(0x1)) {
 				ret = nf_conntrack_confirm(skb);
 				if (ret != NF_ACCEPT) {
 					return ret;
