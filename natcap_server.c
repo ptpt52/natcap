@@ -92,6 +92,59 @@ static inline int natcap_auth(const struct net_device *in,
 	return E_NATCAP_OK;
 }
 
+
+static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_buff *oskb) {
+	struct sk_buff *nskb;
+	struct ethhdr *neth, *oeth;
+	struct iphdr *niph, *oiph;
+	struct udphdr *oudph, *nudph;
+	int payload_len = 4;
+	int offset, header_len;
+
+	oeth = (struct ethhdr *)skb_mac_header(oskb);
+	oiph = ip_hdr(oskb);
+	oudph = (struct udphdr *)((void *)oiph + oiph->ihl*4);
+
+	offset = sizeof(struct iphdr) + sizeof(struct udphdr) + payload_len - oskb->len;
+	header_len = offset < 0 ? 0 : offset;
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
+	if (!nskb) {
+		NATCAP_ERROR("alloc_skb fail\n");
+		return;
+	}
+
+	neth = eth_hdr(nskb);
+	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+	//neth->h_proto = htons(ETH_P_IP);
+
+	niph = ip_hdr(nskb);
+	niph->saddr = oiph->daddr;
+	niph->daddr = oiph->saddr;
+	niph->version = oiph->version;
+	niph->ihl = 5;
+	niph->tos = 0;
+	niph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + payload_len);
+	niph->ttl = 0x80;
+	niph->protocol = oiph->protocol;
+	niph->id = __constant_htons(0xDEAD);
+	niph->frag_off = 0x0;
+	nskb->len = ntohs(niph->tot_len);
+
+	nudph = (struct udphdr *)((void *)niph + niph->ihl*4);
+	*((unsigned int *)((void *)nudph + sizeof(struct udphdr))) = htonl(0xFFFE009A);
+	nudph->source = oudph->dest;
+	nudph->dest = oudph->source;
+	nudph->len = ntohs(sizeof(struct udphdr) + payload_len);
+
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(nskb);
+
+	skb_push(nskb, (char *)niph - (char *)neth);
+	nskb->dev = (struct net_device *)dev;
+	dev_queue_xmit(nskb);
+}
+
 static inline void natcap_auth_reply_payload(const char *payload, int payload_len, struct sk_buff *oskb, const struct net_device *dev)
 {
 	struct sk_buff *nskb;
@@ -400,31 +453,35 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == htonl(0xFFFE0099)) {
-			if (skb->ip_summed == CHECKSUM_NONE) {
-				if (skb_rcsum_verify(skb) != 0) {
-					NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": skb_rcsum_verify fail\n", DEBUG_UDP_ARG(iph,l4));
-					return NF_DROP;
+		if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+			skb->mark = XT_MARK_NATCAP;
+			NATCAP_DEBUG("(SPCI)" DEBUG_UDP_FMT ": pass data decode\n", DEBUG_UDP_ARG(iph,l4));
+		} else {
+			if (*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == htonl(0xFFFE0099)) {
+				if (skb->ip_summed == CHECKSUM_NONE) {
+					if (skb_rcsum_verify(skb) != 0) {
+						NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": skb_rcsum_verify fail\n", DEBUG_UDP_ARG(iph,l4));
+						return NF_DROP;
+					}
+					skb->csum = 0;
+					skb->ip_summed = CHECKSUM_UNNECESSARY;
 				}
-				skb->csum = 0;
-				skb->ip_summed = CHECKSUM_UNNECESSARY;
-			}
 
-			server.ip = *((unsigned int *)(l4 + sizeof(struct udphdr) + 4));
-			server.port = *((unsigned short *)(l4 + sizeof(struct udphdr) + 8));
+				server.ip = *((unsigned int *)(l4 + sizeof(struct udphdr) + 4));
+				server.port = *((unsigned short *)(l4 + sizeof(struct udphdr) + 8));
 
-			if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
-				NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
-				if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
-					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
-					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-					return NF_DROP;
+				if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
+					NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+					if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
+						NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+						set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+						return NF_DROP;
+					}
 				}
+				skb->mark = XT_MARK_NATCAP;
+				NATCAP_DEBUG("(SPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
 			}
 		}
-
-		skb->mark = XT_MARK_NATCAP;
-		NATCAP_DEBUG("(SPCI)" DEBUG_UDP_FMT ": after decode\n", DEBUG_UDP_ARG(iph,l4));
 	}
 
 	return NF_ACCEPT;
@@ -432,14 +489,14 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 //PREROUTING->*POSTROUTING*
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-static unsigned int natcap_server_out_hook(unsigned int hooknum,
+static unsigned int natcap_server_post_out_hook(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
 {
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
-static unsigned int natcap_server_out_hook(const struct nf_hook_ops *ops,
+static unsigned int natcap_server_post_out_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
@@ -447,13 +504,13 @@ static unsigned int natcap_server_out_hook(const struct nf_hook_ops *ops,
 {
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
-static unsigned int natcap_server_out_hook(const struct nf_hook_ops *ops,
+static unsigned int natcap_server_post_out_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 #else
-static unsigned int natcap_server_out_hook(void *priv,
+static unsigned int natcap_server_post_out_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 {
@@ -471,52 +528,125 @@ static unsigned int natcap_server_out_hook(void *priv,
 		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
-	if (iph->protocol != IPPROTO_TCP)
+	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
 		return NF_ACCEPT;
+	}
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
-		return NF_ACCEPT;
-	}
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		return NF_ACCEPT;
-	}
-	if (test_bit(IPS_NATCAP_DROP_BIT, &ct->status)) {
-		return NF_DROP;
 	}
 	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
-
-	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
-		return NF_DROP;
-	iph = ip_hdr(skb);
-	l4 = (void *)iph + iph->ihl * 4;
-	if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr)) {
-		return NF_DROP;
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
+		if (iph->protocol == IPPROTO_TCP) {
+			if (test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
+				l4 = (void *)iph + iph->ihl * 4;
+				natcap_adjust_tcp_mss(TCPH(l4), -8);
+				return NF_ACCEPT;
+			}
+		}
+		return NF_ACCEPT;
 	}
 
-	NATCAP_DEBUG("(SO)" DEBUG_TCP_FMT ": before encode\n", DEBUG_TCP_ARG(iph,l4));
-	if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
-		status |= NATCAP_NEED_ENC;
-	}
-
-	ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
-	if (ret == 0) {
-		ret = natcap_tcp_encode(skb, &tcpopt);
+	if (iph->protocol == IPPROTO_TCP) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
+			return NF_DROP;
 		iph = ip_hdr(skb);
-		l4 = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-	}
-	if (ret != 0) {
-		NATCAP_ERROR("(SO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
-		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		return NF_DROP;
-	}
+		l4 = (void *)iph + iph->ihl * 4;
+		if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr)) {
+			return NF_DROP;
+		}
 
-	NATCAP_DEBUG("(SO)" DEBUG_TCP_FMT ":after encode\n", DEBUG_TCP_ARG(iph,l4));
+		NATCAP_DEBUG("(SPO)" DEBUG_TCP_FMT ": before encode\n", DEBUG_TCP_ARG(iph,l4));
+		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+			status |= NATCAP_NEED_ENC;
+		}
+
+		ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
+		if (ret == 0) {
+			ret = natcap_tcp_encode(skb, &tcpopt);
+			iph = ip_hdr(skb);
+			l4 = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+		}
+		if (ret != 0) {
+			NATCAP_ERROR("(SPO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			return NF_DROP;
+		}
+
+		NATCAP_DEBUG("(SPO)" DEBUG_TCP_FMT ":after encode\n", DEBUG_TCP_ARG(iph,l4));
+
+		if (!test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
+			return NF_ACCEPT;
+		}
+
+		/* XXX I just confirm it first  */
+		ret = nf_conntrack_confirm(skb);
+		if (ret != NF_ACCEPT) {
+			return ret;
+		}
+
+		if (skb_is_gso(skb)) {
+			struct sk_buff *segs;
+
+			segs = skb_gso_segment(skb, 0);
+			if (IS_ERR(segs)) {
+				return NF_DROP;
+			}
+
+			consume_skb(skb);
+			skb = segs;
+		}
+
+		do {
+			int offlen;
+			struct sk_buff *nskb = skb->next;
+
+			if (skb->end - skb->tail < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
+				return NF_DROP;
+			}
+
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
+
+			offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4;
+			BUG_ON(offlen < 0);
+			memmove((void *)UDPH(l4) + 4 + 8, (void *)UDPH(l4) + 4, offlen);
+			iph->tot_len = htons(ntohs(iph->tot_len) + 8);
+			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
+			skb->len += 8;
+			skb->tail += 8;
+			*((unsigned int *)((void *)UDPH(l4) + 8)) = htonl(0xFFFF0099);
+			iph->protocol = IPPROTO_UDP;
+			skb_rcsum_tcpudp(skb);
+
+			skb->next = NULL;
+			NF_OKFN(skb);
+
+			skb = nskb;
+		} while (skb);
+
+		return NF_STOLEN;
+	} else if (iph->protocol == IPPROTO_UDP) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12)) {
+			return NF_ACCEPT;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+
+		if (*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == htonl(0xFFFE0099)) {
+			ret = nf_conntrack_confirm(skb);
+			if (ret != NF_ACCEPT) {
+				return ret;
+			}
+			return NF_DROP;
+		}
+	}
 
 	return NF_ACCEPT;
 }
@@ -567,7 +697,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
-	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
+	if (iph->protocol != IPPROTO_UDP) {
 		return NF_ACCEPT;
 	}
 
@@ -616,124 +746,15 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			return NF_DROP;
 		}
 
+		//reply CFM pkt
+		natcap_udp_reply_cfm(in, skb);
+
 		if (!test_and_set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) { /* first time in */
 			return NF_ACCEPT;
 		}
 	}
 
 	return NF_ACCEPT;
-}
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-static unsigned natcap_server_post_out_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
-{
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
-static unsigned int natcap_server_post_out_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
-{
-	//unsigned int hooknum = ops->hooknum;
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
-static unsigned int natcap_server_post_out_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
-{
-	//unsigned int hooknum = state->hook;
-	//const struct net_device *in = state->in;
-	//const struct net_device *out = state->out;
-#else
-static unsigned int natcap_server_post_out_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
-{
-	//unsigned int hooknum = state->hook;
-	//const struct net_device *in = state->in;
-	//const struct net_device *out = state->out;
-#endif
-	int ret = 0;
-	enum ip_conntrack_info ctinfo;
-	struct nf_conn *ct;
-	struct iphdr *iph;
-	void *l4;
-
-	if (disabled)
-		return NF_ACCEPT;
-
-	iph = ip_hdr(skb);
-	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
-		return NF_ACCEPT;
-	}
-
-	ct = nf_ct_get(skb, &ctinfo);
-	if (NULL == ct) {
-		return NF_ACCEPT;
-	}
-	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
-		return NF_ACCEPT;
-	}
-
-	if (!test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
-		return NF_ACCEPT;
-	}
-	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
-		l4 = (void *)iph + iph->ihl * 4;
-		natcap_adjust_tcp_mss(TCPH(l4), -8);
-		return NF_ACCEPT;
-	}
-
-	/* XXX I just confirm it first  */
-	ret = nf_conntrack_confirm(skb);
-	if (ret != NF_ACCEPT) {
-		return ret;
-	}
-
-	if (skb_is_gso(skb)) {
-		struct sk_buff *segs;
-
-		segs = skb_gso_segment(skb, 0);
-		if (IS_ERR(segs)) {
-			return NF_DROP;
-		}
-
-		consume_skb(skb);
-		skb = segs;
-	}
-
-	do {
-		int offlen;
-		struct sk_buff *nskb = skb->next;
-
-		if (skb->end - skb->tail < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
-			return NF_DROP;
-		}
-
-		iph = ip_hdr(skb);
-		l4 = (void *)iph + iph->ihl * 4;
-
-		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4;
-		BUG_ON(offlen < 0);
-		memmove((void *)UDPH(l4) + 4 + 8, (void *)UDPH(l4) + 4, offlen);
-		iph->tot_len = htons(ntohs(iph->tot_len) + 8);
-		UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
-		skb->len += 8;
-		skb->tail += 8;
-		*((unsigned int *)((void *)UDPH(l4) + 8)) = htonl(0xFFFF0099);
-		iph->protocol = IPPROTO_UDP;
-		skb_rcsum_tcpudp(skb);
-
-		skb->next = NULL;
-		NF_OKFN(skb);
-
-		skb = nskb;
-	} while (skb);
-
-	return NF_STOLEN;
 }
 
 static struct nf_hook_ops server_hooks[] = {
@@ -754,15 +775,6 @@ static struct nf_hook_ops server_hooks[] = {
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
 		.priority = NF_IP_PRI_NAT_DST - 35,
-	},
-	{
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
-		.owner = THIS_MODULE,
-#endif
-		.hook = natcap_server_out_hook,
-		.pf = PF_INET,
-		.hooknum = NF_INET_POST_ROUTING,
-		.priority = NF_IP_PRI_LAST,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
