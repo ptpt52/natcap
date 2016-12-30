@@ -549,6 +549,20 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 				natcap_adjust_tcp_mss(TCPH(l4), -8);
 				return NF_ACCEPT;
 			}
+		} else if (iph->protocol == IPPROTO_UDP) {
+			if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12)) {
+				return NF_ACCEPT;
+			}
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
+
+			if (*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == htonl(0xFFFE0099)) {
+				ret = nf_conntrack_confirm(skb);
+				if (ret != NF_ACCEPT) {
+					return ret;
+				}
+				return NF_DROP;
+			}
 		}
 		return NF_ACCEPT;
 	}
@@ -634,19 +648,13 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 		return NF_STOLEN;
 	} else if (iph->protocol == IPPROTO_UDP) {
-		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12)) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
 			return NF_ACCEPT;
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == htonl(0xFFFE0099)) {
-			ret = nf_conntrack_confirm(skb);
-			if (ret != NF_ACCEPT) {
-				return ret;
-			}
-			return NF_DROP;
-		}
+		NATCAP_DEBUG("(SPO)" DEBUG_UDP_FMT ": pass data reply\n", DEBUG_UDP_ARG(iph,l4));
 	}
 
 	return NF_ACCEPT;

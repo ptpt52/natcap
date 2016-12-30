@@ -728,7 +728,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			iph = ip_hdr(nskb);
 			l4 = (void *)iph + iph->ihl * 4;
 			iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + 12);
-			UDPH(l4)->len = sizeof(struct udphdr) + 12;
+			UDPH(l4)->len = ntohs(sizeof(struct udphdr) + 12);
 
 			*((unsigned int *)(l4 + sizeof(struct udphdr))) = htonl(0xFFFE0099);
 			*((unsigned int *)(l4 + sizeof(struct udphdr) + 4)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
