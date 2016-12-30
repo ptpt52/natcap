@@ -434,7 +434,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_REPLY) {
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
 		return NF_ACCEPT;
 	}
 
