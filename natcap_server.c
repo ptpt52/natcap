@@ -477,7 +477,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				}
 			}
 
-			if (*((unsigned short *)((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == __constant_htonl(0x2)) {
+			if (*((unsigned short *)((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == __constant_htons(0x2)) {
 				int offlen;
 
 				offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct udphdr) - 12;
