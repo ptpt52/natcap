@@ -340,14 +340,14 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
-		return NF_ACCEPT;
-	}
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (test_bit(IPS_NATCAP_DROP_BIT, &ct->status)) {
 		return NF_DROP;
+	}
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+		return NF_ACCEPT;
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
@@ -554,8 +554,9 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
-		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr)))
+		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
 			return NF_DROP;
+		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 		if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr)) {
