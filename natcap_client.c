@@ -1170,6 +1170,13 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 		NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": after natcap reply\n", DEBUG_TCP_ARG(iph,l4));
 
+		if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
+			if (!is_natcap_server(iph->saddr) && ip_set_test_src_ip(in, out, skb, "cniplist") <= 0) {
+				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn got response add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
+				ip_set_add_src_ip(in, out, skb, "gfwlist");
+			}
+		}
+
 		return ret;
 	} else {
 		if (TCPH(l4)->rst) {
