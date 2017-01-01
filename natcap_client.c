@@ -240,10 +240,10 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
-		goto bypass_out;
+		return NF_ACCEPT;
 	}
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
-		goto natcaped_out;
+		return NF_ACCEPT;
 	}
 	if (nf_ct_is_confirmed(ct)) {
 		return NF_ACCEPT;
@@ -267,7 +267,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-				goto bypass_out;
+				return NF_ACCEPT;
 			}
 			if (server.encryption) {
 				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
@@ -275,7 +275,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-			goto bypass_out;
+			return NF_ACCEPT;
 		}
 	} else {
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
@@ -289,7 +289,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-				goto bypass_out;
+				return NF_ACCEPT;
 			}
 			if (server.encryption) {
 				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
@@ -297,7 +297,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
 		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-			goto bypass_out;
+			return NF_ACCEPT;
 		}
 	}
 
@@ -327,7 +327,6 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": after encode\n", DEBUG_UDP_ARG(iph,l4));
 	}
 
-natcaped_out:
 	if (iph->protocol == IPPROTO_TCP) {
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
 			return NF_DROP;
@@ -350,41 +349,7 @@ natcaped_out:
 			}
 		}
 	}
-	return NF_ACCEPT;
 
-bypass_out:
-	if (iph->protocol == IPPROTO_TCP) {
-		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
-			return NF_DROP;
-		}
-		iph = ip_hdr(skb);
-		l4 = (void *)iph + iph->ihl * 4;
-		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
-			if (TCPH(l4)->syn && !TCPH(l4)->ack &&
-					(TCPH(l4)->dest == __constant_htons(80) || TCPH(l4)->dest == __constant_htons(443))) {
-				if (!test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
-					NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": bypass syn1\n", DEBUG_TCP_ARG(iph,l4));
-					return NF_ACCEPT;
-				}
-				if (!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
-					NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": bypass syn2\n", DEBUG_TCP_ARG(iph,l4));
-					return NF_ACCEPT;
-				}
-				if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
-					if (!is_natcap_server(iph->daddr) && ip_set_test_dst_ip(in, out, skb, "cniplist") <= 0) {
-						NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": bypass syn3 add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
-						ip_set_add_dst_ip(in, out, skb, "gfwlist");
-					}
-				}
-			}
-		} else {
-			if (TCPH(l4)->rst && TCPH(l4)->source == __constant_htons(80)
-					&& ip_set_test_src_ip(in, out, skb, "cniplist") <= 0) {
-				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": bypass get reset add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
-				ip_set_add_src_ip(in, out, skb, "gfwlist");
-			}
-		}
-	}
 	return NF_ACCEPT;
 }
 
@@ -1180,6 +1145,10 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		return ret;
 	} else {
 		if (TCPH(l4)->rst) {
+			if (TCPH(l4)->source == __constant_htons(80) && ip_set_test_src_ip(in, out, skb, "cniplist") <= 0) {
+				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": bypass get reset add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
+				ip_set_add_src_ip(in, out, skb, "gfwlist");
+			}
 			NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": ignore rst\n", DEBUG_TCP_ARG(iph,l4));
 			return NF_DROP;
 		}
