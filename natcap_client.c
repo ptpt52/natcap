@@ -333,8 +333,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
-		if (TCPH(l4)->syn && !TCPH(l4)->ack &&
-				(TCPH(l4)->dest == __constant_htons(80) || TCPH(l4)->dest == __constant_htons(443))) {
+		if (TCPH(l4)->syn && !TCPH(l4)->ack) {
 			if (!test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": natcaped syn1\n", DEBUG_TCP_ARG(iph,l4));
 				return NF_ACCEPT;
