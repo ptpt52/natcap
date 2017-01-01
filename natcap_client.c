@@ -239,17 +239,14 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+		return NF_ACCEPT;
+	}
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
-		return NF_ACCEPT;
-	}
-	if (nf_ct_is_confirmed(ct)) {
-		return NF_ACCEPT;
-	}
-	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
-		return NF_ACCEPT;
+		goto natcaped_out;
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
@@ -327,6 +324,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": after encode\n", DEBUG_UDP_ARG(iph,l4));
 	}
 
+natcaped_out:
 	if (iph->protocol == IPPROTO_TCP) {
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
 			return NF_DROP;
