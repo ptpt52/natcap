@@ -1180,17 +1180,17 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		if (!test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 			NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": got cfm\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-			//master = ct->master;
-			//ct->master = NULL;
-			//nf_ct_put(master);
+			master = ct->master;
+			ct->master = NULL;
+			if (master) {
+				nf_ct_put(master);
+			}
 		}
 
 		if (!test_bit(IPS_NATCAP_ACK_BIT, &ct->status)) {
 			NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": drop without lock cfm\n", DEBUG_TCP_ARG(iph,l4));
 			return NF_DROP;
 		}
-
-		skb->mark = 123;
 	}
 
 	return NF_ACCEPT;
