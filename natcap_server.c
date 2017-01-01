@@ -491,7 +491,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 
 			NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
-			//reply CFM pkt
+			//reply ACK pkt
 			natcap_udp_reply_cfm(in, skb);
 		}
 

@@ -38,10 +38,10 @@ rmmod natcap >/dev/null 2>&1
 ( modprobe natcap mode=0 || insmod ./natcap.ko mode=0 ) && {
 cat <<EOF >>/dev/natcap_ctl
 clean
-debug=3
+debug=7
 disabled=0
 encode_mode=TCP
 server_persist_timeout=6
-server 192.168.15.192:65535-e
+server 45.32.40.68:6553-e
 EOF
 }
