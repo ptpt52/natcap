@@ -1146,8 +1146,8 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": bypass get reset add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
 				ip_set_add_src_ip(in, out, skb, "gfwlist");
 			}
-			NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": ignore rst\n", DEBUG_TCP_ARG(iph,l4));
-			return NF_DROP;
+			//NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": ignore rst\n", DEBUG_TCP_ARG(iph,l4));
+			//return NF_DROP;
 		}
 
 		if (!test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
