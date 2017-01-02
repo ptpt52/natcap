@@ -157,31 +157,6 @@ static inline struct natcap_TCPOPT *natcap_tcp_decode_header(struct tcphdr *tcph
 	return opt;
 }
 
-extern int natcap_udp_encode(struct sk_buff *skb, unsigned long status, unsigned int opcode);
-extern int natcap_udp_decode(struct sk_buff *skb, struct natcap_udp_tcpopt *nuo);
-static inline struct natcap_udp_tcpopt *natcap_udp_decode_header(struct tcphdr *tcph)
-{
-	struct natcap_udp_tcpopt *pnuo = NULL;
-
-	if (!((tcph->syn && !tcph->ack) || (tcph->rst && tcph->ack))) {
-		return NULL;
-	}
-
-	pnuo = (struct natcap_udp_tcpopt *)((void *)tcph + sizeof(struct tcphdr));
-	if (
-			!(
-				tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int)) &&
-				(pnuo->opcode == TCPOPT_NATCAP_UDP || pnuo->opcode == TCPOPT_NATCAP_UDP_ENC) &&
-				pnuo->opsize == ALIGN(sizeof(struct natcap_udp_tcpopt), sizeof(unsigned int))
-			 )
-	   )
-	{
-		return NULL;
-	}
-
-	return pnuo;
-}
-
 static inline void natcap_adjust_tcp_mss(struct tcphdr *tcph, int delta)
 {
 	unsigned int optlen, i;
