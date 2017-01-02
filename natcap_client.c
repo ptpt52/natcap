@@ -872,7 +872,6 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
-			master->master = ct;
 			if (server.encryption) {
 				set_bit(IPS_NATCAP_ENC_BIT, &master->status);
 				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
@@ -881,6 +880,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				set_bit(IPS_NATCAP_UDPENC_BIT, &master->status);
 				set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status);
 			}
+			master->master = ct;
 			set_bit(IPS_NATCAP_BIT, &master->status);
 		}
 		/* XXX I just confirm it first  */
