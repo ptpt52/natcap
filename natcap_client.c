@@ -860,6 +860,15 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
+		/* XXX I just confirm it first  */
+		ret = nf_conntrack_confirm(nskb);
+		if (ret != NF_ACCEPT) {
+			if (ret == NF_DROP) {
+				consume_skb(nskb);
+			}
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+			return NF_ACCEPT;
+		}
 		master = nf_ct_get(nskb, &ctinfo);
 		if (!master) {
 			consume_skb(nskb);
@@ -882,15 +891,6 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			}
 			master->master = ct;
 			set_bit(IPS_NATCAP_BIT, &master->status);
-		}
-		/* XXX I just confirm it first  */
-		ret = nf_conntrack_confirm(nskb);
-		if (ret != NF_ACCEPT) {
-			if (ret == NF_DROP) {
-				consume_skb(nskb);
-			}
-			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-			return NF_ACCEPT;
 		}
 
 		nf_conntrack_get(&master->ct_general);
@@ -938,6 +938,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 		if ((struct nf_conn *)nskb->nfct != master) {
 			consume_skb(nskb);
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": skb->nfct != master, ignore and drop\n", DEBUG_TCP_ARG(iph,l4));
 			goto out;
 		}
@@ -1112,6 +1113,9 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		master = ct->master;
 		if (!master) {
+			return NF_DROP;
+		}
+		if (!test_bit(IPS_NATCAP_SYN_BIT, &master->status)) {
 			return NF_DROP;
 		}
 
