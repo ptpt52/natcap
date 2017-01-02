@@ -299,6 +299,13 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 	}
 
 	if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
+		if (ipv4_is_lbcast(iph->saddr) || ipv4_is_lbcast(iph->daddr) ||
+				ipv4_is_loopback(iph->saddr) || ipv4_is_loopback(iph->daddr) ||
+				ipv4_is_multicast(iph->saddr) || ipv4_is_multicast(iph->daddr) ||
+				ipv4_is_zeronet(iph->saddr) || ipv4_is_zeronet(iph->daddr)) {
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			return NF_ACCEPT;
+		}
 		if (iph->protocol == IPPROTO_TCP) {
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		} else {
@@ -812,6 +819,13 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	}
 
 	if (!test_and_set_bit(IPS_NATCAP_SYN_BIT, &ct->status)) {
+		if (ipv4_is_lbcast(iph->saddr) || ipv4_is_lbcast(iph->daddr) ||
+				ipv4_is_loopback(iph->saddr) || ipv4_is_loopback(iph->daddr) ||
+				ipv4_is_multicast(iph->saddr) || ipv4_is_multicast(iph->daddr) ||
+				ipv4_is_zeronet(iph->saddr) || ipv4_is_zeronet(iph->daddr)) {
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+			return NF_ACCEPT;
+		}
 		if (ct->master) {
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
