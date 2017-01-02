@@ -883,11 +883,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			}
 			if (server.encryption) {
 				set_bit(IPS_NATCAP_ENC_BIT, &master->status);
-				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 			}
 			if (encode_mode == UDP_ENCODE) {
 				set_bit(IPS_NATCAP_UDPENC_BIT, &master->status);
-				set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status);
 			}
 			master->master = ct;
 			set_bit(IPS_NATCAP_BIT, &master->status);
