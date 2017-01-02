@@ -872,7 +872,6 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
-			nf_conntrack_get(&ct->ct_general);
 			master->master = ct;
 			if (server.encryption) {
 				set_bit(IPS_NATCAP_ENC_BIT, &master->status);
@@ -1143,6 +1142,15 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			net = dev_net(out);
 
 		ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, skb);
+		if (ret != NF_ACCEPT) {
+			return ret;
+		}
+
+		ct = nf_ct_get(skb, &ctinfo);
+		if (master != ct) {
+			NATCAP_ERROR("(CPMI)" DEBUG_TCP_FMT ": master != ct, ignore and drop\n", DEBUG_TCP_ARG(iph,l4));
+			return NF_DROP;
+		}
 
 		NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": after natcap reply\n", DEBUG_TCP_ARG(iph,l4));
 
@@ -1153,7 +1161,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			}
 		}
 
-		return ret;
+		return NF_ACCEPT;
 	} else {
 		if (TCPH(l4)->rst) {
 			if (TCPH(l4)->source == __constant_htons(80) && ip_set_test_src_ip(in, out, skb, "cniplist") <= 0) {
