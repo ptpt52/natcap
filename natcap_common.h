@@ -214,12 +214,22 @@ extern void natcap_common_exit(void);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 #define NF_OKFN(skb) do { \
-	okfn(skb); \
+	if (okfn) { \
+		okfn(skb); \
+	} else { \
+		kfree_skb(skb); \
+		NATCAP_println("NF_OKFN is null, drop pkt=%p", skb); \
+	} \
 } while (0)
 
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 #define NF_OKFN(skb) do { \
-	okfn(skb); \
+	if (okfn) { \
+		okfn(skb); \
+	} else { \
+		kfree_skb(skb); \
+		NATCAP_println("NF_OKFN is null, drop pkt=%p", skb); \
+	} \
 } while (0)
 
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -228,6 +238,7 @@ extern void natcap_common_exit(void);
 		state->okfn(state->sk, skb); \
 	} else { \
 		kfree_skb(skb); \
+		NATCAP_println("NF_OKFN is null, drop pkt=%p", skb); \
 	} \
 } while (0)
 
@@ -237,6 +248,7 @@ extern void natcap_common_exit(void);
 		state->okfn(state->net, state->sk, skb); \
 	} else { \
 		kfree_skb(skb); \
+		NATCAP_println("NF_OKFN is null, drop pkt=%p", skb); \
 	} \
 } while (0)
 
