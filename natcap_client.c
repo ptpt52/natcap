@@ -1110,10 +1110,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		master = ct->master;
-		if (!master) {
-			return NF_DROP;
-		}
-		if (!test_bit(IPS_NATCAP_SYN_BIT, &master->status)) {
+		if (!master || !test_bit(IPS_NATCAP_SYN_BIT, &master->status) || master->master != ct) {
 			return NF_DROP;
 		}
 
@@ -1174,21 +1171,19 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": bypass get reset add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
 				ip_set_add_src_ip(in, out, skb, "gfwlist");
 			}
-			//NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": ignore rst\n", DEBUG_TCP_ARG(iph,l4));
-			//return NF_DROP;
 		}
 
 		if (!test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 			NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": got cfm\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-			/*
 			master = ct->master;
-			ct->master = NULL;
-			if (master) {
+			if (master && master->master == ct &&
+					test_bit(IPS_NATCAP_SYN_BIT, &master->status) &&
+					test_bit(IPS_NATCAP_BIT, &master->status)) {
+				ct->master = NULL;
 				master->master = NULL;
 				nf_ct_put(master);
 			}
-			*/
 		}
 
 		if (!test_bit(IPS_NATCAP_ACK_BIT, &ct->status)) {
