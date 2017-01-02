@@ -936,6 +936,11 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			}
 			goto out;
 		}
+		if ((struct nf_conn *)nskb->nfct != master) {
+			consume_skb(nskb);
+			NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": skb->nfct != master, ignore and drop\n", DEBUG_TCP_ARG(iph,l4));
+			goto out;
+		}
 		/* XXX I just confirm it first  */
 		ret = nf_conntrack_confirm(nskb);
 		if (ret != NF_ACCEPT) {
@@ -1146,9 +1151,8 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			return ret;
 		}
 
-		ct = nf_ct_get(skb, &ctinfo);
-		if (master != ct) {
-			NATCAP_ERROR("(CPMI)" DEBUG_TCP_FMT ": master != ct, ignore and drop\n", DEBUG_TCP_ARG(iph,l4));
+		if ((struct nf_conn *)skb->nfct != master) {
+			NATCAP_ERROR("(CPMI)" DEBUG_TCP_FMT ": skb->nfct != master, ignore and drop\n", DEBUG_TCP_ARG(iph,l4));
 			return NF_DROP;
 		}
 
@@ -1178,6 +1182,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			master = ct->master;
 			ct->master = NULL;
 			if (master) {
+				master->master = NULL;
 				nf_ct_put(master);
 			}
 		}
