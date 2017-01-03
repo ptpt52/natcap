@@ -327,7 +327,10 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			return NF_DROP;
 		}
 
-		if (ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
+		if (ip_set_test_dst_ip(in, out, skb, "bypasslist") > 0) {
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			return NF_ACCEPT;
+		} else if (ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
 			natcap_server_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
@@ -1208,7 +1211,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 		if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
 			if (!is_natcap_server(iph->saddr) && ip_set_test_src_ip(in, out, skb, "cniplist") <= 0) {
-				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn got response add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn natcap got response add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
 				ip_set_add_src_ip(in, out, skb, "gfwlist");
 			}
 		}
@@ -1233,6 +1236,11 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				natcap_reset_synack(skb, in);
 			}
 			return NF_DROP;
+		}
+
+		if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status) && !TCPH(l4)->rst) {
+			NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn bypass got response add target to bypasslist\n", DEBUG_TCP_ARG(iph,l4));
+			ip_set_add_src_ip(in, out, skb, "bypasslist");
 		}
 	}
 
