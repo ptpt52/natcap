@@ -13,6 +13,7 @@
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
+#include <net/netfilter/nf_conntrack_extend.h>
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_core.h>
 #include <linux/netfilter/ipset/ip_set.h>
@@ -737,6 +738,80 @@ unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto
 	range.max_proto.all = man_proto;
 	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
 #endif
+}
+
+int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
+{
+	struct nf_ct_ext *old, *new;
+	struct nf_conn_nat *nat = NULL;
+	unsigned int newoff, newlen = 0;
+	size_t alloc_size;
+	size_t var_alloc_len = ALIGN(sizeof(struct tuple), sizeof(unsigned long));
+
+	if (nf_ct_is_confirmed(ct)) {
+		return -1;
+	}
+	if (ct->ext && !!ct->ext->offset[NF_CT_EXT_NAT]) {
+		return -1;
+	}
+
+	old = ct->ext;
+	if (!old) {
+		newoff = ALIGN(sizeof(struct nf_ct_ext), sizeof(unsigned long));
+		newlen = ALIGN(newoff + var_alloc_len, sizeof(unsigned long));
+		alloc_size = ALIGN(newlen + sizeof(struct nf_conn_nat), sizeof(unsigned long));
+
+		new = kzalloc(alloc_size, gfp);
+		if (!new) {
+			return -1;
+		}
+		new->len = newlen;
+		ct->ext = new;
+		nat = nf_ct_ext_add(ct, NF_CT_EXT_NAT, gfp);
+	} else {
+		newoff = ALIGN(old->len, sizeof(unsigned long));
+		newlen = ALIGN(newoff + var_alloc_len, sizeof(unsigned long));
+		alloc_size = ALIGN(newlen + sizeof(struct nf_conn_nat), sizeof(unsigned long));
+
+		new = __krealloc(old, alloc_size, gfp);
+		if (!new) {
+			return -1;
+		}
+
+		if (new != old) {
+			kfree_rcu(old, rcu);
+			rcu_assign_pointer(ct->ext, new);
+		}
+		new->len = newlen;
+		memset((void *)new + newoff, 0, newlen - newoff);
+		nat = nf_ct_ext_add(ct, NF_CT_EXT_NAT, gfp);
+	}
+
+	if (nat == NULL) {
+		return -1;
+	}
+
+	if (newlen != ct->ext->offset[NF_CT_EXT_NAT]) {
+		NATCAP_ERROR("nat ext offset(%u) is not at %u as expect\n", ct->ext->offset[NF_CT_EXT_NAT], newlen);
+		return -1;
+	}
+
+	NATCAP_DEBUG("nat ext offset(%u) newoff:%u newlen:%u var_alloc_len:%u\n",
+			ct->ext->offset[NF_CT_EXT_NAT], newoff, newlen, (unsigned int)var_alloc_len);
+
+	return 0;
+}
+
+struct tuple *natcap_session_get(struct nf_conn *ct)
+{
+	struct nf_conn_nat *nat;
+
+	nat  = nfct_nat(ct);
+	if (!nat) {
+		return NULL;
+	}
+
+	return (struct tuple *)((void *)nat - ALIGN(sizeof(struct tuple), sizeof(unsigned long)));
 }
 
 int natcap_common_init(void)

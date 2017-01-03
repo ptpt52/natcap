@@ -224,6 +224,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	void *l4;
+	struct tuple *tup;
 	struct tuple server;
 
 	if (disabled)
@@ -272,6 +273,39 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			if (!nf_ct_is_confirmed(ct)) {
+				if (ipv4_is_lbcast(iph->saddr) || ipv4_is_lbcast(iph->daddr) ||
+						ipv4_is_loopback(iph->saddr) || ipv4_is_loopback(iph->daddr) ||
+						ipv4_is_multicast(iph->saddr) || ipv4_is_multicast(iph->daddr) ||
+						ipv4_is_zeronet(iph->saddr) || ipv4_is_zeronet(iph->daddr)) {
+					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+					return NF_ACCEPT;
+				}
+				if (ct->master) {
+					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+					return NF_ACCEPT;
+				}
+
+				natcap_server_info_select(iph->daddr, TCPH(l4)->dest, &server);
+				if (server.ip == 0) {
+					NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
+					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+					return NF_ACCEPT;
+				}
+
+				if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
+					NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
+					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				}
+				tup = natcap_session_get(ct);
+				if (!tup) {
+					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+					return NF_ACCEPT;
+				}
+				memcpy(tup, &server, sizeof(struct tuple));
+
+				set_bit(IPS_NATCAP_SYN_BIT, &ct->status);
+			}
 			return NF_ACCEPT;
 		}
 	} else {
@@ -790,12 +824,12 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	unsigned long status = NATCAP_CLIENT_MODE;
-	struct nf_conn *ct, *master;
+	struct nf_conn *ct, *master = NULL;
 	struct iphdr *iph;
 	void *l4;
 	struct net *net = &init_net;
 	struct sk_buff *nskb = NULL;
-	struct tuple server;
+	struct tuple *tup = NULL;
 	struct natcap_TCPOPT tcpopt;
 
 	if (disabled)
@@ -817,210 +851,151 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
-
-	if (!test_and_set_bit(IPS_NATCAP_SYN_BIT, &ct->status)) {
-		if (ipv4_is_lbcast(iph->saddr) || ipv4_is_lbcast(iph->daddr) ||
-				ipv4_is_loopback(iph->saddr) || ipv4_is_loopback(iph->daddr) ||
-				ipv4_is_multicast(iph->saddr) || ipv4_is_multicast(iph->daddr) ||
-				ipv4_is_zeronet(iph->saddr) || ipv4_is_zeronet(iph->daddr)) {
-			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-			return NF_ACCEPT;
-		}
-		if (ct->master) {
-			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-			return NF_ACCEPT;
-		}
-
-		natcap_server_info_select(iph->daddr, TCPH(l4)->dest, &server);
-		if (server.ip == 0) {
-			NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
-			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-			return NF_ACCEPT;
-		}
-
-		nskb = skb_copy(skb, GFP_ATOMIC);
-		nf_conntrack_put(nskb->nfct);
-		nskb->nfct = NULL;
-
-		iph = ip_hdr(nskb);
-		l4 = (void *)iph + iph->ihl * 4;
-		iph->daddr = server.ip;
-		TCPH(l4)->dest = server.port;
-		skb_rcsum_tcpudp(nskb);
-
-		if (in)
-			net = dev_net(in);
-		else if (out)
-			net = dev_net(out);
-		ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, nskb);
-		if (ret != NF_ACCEPT) {
-			if (ret == NF_DROP) {
-				consume_skb(nskb);
-			}
-			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-			return NF_ACCEPT;
-		}
-		/* XXX I just confirm it first  */
-		ret = nf_conntrack_confirm(nskb);
-		if (ret != NF_ACCEPT) {
-			if (ret == NF_DROP) {
-				consume_skb(nskb);
-			}
-			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-			return NF_ACCEPT;
-		}
-		master = nf_ct_get(nskb, &ctinfo);
-		if (!master) {
-			consume_skb(nskb);
-			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-			return NF_ACCEPT;
-		}
-		if (!test_and_set_bit(IPS_NATCAP_SYN_BIT, &master->status)) {
-			if (master->master) {
-				consume_skb(nskb);
-				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-				return NF_ACCEPT;
-			}
-			if (server.encryption) {
-				set_bit(IPS_NATCAP_ENC_BIT, &master->status);
-			}
-			if (encode_mode == UDP_ENCODE) {
-				set_bit(IPS_NATCAP_UDPENC_BIT, &master->status);
-			}
-			master->master = ct;
-			set_bit(IPS_NATCAP_BIT, &master->status);
-		}
-
-		nf_conntrack_get(&master->ct_general);
-		ct->master = master;
-
-		goto nskb_post_out;
+	if (!test_bit(IPS_NATCAP_SYN_BIT, &ct->status)) {
+		return NF_ACCEPT;
 	}
-
-	iph = ip_hdr(skb);
-	l4 = (void *)iph + iph->ihl * 4;
-
 	if (test_bit(IPS_NATCAP_ACK_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 
-	master = ct->master;
-	if (!master) {
+	tup = natcap_session_get(ct);
+	if (!tup) {
+		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
 
-	if (test_bit(IPS_NATCAP_SYN_BIT, &master->status)) {
-		nskb = skb_copy(skb, GFP_ATOMIC);
-		nf_conntrack_put(nskb->nfct);
-		nskb->nfct = NULL;
+	nskb = skb_copy(skb, GFP_ATOMIC);
+	nf_conntrack_put(nskb->nfct);
+	nskb->nfct = NULL;
 
-		iph = ip_hdr(nskb);
-		l4 = (void *)iph + iph->ihl * 4;
+	iph = ip_hdr(nskb);
+	l4 = (void *)iph + iph->ihl * 4;
 
-		NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": before natcap post out\n", DEBUG_TCP_ARG(iph,l4));
+	NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": before natcap post out\n", DEBUG_TCP_ARG(iph,l4));
 
-		iph->daddr = master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
-		TCPH(l4)->dest = master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
-		skb_rcsum_tcpudp(nskb);
+	iph->daddr = tup->ip;
+	TCPH(l4)->dest = tup->port;
+	skb_rcsum_tcpudp(nskb);
 
-		if (in)
-			net = dev_net(in);
-		else if (out)
-			net = dev_net(out);
-		ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, nskb);
-		if (ret != NF_ACCEPT) {
-			if (ret == NF_DROP) {
-				consume_skb(nskb);
-			}
-			goto out;
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
+	ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, nskb);
+	if (ret != NF_ACCEPT) {
+		if (ret == NF_DROP) {
+			consume_skb(nskb);
 		}
-		if ((struct nf_conn *)nskb->nfct != master) {
+		return NF_ACCEPT;
+	}
+	/* XXX I just confirm it first  */
+	ret = nf_conntrack_confirm(nskb);
+	if (ret != NF_ACCEPT) {
+		if (ret == NF_DROP) {
+			consume_skb(nskb);
+		}
+		return NF_ACCEPT;
+	}
+
+	master = nf_ct_get(nskb, &ctinfo);
+	if (!master || master == ct) {
+		consume_skb(nskb);
+		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+		return NF_ACCEPT;
+	}
+	if (!test_and_set_bit(IPS_NATCAP_SYN_BIT, &master->status)) {
+		if (master->master) {
 			consume_skb(nskb);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-			NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": skb->nfct != master, ignore and drop\n", DEBUG_TCP_ARG(iph,l4));
-			goto out;
+			return NF_ACCEPT;
 		}
-		/* XXX I just confirm it first  */
-		ret = nf_conntrack_confirm(nskb);
-		if (ret != NF_ACCEPT) {
-			if (ret == NF_DROP) {
-				consume_skb(nskb);
-			}
-			goto out;
+		if (tup->encryption) {
+			set_bit(IPS_NATCAP_ENC_BIT, &master->status);
 		}
+		if (encode_mode == UDP_ENCODE) {
+			set_bit(IPS_NATCAP_UDPENC_BIT, &master->status);
+		}
+		nf_conntrack_get(&ct->ct_general);
+		master->master = ct;
+		set_bit(IPS_NATCAP_BIT, &master->status);
 	}
 
-nskb_post_out:
-	if (nskb) {
-		skb = nskb;
-		if (test_bit(IPS_NATCAP_ENC_BIT, &master->status)) {
-			status |= NATCAP_NEED_ENC;
-		}
+	if (master->master != ct) {
+		consume_skb(nskb);
+		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+		NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": bad ct=%p and master=%p\n", DEBUG_TCP_ARG(iph,l4), ct, master);
+		return NF_ACCEPT;
+	}
 
-		ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
-		if (ret == 0) {
-			ret = natcap_tcp_encode(skb, &tcpopt);
-			iph = ip_hdr(skb);
-			l4 = (void *)iph + iph->ihl * 4;
-		}
-		if (ret != 0) {
-			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-			consume_skb(skb);
+	skb = nskb;
+	if (test_bit(IPS_NATCAP_ENC_BIT, &master->status)) {
+		status |= NATCAP_NEED_ENC;
+	}
+
+	ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
+	if (ret == 0) {
+		ret = natcap_tcp_encode(skb, &tcpopt);
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+	}
+	if (ret != 0) {
+		NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+		consume_skb(skb);
+		return NF_ACCEPT;
+	}
+
+	NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": after encode\n", DEBUG_TCP_ARG(iph,l4));
+
+	if (!test_bit(IPS_NATCAP_UDPENC_BIT, &master->status)) {
+		flow_total_tx_bytes += skb->len;
+		NF_OKFN(skb);
+		goto out;
+	}
+
+	if (skb_is_gso(skb)) {
+		struct sk_buff *segs;
+
+		segs = skb_gso_segment(skb, 0);
+		consume_skb(skb);
+		if (IS_ERR(segs)) {
 			goto out;
 		}
+		skb = segs;
+	}
 
-		NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": after encode\n", DEBUG_TCP_ARG(iph,l4));
+	do {
+		int offlen;
+		struct sk_buff *nskb = skb->next;
 
-		if (!test_bit(IPS_NATCAP_UDPENC_BIT, &master->status)) {
-			flow_total_tx_bytes += skb->len;
-			NF_OKFN(skb);
-			goto out;
-		}
-
-		if (skb_is_gso(skb)) {
-			struct sk_buff *segs;
-
-			segs = skb_gso_segment(skb, 0);
+		if (skb->end - skb->tail < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 			consume_skb(skb);
-			if (IS_ERR(segs)) {
-				goto out;
-			}
-			skb = segs;
-		}
-
-		do {
-			int offlen;
-			struct sk_buff *nskb = skb->next;
-
-			if (skb->end - skb->tail < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
-				consume_skb(skb);
-				skb = nskb;
-				NATCAP_ERROR("pskb_expand_head failed\n");
-				continue;
-			}
-			iph = ip_hdr(skb);
-			l4 = (void *)iph + iph->ihl * 4;
-
-			offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4;
-			BUG_ON(offlen < 0);
-			memmove((void *)UDPH(l4) + 4 + 8, (void *)UDPH(l4) + 4, offlen);
-			iph->tot_len = htons(ntohs(iph->tot_len) + 8);
-			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
-			skb->len += 8;
-			skb->tail += 8;
-			*((unsigned int *)((void *)UDPH(l4) + 8)) = __constant_htonl(0xFFFF0099);
-			iph->protocol = IPPROTO_UDP;
-			skb_rcsum_tcpudp(skb);
-			skb->next = NULL;
-			flow_total_tx_bytes += skb->len;
-
-			NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
-
-			NF_OKFN(skb);
-
 			skb = nskb;
-		} while (skb);
-	}
+			NATCAP_ERROR("pskb_expand_head failed\n");
+			continue;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+
+		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4;
+		BUG_ON(offlen < 0);
+		memmove((void *)UDPH(l4) + 4 + 8, (void *)UDPH(l4) + 4, offlen);
+		iph->tot_len = htons(ntohs(iph->tot_len) + 8);
+		UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
+		skb->len += 8;
+		skb->tail += 8;
+		*((unsigned int *)((void *)UDPH(l4) + 8)) = __constant_htonl(0xFFFF0099);
+		iph->protocol = IPPROTO_UDP;
+		skb_rcsum_tcpudp(skb);
+		skb->next = NULL;
+		flow_total_tx_bytes += skb->len;
+
+		NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
+
+		NF_OKFN(skb);
+
+		skb = nskb;
+	} while (skb);
 
 out:
 	if (test_bit(IPS_NATCAP_ACK_BIT, &master->status)) {
@@ -1110,7 +1085,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		master = ct->master;
-		if (!master || !test_bit(IPS_NATCAP_SYN_BIT, &master->status) || master->master != ct) {
+		if (!master || !test_bit(IPS_NATCAP_SYN_BIT, &master->status)) {
 			return NF_DROP;
 		}
 
@@ -1176,14 +1151,6 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		if (!test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 			NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": got cfm\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-			master = ct->master;
-			if (master && master->master == ct &&
-					test_bit(IPS_NATCAP_SYN_BIT, &master->status) &&
-					test_bit(IPS_NATCAP_BIT, &master->status)) {
-				ct->master = NULL;
-				master->master = NULL;
-				nf_ct_put(master);
-			}
 		}
 
 		if (!test_bit(IPS_NATCAP_ACK_BIT, &ct->status)) {
