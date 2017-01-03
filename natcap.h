@@ -129,8 +129,11 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_SYN3 (1 << IPS_NATCAP_SYN3_BIT)
 #define IPS_NATCAP_AUTH_BIT 30
 #define IPS_NATCAP_AUTH (1 << IPS_NATCAP_AUTH_BIT)
+
 #define IPS_NATCAP_DROP_BIT 31
 #define IPS_NATCAP_DROP (1 << IPS_NATCAP_DROP_BIT)
+#define IPS_NATCAP_IPSET_BIT 31
+#define IPS_NATCAP_IPSET (1 << IPS_NATCAP_IPSET_BIT)
 
 #define IPS_NATCAP_UDP_BIT 23
 #define IPS_NATCAP_UDP (1 << IPS_NATCAP_UDP_BIT)
