@@ -33,7 +33,7 @@ static inline int natcap_auth(const struct net_device *in,
 	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	if (tcpopt->header.type == NATCAP_TCPOPT_ALL) {
+	if (tcpopt->header.type == NATCAP_TCPOPT_ALL || tcpopt->header.type == NATCAP_TCPOPT_SYN) {
 		if (server) {
 			server->ip = tcpopt->all.data.ip;
 			server->port = tcpopt->all.data.port;
@@ -553,6 +553,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
 		return NF_ACCEPT;
 	}
+	l4 = (void *)iph + iph->ihl * 4;
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
@@ -571,13 +572,14 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 				natcap_adjust_tcp_mss(TCPH(l4), -8);
 				return NF_ACCEPT;
 			}
-		} else if (iph->protocol == IPPROTO_UDP) {
-			if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12)) {
-				return NF_ACCEPT;
+			if (TCPH(l4)->seq == TCPOPT_NATCAP && TCPH(l4)->ack_seq == TCPOPT_NATCAP) {
+				ret = nf_conntrack_confirm(skb);
+				if (ret != NF_ACCEPT) {
+					return ret;
+				}
+				return NF_DROP;
 			}
-			iph = ip_hdr(skb);
-			l4 = (void *)iph + iph->ihl * 4;
-
+		} else if (iph->protocol == IPPROTO_UDP) {
 			if (*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == __constant_htonl(0xFFFE0099) &&
 					*((unsigned short *)((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == __constant_htons(0x1)) {
 				ret = nf_conntrack_confirm(skb);
@@ -591,11 +593,6 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
-		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
-			return NF_DROP;
-		}
-		iph = ip_hdr(skb);
-		l4 = (void *)iph + iph->ihl * 4;
 		if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr)) {
 			return NF_DROP;
 		}
@@ -674,12 +671,6 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 		return NF_STOLEN;
 	} else if (iph->protocol == IPPROTO_UDP) {
-		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
-			return NF_ACCEPT;
-		}
-		iph = ip_hdr(skb);
-		l4 = (void *)iph + iph->ihl * 4;
-
 		NATCAP_DEBUG("(SPO)" DEBUG_UDP_FMT ": pass data reply\n", DEBUG_UDP_ARG(iph,l4));
 	}
 

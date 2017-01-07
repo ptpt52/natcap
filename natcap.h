@@ -50,6 +50,7 @@ struct natcap_TCPOPT {
 	union {
 		struct {
 #define NATCAP_TCPOPT_ALL 1
+#define NATCAP_TCPOPT_SYN 4
 			struct natcap_TCPOPT_data data;
 		} all;
 		struct {
