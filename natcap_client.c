@@ -677,16 +677,16 @@ static unsigned int natcap_client_post_out_hook(const struct nf_hook_ops *ops,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
-	//const struct net_device *in = state->in;
-	//const struct net_device *out = state->out;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_client_post_out_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
-	//const struct net_device *in = state->in;
-	//const struct net_device *out = state->out;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
 #endif
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
@@ -710,6 +710,22 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL && iph->protocol == IPPROTO_TCP) {
+			if (TCPH(l4)->syn && !TCPH(l4)->ack) {
+				if (!test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
+					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn1\n", DEBUG_TCP_ARG(iph,l4));
+					return NF_ACCEPT;
+				}
+				if (!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
+					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn2\n", DEBUG_TCP_ARG(iph,l4));
+					return NF_ACCEPT;
+				}
+				if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
+					NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": bypass syn3 del target from bypasslist\n", DEBUG_TCP_ARG(iph,l4));
+					ip_set_del_dst_ip(in, out, skb, "bypasslist");
+				}
+			}
+		}
 		return NF_ACCEPT;
 	}
 	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
@@ -1353,8 +1369,10 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			return NF_DROP;
 		}
 		if (!test_and_set_bit(IPS_NATCAP_IPSET_BIT, &ct->status) && !TCPH(l4)->rst) {
-			NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn bypass got response add target to bypasslist\n", DEBUG_TCP_ARG(iph,l4));
-			ip_set_add_src_ip(in, out, skb, "bypasslist");
+			if (ip_set_test_src_ip(in, out, skb, "cniplist") > 0) {
+				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn bypass got response add target to bypasslist\n", DEBUG_TCP_ARG(iph,l4));
+				ip_set_add_src_ip(in, out, skb, "bypasslist");
+			}
 		}
 	}
 	return NF_ACCEPT;
