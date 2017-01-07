@@ -80,12 +80,13 @@ static inline int natcap_auth(const struct net_device *in,
 				tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
 				ntohl(tcpopt->user.data.u_hash));
 	} else if (tcpopt->header.type == NATCAP_TCPOPT_DST) {
-		if (!server) {
+		if (server) {
+			server->ip = tcpopt->dst.data.ip;
+			server->port = tcpopt->dst.data.port;
+			server->encryption = tcpopt->header.encryption;
+		} else if (!tcph->syn || tcph->ack) {
 			return E_NATCAP_INVAL;
 		}
-		server->ip = tcpopt->dst.data.ip;
-		server->port = tcpopt->dst.data.port;
-		server->encryption = tcpopt->header.encryption;
 	} else if (server) {
 		return E_NATCAP_INVAL;
 	}
