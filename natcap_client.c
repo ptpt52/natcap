@@ -727,19 +727,61 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
+		struct sk_buff *skb2 = NULL;
+
 		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
 			status |= NATCAP_NEED_ENC;
 		}
 
 		ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
+		if (ret != 0) {
+			if (skb_is_gso(skb) || (!TCPH(l4)->syn || TCPH(l4)->ack)) {
+				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+				return NF_DROP;
+			}
+
+			skb2 = skb_copy(skb, GFP_ATOMIC);
+			if (skb2 == NULL) {
+				NATCAP_ERROR("alloc_skb fail\n");
+				return NF_DROP;
+			}
+			iph = ip_hdr(skb2);
+			l4 = (void *)iph + iph->ihl * 4;
+			skb2->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
+			iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr));
+			iph->ihl = 5;
+			TCPH(l4)->doff = 5;
+			skb_rcsum_tcpudp(skb2);
+
+			ret = natcap_tcpopt_setup(status, skb2, ct, &tcpopt);
+			if (ret != 0) {
+				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+				consume_skb(skb2);
+				return NF_DROP;
+			}
+			ret = natcap_tcp_encode(skb2, &tcpopt);
+			if (ret != 0) {
+				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+				consume_skb(skb2);
+				return NF_DROP;
+			}
+			ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
+			if (ret != 0) {
+				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+				consume_skb(skb2);
+				return NF_DROP;
+			}
+		}
 		if (ret == 0) {
 			ret = natcap_tcp_encode(skb, &tcpopt);
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 		}
 		if (ret != 0) {
-			NATCAP_WARN("(CPO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
-			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d, skb2=%p\n", DEBUG_TCP_ARG(iph,l4), ret, skb2);
+			if (skb2) {
+				consume_skb(skb2);
+			}
 			return NF_DROP;
 		}
 
@@ -747,12 +789,18 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 		if (!test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
 			flow_total_tx_bytes += skb->len;
+			if (skb2) {
+				NF_OKFN(skb2);
+			}
 			return NF_ACCEPT;
 		}
 
 		/* XXX I just confirm it first  */
 		ret = nf_conntrack_confirm(skb);
 		if (ret != NF_ACCEPT) {
+			if (skb2) {
+				consume_skb(skb2);
+			}
 			return ret;
 		}
 
@@ -761,11 +809,19 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 			segs = skb_gso_segment(skb, 0);
 			if (IS_ERR(segs)) {
+				if (skb2) {
+					consume_skb(skb2);
+				}
 				return NF_DROP;
 			}
 
 			consume_skb(skb);
 			skb = segs;
+		}
+
+		if (skb2) {
+			skb2->next = skb;
+			skb = skb2;
 		}
 
 		do {
@@ -901,6 +957,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	enum ip_conntrack_info ctinfo;
 	unsigned long status = NATCAP_CLIENT_MODE;
 	struct nf_conn *ct, *master = NULL;
+	struct sk_buff *skb2 = NULL;
 	struct iphdr *iph;
 	void *l4;
 	struct net *net = &init_net;
@@ -1009,13 +1066,64 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		status |= NATCAP_NEED_ENC;
 	}
 	ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
+	if (ret != 0) {
+		if (skb_is_gso(skb) || (!TCPH(l4)->syn || TCPH(l4)->ack)) {
+			NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+			consume_skb(skb);
+			return NF_ACCEPT;
+		}
+
+		skb2 = skb_copy(skb, GFP_ATOMIC);
+		if (skb2 == NULL) {
+			NATCAP_ERROR("alloc_skb fail\n");
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+			consume_skb(skb);
+			return NF_ACCEPT;
+		}
+		iph = ip_hdr(skb2);
+		l4 = (void *)iph + iph->ihl * 4;
+		skb2->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
+		iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr));
+		iph->ihl = 5;
+		TCPH(l4)->doff = 5;
+		skb_rcsum_tcpudp(skb2);
+
+		ret = natcap_tcpopt_setup(status, skb2, ct, &tcpopt);
+		if (ret != 0) {
+			NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+			consume_skb(skb2);
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+			consume_skb(skb);
+			return NF_ACCEPT;
+		}
+		ret = natcap_tcp_encode(skb2, &tcpopt);
+		if (ret != 0) {
+			NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+			consume_skb(skb2);
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+			consume_skb(skb);
+			return NF_ACCEPT;
+		}
+		ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
+		if (ret != 0) {
+			NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+			consume_skb(skb2);
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+			consume_skb(skb);
+			return NF_ACCEPT;
+		}
+	}
 	if (ret == 0) {
 		ret = natcap_tcp_encode(skb, &tcpopt);
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 	}
 	if (ret != 0) {
-		NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+		NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d, skb2=%p\n", DEBUG_TCP_ARG(iph,l4), ret, skb2);
+		if (skb2) {
+			consume_skb(skb2);
+		}
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 		consume_skb(skb);
 		return NF_ACCEPT;
@@ -1025,6 +1133,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 	if (!test_bit(IPS_NATCAP_UDPENC_BIT, &master->status)) {
 		flow_total_tx_bytes += skb->len;
+		if (skb2) {
+			NF_OKFN(skb2);
+		}
 		NF_OKFN(skb);
 		goto out;
 	}
@@ -1035,9 +1146,17 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		segs = skb_gso_segment(skb, 0);
 		consume_skb(skb);
 		if (IS_ERR(segs)) {
+			if (skb2) {
+				consume_skb(skb2);
+			}
 			goto out;
 		}
 		skb = segs;
+	}
+
+	if (skb2) {
+		skb2->next = skb;
+		skb = skb2;
 	}
 
 	do {
