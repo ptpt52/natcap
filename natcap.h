@@ -63,15 +63,6 @@ struct natcap_TCPOPT {
 	};
 };
 
-struct natcap_udp_tcpopt {
-	u8 opcode;
-#define TCPOPT_NATCAP_UDP 0x9A
-#define TCPOPT_NATCAP_UDP_ENC 0x9B
-	u8 opsize;
-	__be16 port;
-	__be32 ip;
-};
-
 #pragma pack(pop)
 
 struct tuple {
