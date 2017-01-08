@@ -533,6 +533,26 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 
 			if (TCPH(l4)->syn && !TCPH(l4)->ack) {
 				if (natcap_tcp_decode_header(TCPH(l4)) != NULL) {
+					tcpopt.header.encryption = 0;
+					ret = natcap_tcp_decode(skb, &tcpopt);
+					if (ret == 0 && tcpopt.header.opcode == TCPOPT_NATCAP) {
+						struct tuple server;
+						if (tcpopt.header.type == NATCAP_TCPOPT_DST) {
+							server.ip = tcpopt.dst.data.ip;
+							server.port = tcpopt.dst.data.port;
+							server.encryption = tcpopt.header.encryption;
+							if (natcap_dnat_setup(ct, server.ip, server.port) == NF_ACCEPT) {
+								NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup ok, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+							}
+						} else if (tcpopt.header.type == NATCAP_TCPOPT_ALL || tcpopt.header.type == NATCAP_TCPOPT_SYN) {
+							server.ip = tcpopt.all.data.ip;
+							server.port = tcpopt.all.data.port;
+							server.encryption = tcpopt.header.encryption;
+							if (natcap_dnat_setup(ct, server.ip, server.port) == NF_ACCEPT) {
+								NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup ok, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+							}
+						}
+					}
 					skb->mark = XT_MARK_NATCAP;
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": set mark 0x%x\n", DEBUG_TCP_ARG(iph,l4), XT_MARK_NATCAP);
