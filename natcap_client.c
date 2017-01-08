@@ -532,22 +532,21 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			}
 
 			if (TCPH(l4)->syn && !TCPH(l4)->ack) {
-				if (natcap_tcp_decode_header(TCPH(l4)) != NULL) {
-					tcpopt.header.encryption = 0;
-					ret = natcap_tcp_decode(skb, &tcpopt);
-					if (ret == 0 && tcpopt.header.opcode == TCPOPT_NATCAP) {
+				struct natcap_TCPOPT *opt = natcap_tcp_decode_header(TCPH(l4));
+				if (opt != NULL) {
+					if (opt->header.opcode == TCPOPT_NATCAP) {
 						struct tuple server;
-						if (tcpopt.header.type == NATCAP_TCPOPT_DST) {
-							server.ip = tcpopt.dst.data.ip;
-							server.port = tcpopt.dst.data.port;
-							server.encryption = tcpopt.header.encryption;
+						if (opt->header.type == NATCAP_TCPOPT_DST) {
+							server.ip = opt->dst.data.ip;
+							server.port = opt->dst.data.port;
+							server.encryption = opt->header.encryption;
 							if (natcap_dnat_setup(ct, server.ip, server.port) == NF_ACCEPT) {
 								NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup ok, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 							}
-						} else if (tcpopt.header.type == NATCAP_TCPOPT_ALL || tcpopt.header.type == NATCAP_TCPOPT_SYN) {
-							server.ip = tcpopt.all.data.ip;
-							server.port = tcpopt.all.data.port;
-							server.encryption = tcpopt.header.encryption;
+						} else if (opt->header.type == NATCAP_TCPOPT_ALL || opt->header.type == NATCAP_TCPOPT_SYN) {
+							server.ip = opt->all.data.ip;
+							server.port = opt->all.data.port;
+							server.encryption = opt->header.encryption;
 							if (natcap_dnat_setup(ct, server.ip, server.port) == NF_ACCEPT) {
 								NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup ok, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 							}
