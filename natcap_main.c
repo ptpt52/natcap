@@ -37,6 +37,7 @@
 #include "natcap_client.h"
 #include "natcap_server.h"
 #include "natcap_forward.h"
+#include "natcap_knock.h"
 
 static int natcap_major = 0;
 static int natcap_minor = 0;
@@ -63,7 +64,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    clean -- remove all existing server(s)\n"
 				"#\n"
 				"# Info:\n"
-				"#    mode=%u\n"
+				"#    mode=%s(%u)\n"
 				"#    default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n"
 				"#    default_u_hash=%u\n"
 				"#    server_seed=%u\n"
@@ -71,6 +72,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    debug=%u\n"
 				"#    encode_mode=%s\n"
 				"#    server_persist_timeout=%u\n"
+				"#    knock_port=%u\n"
 				"#    flow_total_tx_bytes=%llu\n"
 				"#    flow_total_rx_bytes=%llu\n"
 				"#\n"
@@ -82,13 +84,14 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"encode_mode=%s\n"
 				"u_hash=%u\n"
 				"server_persist_timeout=%u\n"
+				"knock_port=%u\n"
 				"\n",
-				mode,
+				mode_str[mode], mode,
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
-				server_seed, disabled, debug, encode_mode_str[encode_mode], server_persist_timeout,
+				server_seed, disabled, debug, encode_mode_str[encode_mode], server_persist_timeout, ntohs(knock_port),
 				flow_total_tx_bytes, flow_total_rx_bytes,
-				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout);
+				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout, ntohs(knock_port));
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -263,6 +266,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			encode_mode = UDP_ENCODE;
 			goto done;
 		}
+	} else if (strncmp(data, "knock_port=", 11) == 0) {
+		unsigned int d;
+		n = sscanf(data, "knock_port=%u", &d);
+		if (n == 1 && d <= 65535) {
+			knock_port = htons((unsigned short)(d & 0xffff));
+			goto done;
+		}
 	}
 
 	NATCAP_println("ignoring line[%s]", data);
@@ -309,6 +319,8 @@ static int natcap_mode_init(void)
 			return natcap_server_init();
 		case FORWARD_MODE:
 			return natcap_forward_init();
+		case KNOCK_MODE:
+			return natcap_knock_init();
 		default:
 			break;
 	}
@@ -318,12 +330,14 @@ static int natcap_mode_init(void)
 static void natcap_mode_exit(void)
 {
 	switch (mode) {
-		case 0:
+		case CLIENT_MODE:
 			return natcap_client_exit();
-		case 1:
+		case SERVER_MODE:
 			return natcap_server_exit();
-		case 2:
+		case FORWARD_MODE:
 			return natcap_forward_exit();
+		case KNOCK_MODE:
+			return natcap_knock_exit();
 		default:
 			break;
 	}

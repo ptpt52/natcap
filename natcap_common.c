@@ -36,6 +36,13 @@ unsigned int server_seed = 0;
 module_param(server_seed, int, 0);
 MODULE_PARM_DESC(server_seed, "Server side seed number for encode");
 
+const char *const mode_str[] = {
+	[CLIENT_MODE] = "CLIENT",
+	[SERVER_MODE] = "SERVER",
+	[FORWARD_MODE] = "FORWARD",
+	[KNOCK_MODE] = "KNOCK",
+};
+
 unsigned int encode_mode = TCP_ENCODE;
 const char *const encode_mode_str[] = {
 	[TCP_ENCODE] = "TCP",

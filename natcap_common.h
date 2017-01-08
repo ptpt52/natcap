@@ -26,6 +26,7 @@ enum {
 	CLIENT_MODE = 0,
 	SERVER_MODE = 1,
 	FORWARD_MODE = 2,
+	KNOCK_MODE = 3,
 };
 
 enum {
@@ -33,12 +34,14 @@ enum {
 	UDP_ENCODE = 1,
 };
 
+extern unsigned int mode;
+extern const char *const mode_str[];
+
 extern unsigned int encode_mode;
 extern const char *const encode_mode_str[];
 
 extern unsigned int disabled;
 extern unsigned int debug;
-extern unsigned int mode;
 extern unsigned int server_seed;
 
 extern const char *const hooknames[];
