@@ -524,6 +524,24 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
+		if (iph->protocol == IPPROTO_TCP) {
+			if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+				return NF_DROP;
+			}
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
+			if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr)) {
+				return NF_DROP;
+			}
+
+			if (TCPH(l4)->syn && !TCPH(l4)->ack) {
+				if (natcap_tcp_decode_header(TCPH(l4)) != NULL) {
+					skb->mark = XT_MARK_NATCAP;
+					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+					return NF_ACCEPT;
+				}
+			}
+		}
 		return NF_ACCEPT;
 	}
 
