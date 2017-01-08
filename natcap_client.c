@@ -520,9 +520,6 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
-		return NF_ACCEPT;
-	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
 		if (iph->protocol == IPPROTO_TCP) {
 			if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
@@ -538,10 +535,14 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 				if (natcap_tcp_decode_header(TCPH(l4)) != NULL) {
 					skb->mark = XT_MARK_NATCAP;
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+					NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": set mark 0x%x\n", DEBUG_TCP_ARG(iph,l4), XT_MARK_NATCAP);
 					return NF_ACCEPT;
 				}
 			}
 		}
+		return NF_ACCEPT;
+	}
+	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 
