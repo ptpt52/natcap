@@ -775,6 +775,9 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				consume_skb(skb2);
 				return NF_DROP;
 			}
+			if (tcpopt.header.type == NATCAP_TCPOPT_ALL) {
+				tcpopt.header.type = NATCAP_TCPOPT_SYN;
+			}
 			ret = natcap_tcp_encode(skb2, &tcpopt);
 			if (ret != 0) {
 				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
@@ -1108,6 +1111,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			consume_skb(skb);
 			return NF_ACCEPT;
+		}
+		if (tcpopt.header.type == NATCAP_TCPOPT_ALL) {
+			tcpopt.header.type = NATCAP_TCPOPT_SYN;
 		}
 		ret = natcap_tcp_encode(skb2, &tcpopt);
 		if (ret != 0) {
