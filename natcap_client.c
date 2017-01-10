@@ -1061,9 +1061,15 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 	NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": before natcap post out\n", DEBUG_TCP_ARG(iph,l4));
 
+	iph->check = natcap_csum_replace(iph->daddr, tup->ip, iph->check);
+	if (skb->ip_summed != CHECKSUM_PARTIAL) {
+		TCPH(l4)->check = natcap_csum_replace(iph->daddr, tup->ip, TCPH(l4)->check);
+		TCPH(l4)->check = natcap_csum_replace(TCPH(l4)->dest, tup->port, TCPH(l4)->check);
+	} else {
+		TCPH(l4)->check = ~natcap_csum_replace(iph->daddr, tup->ip, ~TCPH(l4)->check);
+	}
 	iph->daddr = tup->ip;
 	TCPH(l4)->dest = tup->port;
-	skb_rcsum_tcpudp(skb);
 
 	if (in)
 		net = dev_net(in);
@@ -1358,9 +1364,15 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 		nf_conntrack_put(skb->nfct);
 		skb->nfct = NULL;
+		iph->check = natcap_csum_replace(iph->saddr, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, iph->check);
+		if (skb->ip_summed != CHECKSUM_PARTIAL) {
+			TCPH(l4)->check = natcap_csum_replace(iph->saddr, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, TCPH(l4)->check);
+			TCPH(l4)->check = natcap_csum_replace(TCPH(l4)->source, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all, TCPH(l4)->check);
+		} else {
+			TCPH(l4)->check = ~natcap_csum_replace(iph->saddr, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ~TCPH(l4)->check);
+		}
 		iph->saddr = master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
 		TCPH(l4)->source = master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all;
-		skb_rcsum_tcpudp(skb);
 
 		if (in)
 			net = dev_net(in);
