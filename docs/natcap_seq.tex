@@ -1,0 +1,23 @@
+\documentclass[tikz, border=2mm]{standalone}
+
+\usetikzlibrary{arrows,shadows}
+\usepackage{pgf-umlsd}
+
+\begin{document}
+    \begin{sequencediagram}
+        \newthread[white]{c}{Client$(C)$}
+        \newinst[6]{r}{Router$(R)$}
+        \newinst[6]{p}{ProxyServer$(P)$}
+        \newinst[6]{s}{Server$(S)$}
+
+        \mess{c}{${syn}_{(ipaddr_C:port_C - ipaddr_S:port_S)}$}{r}
+        \mess{r}{${{syn}^{encode(),dnat,snat}}_{(ipaddr_R:port_R - ipaddr_P:port_P)}$}{p}
+        \mess{p}{${{syn}^{decode(),dnat,snat}}_{(ipaddr_P:port_P - ipaddr_S:port_S)}$}{s}
+        \mess{s}{${syn,ack}_{(ipaddr_S:port_S - ipaddr_P:port_P)}$}{p}
+        \mess{p}{${{syn,ack}^{dnat,snat}}_{(ipaddr_P:port_P - ipaddr_R:port_R)}$}{r}
+        \mess{r}{${{syn,ack}^{dnat,snat}}_{(ipaddr_S:port_S - ipaddr_C:port_C)}$}{c}
+        \mess{c}{...}{s}
+        \mess{s}{...}{c}
+    \end{sequencediagram}
+
+\end{document}

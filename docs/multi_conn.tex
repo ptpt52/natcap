@@ -1,0 +1,27 @@
+\documentclass{standalone}
+\usepackage{ctex}
+%\usepackage{geometry}
+%\geometry{left=1.0cm,right=1.0cm}
+\usepackage{pgf}
+\usepackage{tikz}
+\usetikzlibrary{arrows, decorations.pathmorphing, backgrounds, positioning, fit, petri, automata}
+\definecolor{yellow1}{rgb}{1,0.8,0.2}
+
+\begin{document}
+\begin{tikzpicture}[->,>=stealth',shorten >=1pt,auto,node distance=2.8cm,semithick]
+  \tikzstyle{every state}=[fill=yellow1,draw=none,text=black]
+
+  \node[state] (C) at (-6, 0) {客户端};
+  \node[state] (R) at (-1, 0) {科学路由器};
+  \node[state] (S) at (9, 3) {目标网站};
+  \node[state] (P) at (7, -2) {代理服务器};
+
+  \path (C) edge node {访问Google} (R);
+  \draw[->] (R) to[out=40,in=135] node {发起连接（被阻断）} (S);
+  \draw[->] (S) to[out=155,in=25] node {响应（被阻断）} (R);
+  \draw[->] (R) to[out=-5,in=155] node {发起加密连接} (P);
+  \draw[->] (P) to[out=175,in=-20] node {应答} (R);
+  \draw[->] (P) to[out=-5,in=-90] node {发起连接} (S);
+  \draw[->] (S) to[out=-70,in=-20] node {响应} (P);
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,27 @@
+\documentclass{standalone}
+\usepackage{ctex}
+\usepackage{bytefield}
+
+\begin{document}
+\begin{bytefield}[bitwidth=1.1em]{32}
+  \\
+  \\
+  \bitheader{0-31} \\
+  \begin{rightwordgroup}{TCP \\ Header}
+    \bitbox{16}{source port} & \bitbox{16}{destination port} \\
+    \bitbox{32}{sequence number} \\
+    \bitbox{32}{acknowledgment number} \\
+    \bitbox{4}{offset} & \bitbox{4}{reserverd} & \bitbox{8}{tcp flags} & \bitbox{16}{window} \\
+    \bitbox{16}{checksum} & \bitbox{16}{urgent pointer}
+  \end{rightwordgroup} \\
+  \begin{rightwordgroup}{TCP \\ Options}
+    \begin{leftwordgroup}{Natcap \\ Option}
+      \bitbox{8}{code=0x99} & \bitbox{8}{length=10} & \bitbox{8}{type=2(dst)} & \bitbox{8}{encryption bits} \\
+      \bitbox{32}{destination address} \\
+      \bitbox{16}{destination port} & \bitbox{16}{...}
+    \end{leftwordgroup} \\
+    \bitbox{32}{{ ... }other tcp options{ ... }}
+  \end{rightwordgroup} \\
+  \\
+\end{bytefield}
+\end{document}
