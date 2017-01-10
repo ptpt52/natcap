@@ -685,6 +685,7 @@ static unsigned natcap_server_pre_in_hook(unsigned int hooknum,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
 {
+	u_int8_t pf = PF_INET;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_server_pre_in_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
