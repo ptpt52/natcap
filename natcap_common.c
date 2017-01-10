@@ -462,7 +462,7 @@ int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out
 
 	id = ip_set_get_byname(net, ip_set_name, &set);
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -501,7 +501,7 @@ int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out
 
 	id = ip_set_get_byname(net, ip_set_name, &set);
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -540,7 +540,7 @@ int ip_set_add_src_ip(const struct net_device *in, const struct net_device *out,
 
 	id = ip_set_get_byname(net, ip_set_name, &set);
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -579,7 +579,7 @@ int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out,
 
 	id = ip_set_get_byname(net, ip_set_name, &set);
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -618,7 +618,7 @@ int ip_set_del_src_ip(const struct net_device *in, const struct net_device *out,
 
 	id = ip_set_get_byname(net, ip_set_name, &set);
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -657,7 +657,7 @@ int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out,
 
 	id = ip_set_get_byname(net, ip_set_name, &set);
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -696,7 +696,7 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 
 	id = ip_set_get_byname(net, ip_set_name, &set);
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_WARN("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
