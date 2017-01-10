@@ -160,15 +160,6 @@ static inline struct natcap_TCPOPT *natcap_tcp_decode_header(struct tcphdr *tcph
 	return opt;
 }
 
-static inline __be16 natcap_csum_replace(__be32 oldcsum, __be32 newcsum, __be16 check)
-{
-	__be32 diff[2];
-
-	diff[0] =~((__force __be32)oldcsum);
-	diff[1] = (__force __be32)newcsum;
-	return csum_fold(csum_partial(diff, sizeof(diff), ~csum_unfold(check)));
-}
-
 static inline void natcap_adjust_tcp_mss(struct tcphdr *tcph, int delta)
 {
 	unsigned int optlen, i;
