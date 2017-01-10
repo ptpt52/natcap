@@ -22,6 +22,7 @@
 #include <net/netfilter/nf_conntrack.h>
 #include "natcap_common.h"
 #include "natcap_client.h"
+#include "natcap_knock.h"
 
 unsigned long long flow_total_tx_bytes = 0;
 unsigned long long flow_total_rx_bytes = 0;
@@ -327,7 +328,10 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			return NF_DROP;
 		}
 
-		if (ip_set_test_dst_ip(in, out, skb, "bypasslist") > 0) {
+		if (ip_set_test_dst_ip(in, out, skb, "knocklist") > 0) {
+			natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
+			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+		} else if (ip_set_test_dst_ip(in, out, skb, "bypasslist") > 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		} else if (ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {

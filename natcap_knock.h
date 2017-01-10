@@ -11,7 +11,7 @@
 
 extern unsigned short knock_port;
 
-void natcap_knock_info_select(__be32 ip, __be16 port, struct tuple *dst);
+extern void natcap_knock_info_select(__be32 ip, __be16 port, struct tuple *dst);
 
 int natcap_knock_init(void);
 void natcap_knock_exit(void);
