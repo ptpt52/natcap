@@ -1061,7 +1061,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 	NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": before natcap post out\n", DEBUG_TCP_ARG(iph,l4));
 
-	inet_proto_csum_replace4(&iph->check, skb, iph->daddr, tup->ip, false);
+	csum_replace4(&iph->check, iph->daddr, tup->ip);
 	inet_proto_csum_replace4(&TCPH(l4)->check, skb, iph->daddr, tup->ip, true);
 	inet_proto_csum_replace2(&TCPH(l4)->check, skb, TCPH(l4)->dest, tup->port, false);
 	iph->daddr = tup->ip;
@@ -1361,7 +1361,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		nf_conntrack_put(skb->nfct);
 		skb->nfct = NULL;
 
-		inet_proto_csum_replace4(&iph->check, skb, iph->saddr, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, false);
+		csum_replace4(&iph->check, iph->saddr, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 		inet_proto_csum_replace4(&TCPH(l4)->check, skb, iph->saddr, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, true);
 		inet_proto_csum_replace2(&TCPH(l4)->check, skb, TCPH(l4)->source, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all, false);
 		iph->saddr = master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
