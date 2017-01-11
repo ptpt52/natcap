@@ -50,7 +50,7 @@ static inline int natcap_auth(const struct net_device *in,
 					tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
 					tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
 					ntohl(tcpopt->all.data.u_hash));
-			return E_NATCAP_FAIL;
+			return E_NATCAP_AUTH_FAIL;
 		}
 		NATCAP_INFO("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
 				__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
@@ -72,7 +72,7 @@ static inline int natcap_auth(const struct net_device *in,
 					tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
 					tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
 					ntohl(tcpopt->user.data.u_hash));
-			return E_NATCAP_FAIL;
+			return E_NATCAP_AUTH_FAIL;
 		}
 		NATCAP_INFO("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
 				__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
@@ -377,7 +377,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			ret = natcap_auth(in, out, skb, ct, &tcpopt, NULL);
 			if (ret != E_NATCAP_OK) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
-				if (ret == E_NATCAP_FAIL) {
+				if (ret == E_NATCAP_AUTH_FAIL) {
 					set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
 				} else {
 					set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
@@ -405,7 +405,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			ret = natcap_auth(in, out, skb, ct, &tcpopt, &server);
 			if (ret != E_NATCAP_OK) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
-				if (ret == E_NATCAP_FAIL) {
+				if (ret == E_NATCAP_AUTH_FAIL) {
 					set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
 				} else {
 					set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
@@ -573,7 +573,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 				natcap_adjust_tcp_mss(TCPH(l4), -8);
 				return NF_ACCEPT;
 			}
-			if (TCPH(l4)->seq == TCPOPT_NATCAP && TCPH(l4)->ack_seq == TCPOPT_NATCAP) {
+			if ((TCPH(l4)->syn && !TCPH(l4)->ack) && TCPH(l4)->seq == TCPOPT_NATCAP && TCPH(l4)->ack_seq == TCPOPT_NATCAP) {
 				ret = nf_conntrack_confirm(skb);
 				if (ret != NF_ACCEPT) {
 					return ret;

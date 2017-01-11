@@ -408,8 +408,15 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 	}
 
 	memcpy((void *)tcpopt, (void *)opt, opt->header.opsize);
-	if (mode == FORWARD_MODE)
+	if (mode == FORWARD_MODE) {
 		goto done;
+	}
+	if (tcpopt->header.type == NATCAP_TCPOPT_SYN) {
+		tcph->seq = TCPOPT_NATCAP;
+		tcph->ack_seq = TCPOPT_NATCAP;
+		goto do_decode;
+	}
+
 	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize);
 	BUG_ON(offlen < 0);
 	memmove((void *)tcph + sizeof(struct tcphdr), (void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize, offlen);
@@ -418,10 +425,6 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 	iph->tot_len = htons(ntohs(iph->tot_len) - tcpopt->header.opsize);
 	skb->len -= tcpopt->header.opsize;
 	skb->tail -= tcpopt->header.opsize;
-	if (tcpopt->header.type == NATCAP_TCPOPT_SYN) {
-		tcph->seq = TCPOPT_NATCAP;
-		tcph->ack_seq = TCPOPT_NATCAP;
-	}
 
 do_decode:
 	if (tcpopt->header.encryption) {

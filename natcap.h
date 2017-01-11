@@ -140,7 +140,7 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 
 enum {
 	E_NATCAP_OK = 0,
-	E_NATCAP_FAIL,
+	E_NATCAP_AUTH_FAIL,
 	E_NATCAP_INVAL,
 };
 
