@@ -247,7 +247,7 @@ static inline int natcap_tcpmss_clamp_pmtu_adjust(struct sk_buff *skb, struct ne
 			oldmss = ntohs(*((u16 *)(opt + i + 2)));
 
 			if (oldmss <= newmss) {
-				if ((int)oldmss + delta > 0) {
+				if ((int)oldmss + delta <= 0) {
 					return -1;
 				}
 				newmss = oldmss + delta;
