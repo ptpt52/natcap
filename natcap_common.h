@@ -160,45 +160,136 @@ static inline struct natcap_TCPOPT *natcap_tcp_decode_header(struct tcphdr *tcph
 	return opt;
 }
 
-static inline void natcap_adjust_tcp_mss(struct tcphdr *tcph, int delta)
+static inline unsigned int optlen(const u_int8_t *opt, unsigned int offset)
 {
-	unsigned int optlen, i;
-	__be16 oldmss, newmss;
-	unsigned char *op;
+	/* Beware zero-length options: make finite progress */
+	if (opt[offset] <= TCPOPT_NOP || opt[offset+1] == 0)
+		return 1;
+	else
+		return opt[offset+1];
+}
 
-	if (tcph->doff * 4 < sizeof(struct tcphdr))
-		return;
+static inline u_int32_t tcpmss_reverse_mtu(struct net *net, const struct sk_buff *skb)
+{
+	struct flowi fl;
+	const struct nf_afinfo *ai;
+	struct rtable *rt = NULL;
+	u_int32_t mtu     = ~0U;
 
-	optlen = tcph->doff * 4 - sizeof(struct tcphdr);
-	if (!optlen)
-		return;
+	struct flowi4 *fl4 = &fl.u.ip4;
+	memset(fl4, 0, sizeof(*fl4));
+	fl4->daddr = ip_hdr(skb)->saddr;
 
-	op = (unsigned char *)tcph + sizeof(struct tcphdr);
+	rcu_read_lock();
+	ai = nf_get_afinfo(PF_INET);
+	if (ai != NULL)
+		ai->route(net, (struct dst_entry **)&rt, &fl, false);
+	rcu_read_unlock();
 
-	for (i = 0; i < optlen; ) {
-		if (op[i] == TCPOPT_MSS && (optlen - i) >= TCPOLEN_MSS &&
-		        op[i+1] == TCPOLEN_MSS) {
-			__be32 diff[2];
+	if (rt != NULL) {
+		mtu = dst_mtu(&rt->dst);
+		dst_release(&rt->dst);
+	}
+	return mtu;
+}
 
-			oldmss = *((unsigned short *)(op + i + 2));
-			newmss = htons(ntohs(oldmss) + delta);
+static inline int natcap_tcpmss_adjust(struct sk_buff *skb, struct net *net, int delta) {
+	u16 oldmss, newmss;
+	unsigned int i;
+	int tcp_hdrlen;
+	u8 *opt;
+	struct iphdr *iph = ip_hdr(skb);
+	struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-			*((unsigned short *)(op + i + 2)) = newmss;
+	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+		return -1;
+	}
+	iph = ip_hdr(skb);
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+	if (tcph->doff * 4 < sizeof(struct tcphdr)) {
+		return -1;
+	}
+	tcp_hdrlen = tcph->doff * 4;
+	if (!skb_make_writable(skb, iph->ihl * 4 + tcp_hdrlen)) {
+		return -1;
+	}
+	iph = ip_hdr(skb);
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-			diff[0] =~((__force __be32)oldmss);
-			diff[1] = (__force __be32)newmss;
-			tcph->check = csum_fold(csum_partial(diff, sizeof(diff),
-			                                     ~csum_unfold(tcph->check)));
+	opt = (u_int8_t *)tcph;
+	for (i = sizeof(struct tcphdr); i <= tcp_hdrlen - TCPOLEN_MSS; i += optlen(opt, i)) {
+		if (opt[i] == TCPOPT_MSS && opt[i+1] == TCPOLEN_MSS) {
+			oldmss = ntohs(*((u16 *)(opt + i + 2)));
+
+			if ((int)oldmss + delta <= 0) {
+				return -1;
+			}
+			newmss = oldmss + delta;
+
+			*((unsigned short *)(opt + i + 2)) = htons(newmss);
+			inet_proto_csum_replace2(&tcph->check, skb, htons(oldmss), htons(newmss), false);
 
 			NATCAP_INFO("Change TCP MSS %d to %d\n", ntohs(oldmss), ntohs(newmss));
-		}
-
-		if (op[i] < 2) {
-			i++;
-		} else {
-			i += op[i+1] ? : 1;
+			return 0;
 		}
 	}
+	return -1;
+}
+
+static inline int natcap_tcpmss_clamp_pmtu_adjust(struct sk_buff *skb, struct net *net, int delta) {
+	u16 oldmss, newmss;
+	unsigned int i;
+	unsigned int minlen, in_mtu, min_mtu;
+	int tcp_hdrlen;
+	u8 *opt;
+	struct iphdr *iph = ip_hdr(skb);
+	struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+
+	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+		return -1;
+	}
+	iph = ip_hdr(skb);
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+	if (tcph->doff * 4 < sizeof(struct tcphdr)) {
+		return -1;
+	}
+	tcp_hdrlen = tcph->doff * 4;
+	if (!skb_make_writable(skb, iph->ihl * 4 + tcp_hdrlen)) {
+		return -1;
+	}
+	iph = ip_hdr(skb);
+	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+
+	minlen = sizeof(*iph) + sizeof(struct tcphdr);
+	in_mtu = tcpmss_reverse_mtu(net, skb);
+	min_mtu = min(dst_mtu(skb_dst(skb)), in_mtu);
+
+	if (min_mtu <= minlen) {
+		return -1;
+	}
+	newmss = min_mtu - minlen;
+	newmss = newmss + delta;
+
+	opt = (u_int8_t *)tcph;
+	for (i = sizeof(struct tcphdr); i <= tcp_hdrlen - TCPOLEN_MSS; i += optlen(opt, i)) {
+		if (opt[i] == TCPOPT_MSS && opt[i+1] == TCPOLEN_MSS) {
+			oldmss = ntohs(*((u16 *)(opt + i + 2)));
+
+			if (oldmss <= newmss) {
+				if ((int)oldmss + delta > 0) {
+					return -1;
+				}
+				newmss = oldmss + delta;
+			}
+
+			*((unsigned short *)(opt + i + 2)) = htons(newmss);
+			inet_proto_csum_replace2(&tcph->check, skb, htons(oldmss), htons(newmss), false);
+
+			NATCAP_INFO("Change TCP MSS %d to %d\n", ntohs(oldmss), ntohs(newmss));
+			return 0;
+		}
+	}
+	return -1;
 }
 
 extern int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
