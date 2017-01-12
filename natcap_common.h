@@ -209,6 +209,9 @@ static inline int natcap_tcpmss_adjust(struct tcphdr *tcph, int delta) {
 				return -1;
 			}
 			newmss = oldmss + delta;
+			if (oldmss <= newmss) {
+				return -1;
+			}
 
 			*((unsigned short *)(opt + i + 2)) = htons(newmss);
 			csum_replace2(&tcph->check, htons(oldmss), htons(newmss));
@@ -248,6 +251,9 @@ static inline int natcap_tcpmss_clamp_pmtu_adjust(struct sk_buff *skb, struct ne
 					return -1;
 				}
 				newmss = oldmss + delta;
+			}
+			if (oldmss <= newmss) {
+				return -1;
 			}
 
 			*((unsigned short *)(opt + i + 2)) = htons(newmss);
