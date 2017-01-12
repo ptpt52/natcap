@@ -216,7 +216,7 @@ static inline int natcap_tcpmss_adjust(struct tcphdr *tcph, int delta) {
 			*((unsigned short *)(opt + i + 2)) = htons(newmss);
 			csum_replace2(&tcph->check, htons(oldmss), htons(newmss));
 
-			NATCAP_INFO("Change TCP MSS %d to %d\n", ntohs(oldmss), ntohs(newmss));
+			NATCAP_INFO("Change TCP MSS %d to %d\n", oldmss, newmss);
 			return 0;
 		}
 	}
@@ -259,7 +259,7 @@ static inline int natcap_tcpmss_clamp_pmtu_adjust(struct sk_buff *skb, struct ne
 			*((unsigned short *)(opt + i + 2)) = htons(newmss);
 			csum_replace2(&tcph->check, htons(oldmss), htons(newmss));
 
-			NATCAP_INFO("Change TCP MSS %d to %d\n", ntohs(oldmss), ntohs(newmss));
+			NATCAP_INFO("Change TCP MSS %d to %d\n", oldmss, newmss);
 			return 0;
 		}
 	}
