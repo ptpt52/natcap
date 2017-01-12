@@ -646,7 +646,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			int offlen;
 			struct sk_buff *nskb = skb->next;
 
-			if (skb->end - skb->tail < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
+			if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 				consume_skb(skb);
 				skb = nskb;
 				NATCAP_ERROR("pskb_expand_head failed\n");
