@@ -532,16 +532,16 @@ static unsigned int natcap_server_post_out_hook(const struct nf_hook_ops *ops,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
-	const struct net_device *in = state->in;
-	const struct net_device *out = state->out;
+	//const struct net_device *in = state->in;
+	//const struct net_device *out = state->out;
 #else
 static unsigned int natcap_server_post_out_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
-	const struct net_device *in = state->in;
-	const struct net_device *out = state->out;
+	//const struct net_device *in = state->in;
+	//const struct net_device *out = state->out;
 #endif
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
@@ -573,12 +573,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
 		if (iph->protocol == IPPROTO_TCP) {
 			if (test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status) && TCPH(l4)->syn) {
-				struct net *net = &init_net;
-				if (in)
-					net = dev_net(in);
-				else if (out)
-					net = dev_net(out);
-				natcap_tcpmss_adjust(skb, net, -8);
+				natcap_tcpmss_adjust(TCPH(l4), -8);
 				return NF_ACCEPT;
 			}
 			if ((TCPH(l4)->syn && !TCPH(l4)->ack) && TCPH(l4)->seq == TCPOPT_NATCAP && TCPH(l4)->ack_seq == TCPOPT_NATCAP) {

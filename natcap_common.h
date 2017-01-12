@@ -193,29 +193,13 @@ static inline u_int32_t tcpmss_reverse_mtu(struct net *net, const struct sk_buff
 	return mtu;
 }
 
-static inline int natcap_tcpmss_adjust(struct sk_buff *skb, struct net *net, int delta) {
+static inline int natcap_tcpmss_adjust(struct tcphdr *tcph, int delta) {
 	u16 oldmss, newmss;
 	unsigned int i;
 	int tcp_hdrlen;
 	u8 *opt;
-	struct iphdr *iph = ip_hdr(skb);
-	struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
-		return -1;
-	}
-	iph = ip_hdr(skb);
-	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-	if (tcph->doff * 4 < sizeof(struct tcphdr)) {
-		return -1;
-	}
 	tcp_hdrlen = tcph->doff * 4;
-	if (!skb_make_writable(skb, iph->ihl * 4 + tcp_hdrlen)) {
-		return -1;
-	}
-	iph = ip_hdr(skb);
-	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-
 	opt = (u_int8_t *)tcph;
 	for (i = sizeof(struct tcphdr); i <= tcp_hdrlen - TCPOLEN_MSS; i += optlen(opt, i)) {
 		if (opt[i] == TCPOPT_MSS && opt[i+1] == TCPOLEN_MSS) {
@@ -227,7 +211,7 @@ static inline int natcap_tcpmss_adjust(struct sk_buff *skb, struct net *net, int
 			newmss = oldmss + delta;
 
 			*((unsigned short *)(opt + i + 2)) = htons(newmss);
-			inet_proto_csum_replace2(&tcph->check, skb, htons(oldmss), htons(newmss), false);
+			csum_replace2(&tcph->check, htons(oldmss), htons(newmss));
 
 			NATCAP_INFO("Change TCP MSS %d to %d\n", ntohs(oldmss), ntohs(newmss));
 			return 0;
@@ -236,31 +220,14 @@ static inline int natcap_tcpmss_adjust(struct sk_buff *skb, struct net *net, int
 	return -1;
 }
 
-static inline int natcap_tcpmss_clamp_pmtu_adjust(struct sk_buff *skb, struct net *net, int delta) {
+static inline int natcap_tcpmss_clamp_pmtu_adjust(struct sk_buff *skb, struct net *net, struct tcphdr *tcph, int delta) {
 	u16 oldmss, newmss;
 	unsigned int i;
 	unsigned int minlen, in_mtu, min_mtu;
 	int tcp_hdrlen;
 	u8 *opt;
-	struct iphdr *iph = ip_hdr(skb);
-	struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
-		return -1;
-	}
-	iph = ip_hdr(skb);
-	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-	if (tcph->doff * 4 < sizeof(struct tcphdr)) {
-		return -1;
-	}
-	tcp_hdrlen = tcph->doff * 4;
-	if (!skb_make_writable(skb, iph->ihl * 4 + tcp_hdrlen)) {
-		return -1;
-	}
-	iph = ip_hdr(skb);
-	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-
-	minlen = sizeof(*iph) + sizeof(struct tcphdr);
+	minlen = sizeof(struct iphdr) + sizeof(struct tcphdr);
 	in_mtu = tcpmss_reverse_mtu(net, skb);
 	min_mtu = min(dst_mtu(skb_dst(skb)), in_mtu);
 
@@ -270,6 +237,7 @@ static inline int natcap_tcpmss_clamp_pmtu_adjust(struct sk_buff *skb, struct ne
 	newmss = min_mtu - minlen;
 	newmss = newmss + delta;
 
+	tcp_hdrlen = tcph->doff * 4;
 	opt = (u_int8_t *)tcph;
 	for (i = sizeof(struct tcphdr); i <= tcp_hdrlen - TCPOLEN_MSS; i += optlen(opt, i)) {
 		if (opt[i] == TCPOPT_MSS && opt[i+1] == TCPOLEN_MSS) {
@@ -283,7 +251,7 @@ static inline int natcap_tcpmss_clamp_pmtu_adjust(struct sk_buff *skb, struct ne
 			}
 
 			*((unsigned short *)(opt + i + 2)) = htons(newmss);
-			inet_proto_csum_replace2(&tcph->check, skb, htons(oldmss), htons(newmss), false);
+			csum_replace2(&tcph->check, htons(oldmss), htons(newmss));
 
 			NATCAP_INFO("Change TCP MSS %d to %d\n", ntohs(oldmss), ntohs(newmss));
 			return 0;
