@@ -810,6 +810,15 @@ static struct nf_hook_ops server_hooks[] = {
 #endif
 		.hook = natcap_server_post_out_hook,
 		.pf = PF_INET,
+		.hooknum = NF_INET_LOCAL_IN,
+		.priority = NF_IP_PRI_LAST,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
+		.hook = natcap_server_post_out_hook,
+		.pf = PF_INET,
 		.hooknum = NF_INET_POST_ROUTING,
 		.priority = NF_IP_PRI_LAST,
 	},
