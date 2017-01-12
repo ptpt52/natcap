@@ -778,7 +778,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		/* for REPLY post out */
 		if (iph->protocol == IPPROTO_TCP) {
 			if (test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status) && TCPH(l4)->syn) {
-				natcap_tcpmss_adjust(TCPH(l4), -8);
+				natcap_tcpmss_adjust(skb, TCPH(l4), -8);
 			}
 		}
 		return NF_ACCEPT;

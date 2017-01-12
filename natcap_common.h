@@ -193,7 +193,7 @@ static inline u_int32_t tcpmss_reverse_mtu(struct net *net, const struct sk_buff
 	return mtu;
 }
 
-static inline int natcap_tcpmss_adjust(struct tcphdr *tcph, int delta) {
+static inline int natcap_tcpmss_adjust(struct sk_buff *skb, struct tcphdr *tcph, int delta) {
 	u16 oldmss, newmss;
 	unsigned int i;
 	int tcp_hdrlen;
@@ -214,7 +214,7 @@ static inline int natcap_tcpmss_adjust(struct tcphdr *tcph, int delta) {
 			}
 
 			*((unsigned short *)(opt + i + 2)) = htons(newmss);
-			csum_replace2(&tcph->check, htons(oldmss), htons(newmss));
+			inet_proto_csum_replace2(&tcph->check, skb, htons(oldmss), htons(newmss), false);
 
 			NATCAP_INFO("Change TCP MSS %d to %d\n", oldmss, newmss);
 			return 0;
@@ -257,7 +257,7 @@ static inline int natcap_tcpmss_clamp_pmtu_adjust(struct sk_buff *skb, struct ne
 			}
 
 			*((unsigned short *)(opt + i + 2)) = htons(newmss);
-			csum_replace2(&tcph->check, htons(oldmss), htons(newmss));
+			inet_proto_csum_replace2(&tcph->check, skb, htons(oldmss), htons(newmss), false);
 
 			NATCAP_INFO("Change TCP MSS %d to %d\n", oldmss, newmss);
 			return 0;

@@ -573,7 +573,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
 		if (iph->protocol == IPPROTO_TCP) {
 			if (test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status) && TCPH(l4)->syn) {
-				natcap_tcpmss_adjust(TCPH(l4), -8);
+				natcap_tcpmss_adjust(skb, TCPH(l4), -8);
 				return NF_ACCEPT;
 			}
 			if ((TCPH(l4)->syn && !TCPH(l4)->ack) && TCPH(l4)->seq == TCPOPT_NATCAP && TCPH(l4)->ack_seq == TCPOPT_NATCAP) {
