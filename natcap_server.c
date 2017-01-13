@@ -260,17 +260,29 @@ static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_
 	kfree(http);
 }
 
-static inline void natcap_auth_convert_tcprst(struct sk_buff *skb)
+static inline int natcap_auth_convert_tcprst(struct sk_buff *skb)
 {
 	int offset = 0;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
 
 	iph = ip_hdr(skb);
-	if (iph->protocol != IPPROTO_TCP)
-		return;
+	if (iph->protocol != IPPROTO_TCP) {
+		return -1;
+	}
+	if (skb->len < ntohs(iph->tot_len)) {
+		return -1;
+	}
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 	offset = ntohs(iph->tot_len) - ((iph->ihl << 2) + sizeof(struct tcphdr));
+	if (offset < 0) {
+		return -1;
+	}
+	skb->len -= offset;
+	if (skb->len < (skb_tail_pointer(skb) - (unsigned char *)skb->data)) {
+		skb->tail -= (skb_tail_pointer(skb) - (unsigned char *)skb->data) - skb->len;
+	}
+
 	tcph->ack = 0;
 	tcph->psh = 0;
 	tcph->rst = 1;
@@ -282,10 +294,8 @@ static inline void natcap_auth_convert_tcprst(struct sk_buff *skb)
 	iph->id = __constant_htons(0xDEAD);
 	iph->frag_off = 0;
 
-	skb->tail -= offset;
-	skb->len -= offset;
-
 	skb_rcsum_tcpudp(skb);
+	return 0;
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
