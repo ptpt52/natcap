@@ -278,9 +278,8 @@ static inline int natcap_auth_convert_tcprst(struct sk_buff *skb)
 	if (offset < 0) {
 		return -1;
 	}
-	skb->len -= offset;
-	if (skb->len < (skb_tail_pointer(skb) - (unsigned char *)skb->data)) {
-		skb->tail -= (skb_tail_pointer(skb) - (unsigned char *)skb->data) - skb->len;
+	if (pskb_trim(skb, skb->len - offset)) {
+		return -1;
 	}
 
 	tcph->ack = 0;
