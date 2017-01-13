@@ -447,12 +447,14 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			if ((data_len > 4 && strncasecmp(data, "GET ", 4) == 0) ||
 					(data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
 				natcap_auth_http_302(in, skb, ct);
-			}
-			if (TCPH(l4)->ack && !TCPH(l4)->syn) {
+				set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+				return NF_DROP;
+			} else if (data_len > 0) {
+				set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+				return NF_DROP;
+			} else if (TCPH(l4)->ack && !TCPH(l4)->syn) {
 				natcap_auth_convert_tcprst(skb);
 				return NF_ACCEPT;
-			} else if (data_len > 0) {
-				return NF_DROP;
 			}
 		}
 	} else if (iph->protocol == IPPROTO_UDP) {
