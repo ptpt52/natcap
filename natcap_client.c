@@ -218,6 +218,7 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	if (offset <= 0) {
 		if (pskb_trim(nskb, nskb->len + offset)) {
 			NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+			consume_skb(nskb);
 			return -1;
 		}
 	} else {
@@ -828,7 +829,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			iph = ip_hdr(skb2);
 			l4 = (void *)iph + iph->ihl * 4;
 			skb2->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
-			iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr));
+			iph->tot_len = htons(skb2->len);
 			iph->ihl = 5;
 			TCPH(l4)->doff = 5;
 			skb_rcsum_tcpudp(skb2);
@@ -950,13 +951,21 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 					NATCAP_ERROR("alloc_skb fail\n");
 					return NF_ACCEPT;
 				}
-
-				nskb->len += offset;
+				if (offset <= 0) {
+					if (pskb_trim(nskb, nskb->len + offset)) {
+						NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+						consume_skb(nskb);
+						return NF_DROP;
+					}
+				} else {
+					nskb->len += offset;
+					nskb->tail += offset;
+				}
 
 				iph = ip_hdr(nskb);
 				l4 = (void *)iph + iph->ihl * 4;
-				iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + 12);
-				UDPH(l4)->len = ntohs(sizeof(struct udphdr) + 12);
+				iph->tot_len = htons(nskb->len);
+				UDPH(l4)->len = ntohs(ntohs(iph->tot_len) - iph->ihl * 4);
 				*((unsigned int *)(l4 + sizeof(struct udphdr))) = __constant_htonl(0xFFFE0099);
 				*((unsigned int *)(l4 + sizeof(struct udphdr) + 4)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 				*((unsigned short *)(l4 + sizeof(struct udphdr) + 8)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;

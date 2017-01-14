@@ -114,6 +114,7 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	if (offset <= 0) {
 		if (pskb_trim(nskb, nskb->len + offset)) {
 			NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+			consume_skb(nskb);
 			return;
 		}
 	} else {
@@ -182,6 +183,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	if (offset <= 0) {
 		if (pskb_trim(nskb, nskb->len + offset)) {
 			NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+			consume_skb(nskb);
 			return;
 		}
 	} else {
@@ -307,12 +309,19 @@ static inline int natcap_auth_convert_tcprst(struct sk_buff *skb)
 		return -1;
 	}
 
-	tcph->ack = 0;
-	tcph->psh = 0;
+	tcph->res1 = 0;
+	tcph->doff = 5;
+	tcph->syn = 0;
 	tcph->rst = 1;
+	tcph->psh = 0;
+	tcph->ack = 0;
 	tcph->fin = 0;
+	tcph->urg = 0;
+	tcph->ece = 0;
+	tcph->cwr = 0;
 	tcph->window = __constant_htons(0);
-	tcph->doff = sizeof(struct tcphdr) / 4;
+	tcph->check = 0;
+	tcph->urg_ptr = 0;
 
 	iph->tot_len = htons(skb->len);
 	iph->id = __constant_htons(0xDEAD);
