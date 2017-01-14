@@ -102,7 +102,7 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 
 	oeth = (struct ethhdr *)skb_mac_header(oskb);
 	oiph = ip_hdr(oskb);
-	oudph = (struct udphdr *)((void *)oiph + oiph->ihl*4);
+	oudph = (struct udphdr *)((void *)oiph + oiph->ihl * 4);
 
 	offset = sizeof(struct iphdr) + sizeof(struct udphdr) + 4 - oskb->len;
 	header_len = offset < 0 ? 0 : offset;
@@ -165,7 +165,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 
 	oeth = (struct ethhdr *)skb_mac_header(oskb);
 	oiph = ip_hdr(oskb);
-	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl*4);
+	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
 	if (test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
 		add_len = 8;

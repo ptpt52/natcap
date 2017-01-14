@@ -195,24 +195,34 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	struct ethhdr *neth, *oeth;
 	struct iphdr *niph, *oiph;
 	struct tcphdr *otcph, *ntcph;
-	int offset;
+	int offset, header_len;
+	int add_len = 0;
+	u8 protocol = IPPROTO_TCP;
 
 	oeth = (struct ethhdr *)skb_mac_header(oskb);
 	oiph = ip_hdr(oskb);
-	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl*4);
+	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
-	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) - oskb->len;
-	if (offset > 0) {
-		return -1;
+	if (test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
+		add_len = 8;
+		protocol = IPPROTO_UDP;
 	}
-	nskb = skb_copy_expand(oskb, skb_headroom(oskb), 0, GFP_ATOMIC);
+
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + add_len - oskb->len;
+	header_len = offset < 0 ? 0 : offset;
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
 	if (!nskb) {
 		NATCAP_ERROR("alloc_skb fail\n");
 		return -1;
 	}
-	if (pskb_trim(nskb, nskb->len + offset)) {
-		NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
-		return -1;
+	if (offset <= 0) {
+		if (pskb_trim(nskb, nskb->len + offset)) {
+			NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+			return -1;
+		}
+	} else {
+		nskb->len += offset;
+		nskb->tail += offset;
 	}
 
 	neth = eth_hdr(nskb);
@@ -227,24 +237,36 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	niph->version = oiph->version;
 	niph->ihl = 5;
 	niph->tos = 0;
-	niph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr));
+	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
-	niph->protocol = oiph->protocol;
+	niph->protocol = protocol;
 	niph->id = __constant_htons(0xDEAD);
 	niph->frag_off = 0x0;
 
+
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
-	memset(ntcph, 0, sizeof(struct tcphdr));
 	ntcph->source = otcph->dest;
 	ntcph->dest = otcph->source;
+	if (protocol == IPPROTO_UDP) {
+		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
+		*((unsigned int *)((void *)UDPH(ntcph) + 8)) = __constant_htonl(0xFFFF0099);
+		ntcph = (struct tcphdr *)((char *)ntcph + 8);
+	}
 	ntcph->seq = otcph->ack_seq;
 	ntcph->ack_seq = htonl(ntohl(otcph->seq) + 1);
+	ntcph->res1 = 0;
 	ntcph->doff = 5;
-	ntcph->ack = 0;
+	ntcph->syn = 0;
 	ntcph->rst = 1;
 	ntcph->psh = 0;
+	ntcph->ack = 0;
 	ntcph->fin = 0;
+	ntcph->urg = 0;
+	ntcph->ece = 0;
+	ntcph->cwr = 0;
 	ntcph->window = 0;
+	ntcph->check = 0;
+	ntcph->urg_ptr = 0;
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
@@ -1144,7 +1166,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		iph = ip_hdr(skb2);
 		l4 = (void *)iph + iph->ihl * 4;
 		skb2->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
-		iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr));
+		iph->tot_len = htons(skb2->len);
 		iph->ihl = 5;
 		TCPH(l4)->doff = 5;
 		skb_rcsum_tcpudp(skb2);
