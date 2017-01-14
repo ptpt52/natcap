@@ -145,26 +145,35 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	dev_queue_xmit(nskb);
 }
 
-static inline void natcap_auth_reply_payload(const char *payload, int payload_len, struct sk_buff *oskb, const struct net_device *dev)
+static inline void natcap_auth_reply_payload(const char *payload, int payload_len, struct sk_buff *oskb, const struct net_device *dev, struct nf_conn *ct)
 {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
 	struct iphdr *niph, *oiph;
 	struct tcphdr *otcph, *ntcph;
-	int len;
-	unsigned int csum;
 	int offset, header_len;
+	int add_len = 0;
+	u8 protocol = IPPROTO_TCP;
 	char *data;
 
 	oeth = (struct ethhdr *)skb_mac_header(oskb);
 	oiph = ip_hdr(oskb);
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl*4);
 
-	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len - oskb->len;
+	if (test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
+		add_len = 8;
+		protocol = IPPROTO_UDP;
+	}
+
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len + add_len - oskb->len;
 	header_len = offset < 0 ? 0 : offset;
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
 	if (!nskb) {
 		NATCAP_ERROR("alloc_skb fail\n");
+		return;
+	}
+	if (pskb_trim(nskb, nskb->len + offset)) {
+		NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
 		return;
 	}
 
@@ -172,7 +181,6 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
 	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
 	//neth->h_proto = htons(ETH_P_IP);
-	nskb->len += offset;
 
 	niph = ip_hdr(nskb);
 	memset(niph, 0, sizeof(struct iphdr));
@@ -181,38 +189,51 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	niph->version = oiph->version;
 	niph->ihl = 5;
 	niph->tos = 0;
-	niph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len);
+	niph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len + add_len);
 	niph->ttl = 0x80;
-	niph->protocol = oiph->protocol;
+	niph->protocol = protocol;
 	niph->id = __constant_htons(0xDEAD);
 	niph->frag_off = 0x0;
 	ip_send_check(niph);
 
-	data = (char *)ip_hdr(nskb) + sizeof(struct iphdr) + sizeof(struct tcphdr);
-	memcpy(data, payload, payload_len);
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
-	memset(ntcph, 0, sizeof(struct tcphdr));
 	ntcph->source = otcph->dest;
 	ntcph->dest = otcph->source;
+	if (protocol == IPPROTO_UDP) {
+		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
+		*((unsigned int *)((void *)UDPH(ntcph) + 8)) = __constant_htonl(0xFFFF0099);
+		ntcph = (struct tcphdr *)((char *)ntcph + 8);
+	}
+	data = (char *)ntcph + sizeof(struct tcphdr);
+	memcpy(data, payload, payload_len);
 	ntcph->seq = otcph->ack_seq;
 	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - (oiph->ihl<<2) - (otcph->doff<<2));
+	ntcph->res1 = 0;
 	ntcph->doff = 5;
-	ntcph->ack = 1;
+	ntcph->syn = 0;
+	ntcph->rst = 0;
 	ntcph->psh = 1;
+	ntcph->ack = 1;
 	ntcph->fin = 1;
+	ntcph->urg = 0;
+	ntcph->ece = 0;
+	ntcph->cwr = 0;
 	ntcph->window = 65535;
+	ntcph->check = 0;
+	ntcph->urg_ptr = 0;
 
-	len = ntohs(niph->tot_len) - (niph->ihl<<2);
-	csum = csum_partial((char*)ntcph, len, 0);
-	ntcph->check = tcp_v4_check(len, niph->saddr, niph->daddr, csum);
-
-	skb_push(nskb, (char *)niph - (char *)neth);
-	nskb->dev = (struct net_device *)dev;
+	if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+		natcap_data_encode(data, payload_len);
+	}
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_shinfo(nskb)->gso_size = 0;
 	skb_shinfo(nskb)->gso_segs = 0;
 	skb_shinfo(nskb)->gso_type = 0;
+	skb_rcsum_tcpudp(nskb);
+
+	skb_push(nskb, (char *)niph - (char *)neth);
+	nskb->dev = (struct net_device *)dev;
 
 	dev_queue_xmit(nskb);
 }
@@ -252,11 +273,7 @@ static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_
 	http->header[sizeof(http->header) - 1] = 0;
 	n = sprintf(http->payload, "%s%s", http->header, http->data);
 
-	if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
-		natcap_data_encode(http->payload, n);
-	}
-
-	natcap_auth_reply_payload(http->payload, n, skb, dev);
+	natcap_auth_reply_payload(http->payload, n, skb, dev, ct);
 	kfree(http);
 }
 
