@@ -801,6 +801,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 		}
 
+		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 8)) {
+			return NF_DROP;
+		}
+
 		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4 - 8;
 		BUG_ON(offlen < 0);
 		memmove((void *)UDPH(l4) + 4, (void *)UDPH(l4) + 4 + 8, offlen);
