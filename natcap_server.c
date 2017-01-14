@@ -172,9 +172,14 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 		NATCAP_ERROR("alloc_skb fail\n");
 		return;
 	}
-	if (pskb_trim(nskb, nskb->len + offset)) {
-		NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
-		return;
+	if (offset <= 0) {
+		if (pskb_trim(nskb, nskb->len + offset)) {
+			NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+			return;
+		}
+	} else {
+		nskb->len += offset;
+		nskb->tail += offset;
 	}
 
 	neth = eth_hdr(nskb);
