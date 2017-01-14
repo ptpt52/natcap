@@ -189,33 +189,36 @@ static inline int is_natcap_server(__be32 ip)
 	return 0;
 }
 
-static inline void natcap_reset_synack(struct sk_buff *oskb, const struct net_device *dev)
+static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_device *dev, struct nf_conn *ct)
 {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
 	struct iphdr *niph, *oiph;
 	struct tcphdr *otcph, *ntcph;
-	int len;
-	unsigned int csum;
-	int offset, header_len;
+	int offset;
 
 	oeth = (struct ethhdr *)skb_mac_header(oskb);
 	oiph = ip_hdr(oskb);
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl*4);
 
 	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) - oskb->len;
-	header_len = offset < 0 ? 0 : offset;
-	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
+	if (offset > 0) {
+		return -1;
+	}
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), 0, GFP_ATOMIC);
 	if (!nskb) {
 		NATCAP_ERROR("alloc_skb fail\n");
-		return;
+		return -1;
+	}
+	if (pskb_trim(nskb, nskb->len + offset)) {
+		NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+		return -1;
 	}
 
 	neth = eth_hdr(nskb);
 	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
 	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
 	//neth->h_proto = htons(ETH_P_IP);
-	nskb->len += offset;
 
 	niph = ip_hdr(nskb);
 	memset(niph, 0, sizeof(struct iphdr));
@@ -229,7 +232,6 @@ static inline void natcap_reset_synack(struct sk_buff *oskb, const struct net_de
 	niph->protocol = oiph->protocol;
 	niph->id = __constant_htons(0xDEAD);
 	niph->frag_off = 0x0;
-	ip_send_check(niph);
 
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
 	memset(ntcph, 0, sizeof(struct tcphdr));
@@ -244,16 +246,14 @@ static inline void natcap_reset_synack(struct sk_buff *oskb, const struct net_de
 	ntcph->fin = 0;
 	ntcph->window = 0;
 
-	len = ntohs(niph->tot_len) - (niph->ihl<<2);
-	csum = csum_partial((char*)ntcph, len, 0);
-	ntcph->check = tcp_v4_check(len, niph->saddr, niph->daddr, csum);
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(nskb);
 
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
 
-	nskb->ip_summed = CHECKSUM_UNNECESSARY;
-
 	dev_queue_xmit(nskb);
+	return 0;
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
@@ -1353,7 +1353,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		if (!test_bit(IPS_NATCAP_ACK_BIT, &ct->status)) {
 			NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": drop without lock cfm\n", DEBUG_TCP_ARG(iph,l4));
 			if (TCPH(l4)->syn && TCPH(l4)->ack) {
-				natcap_reset_synack(skb, in);
+				natcap_reset_synack(skb, in, ct);
 			}
 			return NF_DROP;
 		}
@@ -1409,7 +1409,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		if (!test_bit(IPS_NATCAP_ACK_BIT, &ct->status)) {
 			NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": drop without lock cfm\n", DEBUG_TCP_ARG(iph,l4));
 			if (TCPH(l4)->syn && TCPH(l4)->ack) {
-				natcap_reset_synack(skb, in);
+				natcap_reset_synack(skb, in, ct);
 			}
 			return NF_DROP;
 		}

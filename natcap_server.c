@@ -98,19 +98,27 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	struct ethhdr *neth, *oeth;
 	struct iphdr *niph, *oiph;
 	struct udphdr *oudph, *nudph;
-	int payload_len = 4;
 	int offset, header_len;
 
 	oeth = (struct ethhdr *)skb_mac_header(oskb);
 	oiph = ip_hdr(oskb);
 	oudph = (struct udphdr *)((void *)oiph + oiph->ihl*4);
 
-	offset = sizeof(struct iphdr) + sizeof(struct udphdr) + payload_len - oskb->len;
+	offset = sizeof(struct iphdr) + sizeof(struct udphdr) + 4 - oskb->len;
 	header_len = offset < 0 ? 0 : offset;
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
 	if (!nskb) {
 		NATCAP_ERROR("alloc_skb fail\n");
 		return;
+	}
+	if (offset <= 0) {
+		if (pskb_trim(nskb, nskb->len + offset)) {
+			NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+			return;
+		}
+	} else {
+		nskb->len += offset;
+		nskb->tail += offset;
 	}
 
 	neth = eth_hdr(nskb);
@@ -124,18 +132,17 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	niph->version = oiph->version;
 	niph->ihl = 5;
 	niph->tos = 0;
-	niph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + payload_len);
+	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
 	niph->protocol = oiph->protocol;
 	niph->id = __constant_htons(0xDEAD);
 	niph->frag_off = 0x0;
-	nskb->len = ntohs(niph->tot_len);
 
-	nudph = (struct udphdr *)((void *)niph + niph->ihl*4);
+	nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
 	*((unsigned int *)((void *)nudph + sizeof(struct udphdr))) = __constant_htonl(0xFFFE009A);
 	nudph->source = oudph->dest;
 	nudph->dest = oudph->source;
-	nudph->len = ntohs(sizeof(struct udphdr) + payload_len);
+	nudph->len = ntohs(nskb->len - niph->ihl * 4);
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
@@ -194,12 +201,11 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	niph->version = oiph->version;
 	niph->ihl = 5;
 	niph->tos = 0;
-	niph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len + add_len);
+	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
 	niph->protocol = protocol;
 	niph->id = __constant_htons(0xDEAD);
 	niph->frag_off = 0x0;
-	ip_send_check(niph);
 
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
 	ntcph->source = otcph->dest;
@@ -232,9 +238,6 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	}
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
-	skb_shinfo(nskb)->gso_size = 0;
-	skb_shinfo(nskb)->gso_segs = 0;
-	skb_shinfo(nskb)->gso_type = 0;
 	skb_rcsum_tcpudp(nskb);
 
 	skb_push(nskb, (char *)niph - (char *)neth);
@@ -296,11 +299,11 @@ static inline int natcap_auth_convert_tcprst(struct sk_buff *skb)
 		return -1;
 	}
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-	offset = ntohs(iph->tot_len) - ((iph->ihl << 2) + sizeof(struct tcphdr));
-	if (offset < 0) {
+	offset = (iph->ihl << 2) + sizeof(struct tcphdr) - skb->len;
+	if (offset > 0) {
 		return -1;
 	}
-	if (pskb_trim(skb, skb->len - offset)) {
+	if (pskb_trim(skb, skb->len + offset)) {
 		return -1;
 	}
 
@@ -311,7 +314,7 @@ static inline int natcap_auth_convert_tcprst(struct sk_buff *skb)
 	tcph->window = __constant_htons(0);
 	tcph->doff = sizeof(struct tcphdr) / 4;
 
-	iph->tot_len = htons(ntohs(iph->tot_len) - offset);
+	iph->tot_len = htons(skb->len);
 	iph->id = __constant_htons(0xDEAD);
 	iph->frag_off = 0;
 
