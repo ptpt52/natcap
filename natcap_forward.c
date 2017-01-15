@@ -349,6 +349,7 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 			skb->tail += 8;
 			*((unsigned int *)((void *)UDPH(l4) + 8)) = __constant_htonl(0xFFFF0099);
 			iph->protocol = IPPROTO_UDP;
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
 
 			skb->next = NULL;
