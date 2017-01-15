@@ -1114,7 +1114,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		net = dev_net(out);
 	ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, skb);
 	if (ret != NF_ACCEPT) {
-		if (ret == NF_DROP) {
+		if (ret != NF_STOLEN) {
 			consume_skb(skb);
 		}
 		return NF_ACCEPT;
@@ -1122,7 +1122,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	/* XXX I just confirm it first  */
 	ret = nf_conntrack_confirm(skb);
 	if (ret != NF_ACCEPT) {
-		if (ret == NF_DROP) {
+		if (ret != NF_STOLEN) {
 			consume_skb(skb);
 		}
 		return NF_ACCEPT;
