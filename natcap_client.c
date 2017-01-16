@@ -1288,6 +1288,11 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 out:
 	if (test_bit(IPS_NATCAP_ACK_BIT, &master->status)) {
+		/* XXX I eat it, make the caller happy  */
+		ret = nf_conntrack_confirm(skb_orig);
+		if (ret != NF_ACCEPT) {
+			return ret;
+		}
 		consume_skb(skb_orig);
 		return NF_STOLEN;
 	}
