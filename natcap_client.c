@@ -1051,7 +1051,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	enum ip_conntrack_info ctinfo;
 	unsigned long status = NATCAP_CLIENT_MODE;
 	struct nf_conn *ct, *master = NULL;
-	struct sk_buff *skb2 = NULL;
+	struct sk_buff *skb2 = NULL, *skb_orig = skb;
 	struct iphdr *iph;
 	void *l4;
 	struct net *net = &init_net;
@@ -1288,7 +1288,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 out:
 	if (test_bit(IPS_NATCAP_ACK_BIT, &master->status)) {
-		return NF_DROP;
+		consume_skb(skb_orig);
+		return NF_STOLEN;
 	}
 
 	return NF_ACCEPT;
