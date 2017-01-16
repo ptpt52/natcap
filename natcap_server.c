@@ -220,7 +220,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	data = (char *)ntcph + sizeof(struct tcphdr);
 	memcpy(data, payload, payload_len);
 	ntcph->seq = otcph->ack_seq;
-	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - (oiph->ihl<<2) - (otcph->doff<<2));
+	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4);
 	ntcph->res1 = 0;
 	ntcph->doff = 5;
 	ntcph->syn = 0;
@@ -301,7 +301,7 @@ static inline int natcap_auth_convert_tcprst(struct sk_buff *skb)
 		return -1;
 	}
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-	offset = (iph->ihl << 2) + sizeof(struct tcphdr) - skb->len;
+	offset = iph->ihl * 4 + sizeof(struct tcphdr) - skb->len;
 	if (offset > 0) {
 		return -1;
 	}
@@ -476,8 +476,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 		if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
 			int data_len;
 			unsigned char *data;
-			data = skb->data + (iph->ihl << 2) + (TCPH(l4)->doff << 2);
-			data_len = ntohs(iph->tot_len) - ((iph->ihl << 2) + (TCPH(l4)->doff << 2));
+			data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
+			data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
 			if ((data_len > 4 && strncasecmp(data, "GET ", 4) == 0) ||
 					(data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
 				natcap_auth_http_302(in, skb, ct);
