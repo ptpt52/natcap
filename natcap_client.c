@@ -347,9 +347,6 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
-		if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr)) {
-			return NF_DROP;
-		}
 
 		if (ip_set_test_dst_ip(in, out, skb, "knocklist") > 0) {
 			natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
@@ -554,12 +551,16 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			}
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
-			if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr)) {
-				return NF_DROP;
-			}
 
 			if (TCPH(l4)->syn && !TCPH(l4)->ack) {
-				struct natcap_TCPOPT *opt = natcap_tcp_decode_header(TCPH(l4));
+				struct natcap_TCPOPT *opt;
+				if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
+					return NF_DROP;
+				}
+				iph = ip_hdr(skb);
+				l4 = (void *)iph + iph->ihl * 4;
+
+				opt = natcap_tcp_decode_header(TCPH(l4));
 				if (opt != NULL) {
 					if (opt->header.opcode == TCPOPT_NATCAP) {
 						struct tuple server;
@@ -600,9 +601,6 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
-		if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr)) {
-			return NF_DROP;
-		}
 		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
 			return NF_DROP;
 		}
@@ -711,6 +709,13 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 8)) {
 			return NF_DROP;
 		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4)) {
+			return NF_DROP;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
 
 		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4 - 8;
 		BUG_ON(offlen < 0);
@@ -719,6 +724,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		skb->len -= 8;
 		skb->tail -= 8;
 		iph->protocol = IPPROTO_TCP;
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
 		skb_rcsum_tcpudp(skb);
 	}
 
@@ -1368,9 +1374,6 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 	}
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
-	if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr)) {
-		return NF_DROP;
-	}
 	if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
 		return NF_DROP;
 	}

@@ -445,6 +445,13 @@ static unsigned int natcap_forward_pre_in_hook(void *priv,
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 8)) {
 			return NF_DROP;
 		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4)) {
+			return NF_DROP;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
 
 		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4 - 8;
 		BUG_ON(offlen < 0);
@@ -453,6 +460,7 @@ static unsigned int natcap_forward_pre_in_hook(void *priv,
 		skb->len -= 8;
 		skb->tail -= 8;
 		iph->protocol = IPPROTO_TCP;
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
 		skb_rcsum_tcpudp(skb);
 
 		if (in)
