@@ -34,6 +34,7 @@ enum {
 	UDP_ENCODE = 1,
 };
 
+extern unsigned int auth_disabled;
 extern unsigned int mode;
 extern const char *const mode_str[];
 

@@ -32,6 +32,10 @@ unsigned int mode = CLIENT_MODE;
 module_param(mode, int, 0);
 MODULE_PARM_DESC(mode, "Working mode (0=client,1=server,2=forward) default=0");
 
+unsigned int auth_disabled = 0;
+module_param(auth_disabled, int, 0);
+MODULE_PARM_DESC(auth_disabled, "Disable auth default=0");
+
 unsigned int server_seed = 0;
 module_param(server_seed, int, 0);
 MODULE_PARM_DESC(server_seed, "Server side seed number for encode");
