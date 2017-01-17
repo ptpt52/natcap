@@ -65,14 +65,15 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+		return NF_ACCEPT;
+	}
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+		flow_total_rx_bytes += skb->len;
 		skb->mark = XT_MARK_NATCAP;
-		return NF_ACCEPT;
-	}
-	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
 
@@ -117,6 +118,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 			}
 		}
 
+		flow_total_rx_bytes += skb->len;
 		skb->mark = XT_MARK_NATCAP;
 		NATCAP_DEBUG("(FPCI)" DEBUG_TCP_FMT ": after decode\n", DEBUG_TCP_ARG(iph,l4));
 	} else if (iph->protocol == IPPROTO_UDP) {
@@ -200,6 +202,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+			flow_total_rx_bytes += skb->len;
 			skb->mark = XT_MARK_NATCAP;
 		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -266,6 +269,9 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 	}
 	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		return NF_ACCEPT;
+	}
+	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_REPLY) {
+		flow_total_tx_bytes += skb->len;
 	}
 	if (!test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
 		return NF_ACCEPT;

@@ -24,9 +24,6 @@
 #include "natcap_client.h"
 #include "natcap_knock.h"
 
-unsigned long long flow_total_tx_bytes = 0;
-unsigned long long flow_total_rx_bytes = 0;
-
 unsigned int server_persist_timeout = 0;
 module_param(server_persist_timeout, int, 0);
 MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
@@ -817,6 +814,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
+	flow_total_tx_bytes += skb->len;
+
 	if (iph->protocol == IPPROTO_TCP) {
 		struct sk_buff *skb2 = NULL;
 
@@ -878,7 +877,6 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": after encode\n", DEBUG_TCP_ARG(iph,l4));
 
 		if (!test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
-			flow_total_tx_bytes += skb->len;
 			if (skb2) {
 				NF_OKFN(skb2);
 			}
@@ -939,7 +937,6 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
 			skb->next = NULL;
-			flow_total_tx_bytes += skb->len;
 
 			NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 

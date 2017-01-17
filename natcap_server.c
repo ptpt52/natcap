@@ -470,6 +470,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 		}
 
+		flow_total_rx_bytes += skb->len;
 		skb->mark = XT_MARK_NATCAP;
 
 		NATCAP_DEBUG("(SPCI)" DEBUG_TCP_FMT ": after decode\n", DEBUG_TCP_ARG(iph,l4));
@@ -546,6 +547,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+			flow_total_rx_bytes += skb->len;
 			skb->mark = XT_MARK_NATCAP;
 		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -641,6 +643,8 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 		}
 		return NF_ACCEPT;
 	}
+
+	flow_total_tx_bytes += skb->len;
 
 	if (iph->protocol == IPPROTO_TCP) {
 		if (TCPH(l4)->doff * 4 < sizeof(struct tcphdr)) {
