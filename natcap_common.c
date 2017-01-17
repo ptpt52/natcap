@@ -366,7 +366,7 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt)
 
 	if (tcph->doff * 4 + tcpopt->header.opsize > 60)
 		return -1;
-	if (skb->end - skb->tail < tcpopt->header.opsize && pskb_expand_head(skb, 0, tcpopt->header.opsize, GFP_ATOMIC)) {
+	if (skb_tailroom(skb) < tcpopt->header.opsize && pskb_expand_head(skb, 0, tcpopt->header.opsize, GFP_ATOMIC)) {
 		return -2;
 	}
 	iph = ip_hdr(skb);
