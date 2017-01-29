@@ -361,6 +361,9 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			if (server.encryption) {
 				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 			}
+			if (encode_mode == UDP_ENCODE) {
+				set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status);
+			}
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -450,9 +453,6 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			}
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
-		}
-		if (encode_mode == UDP_ENCODE) {
-			set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status);
 		}
 	}
 
