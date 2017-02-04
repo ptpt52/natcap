@@ -850,7 +850,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				return NF_DROP;
 			}
 			tcpopt.header.type |= NATCAP_TCPOPT_SYN_BIT;
-			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip == ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
+			if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
 				tcpopt.header.type |= NATCAP_TCPOPT_TARGET_BIT;
 			}
 			ret = natcap_tcp_encode(skb2, &tcpopt);
@@ -863,7 +863,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			tcpopt.header.opsize = 0;
 		}
 		if (ret == 0) {
-			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip == ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
+			if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
 				tcpopt.header.type |= NATCAP_TCPOPT_TARGET_BIT;
 			}
 			ret = natcap_tcp_encode(skb, &tcpopt);
@@ -1201,7 +1201,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			return NF_ACCEPT;
 		}
 		tcpopt.header.type |= NATCAP_TCPOPT_SYN_BIT;
-		if (iph->daddr == ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
+		if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
 			tcpopt.header.type |= NATCAP_TCPOPT_TARGET_BIT;
 		}
 		ret = natcap_tcp_encode(skb2, &tcpopt);
@@ -1216,7 +1216,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		tcpopt.header.opsize = 0;
 	}
 	if (ret == 0) {
-		if (iph->daddr == ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
+		if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
 			tcpopt.header.type |= NATCAP_TCPOPT_TARGET_BIT;
 		}
 		ret = natcap_tcp_encode(skb, &tcpopt);
