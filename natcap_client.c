@@ -561,14 +561,14 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 				if (opt != NULL) {
 					if (opt->header.opcode == TCPOPT_NATCAP) {
 						struct tuple server;
-						if (opt->header.type == NATCAP_TCPOPT_DST) {
+						if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_DST) {
 							server.ip = opt->dst.data.ip;
 							server.port = opt->dst.data.port;
 							server.encryption = opt->header.encryption;
 							if (natcap_dnat_setup(ct, server.ip, server.port) == NF_ACCEPT) {
 								NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup ok, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 							}
-						} else if (opt->header.type == NATCAP_TCPOPT_ALL || opt->header.type == NATCAP_TCPOPT_SYN) {
+						} else if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_ALL) {
 							server.ip = opt->all.data.ip;
 							server.port = opt->all.data.port;
 							server.encryption = opt->header.encryption;
@@ -849,9 +849,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				consume_skb(skb2);
 				return NF_DROP;
 			}
-			if (tcpopt.header.type == NATCAP_TCPOPT_ALL) {
-				tcpopt.header.type = NATCAP_TCPOPT_SYN;
-			}
+			tcpopt.header.type |= NATCAP_TCPOPT_SYN_BIT;
 			ret = natcap_tcp_encode(skb2, &tcpopt);
 			if (ret != 0) {
 				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
@@ -1196,9 +1194,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			consume_skb(skb);
 			return NF_ACCEPT;
 		}
-		if (tcpopt.header.type == NATCAP_TCPOPT_ALL) {
-			tcpopt.header.type = NATCAP_TCPOPT_SYN;
-		}
+		tcpopt.header.type |= NATCAP_TCPOPT_SYN_BIT;
 		ret = natcap_tcp_encode(skb2, &tcpopt);
 		if (ret != 0) {
 			NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);

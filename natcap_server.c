@@ -33,11 +33,14 @@ static inline int natcap_auth(const struct net_device *in,
 	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	if (tcpopt->header.type == NATCAP_TCPOPT_ALL || tcpopt->header.type == NATCAP_TCPOPT_SYN) {
+	if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_ALL) {
 		if (server) {
 			server->ip = tcpopt->all.data.ip;
 			server->port = tcpopt->all.data.port;
 			server->encryption = tcpopt->header.encryption;
+			if ((tcpopt->header.type & NATCAP_TCPOPT_TARGET_BIT)) {
+				server->ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+			}
 		}
 		if (!auth_disabled) {
 			eth = eth_hdr(skb);
@@ -59,7 +62,7 @@ static inline int natcap_auth(const struct net_device *in,
 					tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
 					ntohl(tcpopt->all.data.u_hash));
 		}
-	} else if (tcpopt->header.type == NATCAP_TCPOPT_USER) {
+	} else if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_USER) {
 		if (server) {
 			return E_NATCAP_INVAL;
 		}
@@ -83,11 +86,14 @@ static inline int natcap_auth(const struct net_device *in,
 					tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
 					ntohl(tcpopt->user.data.u_hash));
 		}
-	} else if (tcpopt->header.type == NATCAP_TCPOPT_DST) {
+	} else if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_DST) {
 		if (server) {
 			server->ip = tcpopt->dst.data.ip;
 			server->port = tcpopt->dst.data.port;
 			server->encryption = tcpopt->header.encryption;
+			if ((tcpopt->header.type & NATCAP_TCPOPT_TARGET_BIT)) {
+				server->ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+			}
 		} else if (!tcph->syn || tcph->ack) {
 			return E_NATCAP_INVAL;
 		}

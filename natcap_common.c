@@ -334,6 +334,9 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			memcpy(tcpopt->all.data.mac_addr, default_mac_addr, ETH_ALEN);
 			tcpopt->all.data.u_hash = default_u_hash;
 			set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
+			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip == ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
+				tcpopt->header.type |= NATCAP_TCPOPT_TARGET_BIT;
+			}
 			return 0;
 		}
 		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int));
@@ -343,6 +346,9 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			tcpopt->header.opsize = size;
 			tcpopt->dst.data.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 			tcpopt->dst.data.port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
+			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip == ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
+				tcpopt->header.type |= NATCAP_TCPOPT_TARGET_BIT;
+			}
 			return 0;
 		}
 		return -1;
@@ -362,7 +368,7 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt)
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	if (tcpopt->header.type == NATCAP_TCPOPT_NONE) {
+	if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_NONE) {
 		goto do_encode;
 	}
 
@@ -388,7 +394,7 @@ do_encode:
 	if (tcpopt->header.encryption) {
 		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
 	}
-	if (tcpopt->header.encryption || tcpopt->header.type != NATCAP_TCPOPT_NONE) {
+	if (tcpopt->header.encryption || NTCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_NONE) {
 		skb_rcsum_tcpudp(skb);
 	}
 
@@ -417,7 +423,7 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 	if (mode == FORWARD_MODE) {
 		goto done;
 	}
-	if (tcpopt->header.type == NATCAP_TCPOPT_SYN) {
+	if ((tcpopt->header.type & NATCAP_TCPOPT_SYN_BIT)) {
 		tcph->seq = TCPOPT_NATCAP;
 		tcph->ack_seq = TCPOPT_NATCAP;
 		goto do_decode;
@@ -436,7 +442,7 @@ do_decode:
 	if (tcpopt->header.encryption) {
 		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_decode);
 	}
-	if (tcpopt->header.encryption || tcpopt->header.type != NATCAP_TCPOPT_NONE) {
+	if (tcpopt->header.encryption || NTCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_NONE) {
 		skb_rcsum_tcpudp(skb);
 	}
 done:

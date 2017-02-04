@@ -44,13 +44,18 @@ struct natcap_TCPOPT_user {
 	u8 mac_addr[ETH_ALEN];
 };
 
+#define NATCAP_TCPOPT_SYN_BIT (1<<7)
+#define NATCAP_TCPOPT_TARGET_BIT (1<<6)
+
+#define NATCAP_TCPOPT_TYPE_MASK (0x0F)
+#define NTCAP_TCPOPT_TYPE(t) ((t) & NATCAP_TCPOPT_TYPE_MASK)
+
 struct natcap_TCPOPT {
 #define NATCAP_TCPOPT_NONE 0
 	struct natcap_TCPOPT_header header;
 	union {
 		struct {
 #define NATCAP_TCPOPT_ALL 1
-#define NATCAP_TCPOPT_SYN 4
 			struct natcap_TCPOPT_data data;
 		} all;
 		struct {
