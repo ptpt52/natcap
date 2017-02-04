@@ -850,6 +850,9 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				return NF_DROP;
 			}
 			tcpopt.header.type |= NATCAP_TCPOPT_SYN_BIT;
+			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip == ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
+				tcpopt.header.type |= NATCAP_TCPOPT_TARGET_BIT;
+			}
 			ret = natcap_tcp_encode(skb2, &tcpopt);
 			if (ret != 0) {
 				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
@@ -860,6 +863,9 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			tcpopt.header.opsize = 0;
 		}
 		if (ret == 0) {
+			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip == ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
+				tcpopt.header.type |= NATCAP_TCPOPT_TARGET_BIT;
+			}
 			ret = natcap_tcp_encode(skb, &tcpopt);
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;

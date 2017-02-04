@@ -334,9 +334,6 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			memcpy(tcpopt->all.data.mac_addr, default_mac_addr, ETH_ALEN);
 			tcpopt->all.data.u_hash = default_u_hash;
 			set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
-			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip == ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
-				tcpopt->header.type |= NATCAP_TCPOPT_TARGET_BIT;
-			}
 			return 0;
 		}
 		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int));
@@ -346,9 +343,6 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			tcpopt->header.opsize = size;
 			tcpopt->dst.data.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 			tcpopt->dst.data.port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
-			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip == ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
-				tcpopt->header.type |= NATCAP_TCPOPT_TARGET_BIT;
-			}
 			return 0;
 		}
 		return -1;
