@@ -136,6 +136,7 @@ extern int skb_rcsum_tcpudp(struct sk_buff *skb);
 extern int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_conn *ct, struct natcap_TCPOPT *tcpopt);
 extern int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt);
 extern int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt);
+extern int natcap_tcp_encode_fwdupdate(struct sk_buff *skb, struct tcphdr *tcph, const struct tuple *server);
 static inline struct natcap_TCPOPT *natcap_tcp_decode_header(struct tcphdr *tcph)
 {
 	struct natcap_TCPOPT *opt;

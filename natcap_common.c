@@ -443,6 +443,43 @@ done:
 	return 0;
 }
 
+int natcap_tcp_encode_fwdupdate(struct sk_buff *skb, struct tcphdr *tcph, const struct tuple *server)
+{
+	struct natcap_TCPOPT *tcpopt;
+	__be32 target_ip = 0;
+	u16 oldopt, newopt;
+
+	tcpopt = natcap_tcp_decode_header(tcph);
+	if (tcpopt == NULL) {
+		return -1;
+	}
+
+	if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_ALL) {
+		target_ip = tcpopt->all.data.ip;
+	} else if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_DST) {
+		target_ip = tcpopt->dst.data.ip;
+	} else {
+		return -1;
+	}
+
+	oldopt = (tcpopt->header.type << 8) | tcpopt->header.encryption;
+
+	if (target_ip == server->ip) {
+		tcpopt->header.type |= NATCAP_TCPOPT_TARGET_BIT;
+	} else {
+		tcpopt->header.type &= ~NATCAP_TCPOPT_TARGET_BIT;
+	}
+
+	newopt = (tcpopt->header.type << 8) | tcpopt->header.encryption;
+
+	if (oldopt != newopt) {
+		inet_proto_csum_replace2(&tcph->check, skb, htons(oldopt), htons(newopt), false);
+		return 1;
+	}
+
+	return 0;
+}
+
 int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
 {
 	int ret = 0;

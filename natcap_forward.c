@@ -110,6 +110,12 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
+			if (natcap_tcp_encode_fwdupdate(skb, TCPH(l4), &server) < 0) {
+				NATCAP_ERROR("(FPCI)" DEBUG_TCP_FMT ": natcap_tcp_encode_fwdupdate failed, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				return NF_DROP;
+			}
+
 			NATCAP_INFO("(FPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 			if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 				NATCAP_ERROR("(FPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
@@ -186,6 +192,10 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
+				if (natcap_tcp_encode_fwdupdate(skb, TCPH(l4 + 8), &server) > 0) {
+					skb_rcsum_tcpudp(skb);
+				}
+
 				NATCAP_INFO("(FPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
 				if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 					NATCAP_ERROR("(FPCI)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
