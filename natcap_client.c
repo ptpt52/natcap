@@ -169,7 +169,7 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 		dst->port = ((jiffies^ip) & 0xFFFF);
 	}
 
-	if (port == __constant_htons(443) || port == __constant_htons(22)) {
+	if (port != __constant_htons(80)) {
 		dst->encryption = 0;
 	}
 }
