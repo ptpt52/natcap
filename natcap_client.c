@@ -354,7 +354,9 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		} else if (ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
-			if (shadowsocks && hooknum == NF_INET_PRE_ROUTING) {
+			if (shadowsocks && hooknum == NF_INET_PRE_ROUTING &&
+					(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(80) ||
+					 ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(443))) {
 				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection match gfwlist, use shadowsocks\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
