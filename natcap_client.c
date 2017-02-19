@@ -28,6 +28,8 @@ unsigned int server_persist_timeout = 0;
 module_param(server_persist_timeout, int, 0);
 MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
 
+unsigned int shadowsocks = 0;
+
 u32 default_u_hash = 0;
 unsigned char default_mac_addr[ETH_ALEN];
 static void default_mac_addr_init(void)
@@ -352,6 +354,11 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		} else if (ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
+			if (shadowsocks && hooknum == NF_INET_PRE_ROUTING) {
+				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection match gfwlist, use shadowsocks\n", DEBUG_TCP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
 			natcap_server_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
