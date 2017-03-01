@@ -488,7 +488,7 @@ natcaped_out:
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": natcaped syn2\n", DEBUG_TCP_ARG(iph,l4));
 				return NF_ACCEPT;
 			}
-			if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
+			if (test_bit(IPS_NATCAP_SYN1_BIT, &ct->status) && test_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
 				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": natcaped syn3 del target from gfwlist\n", DEBUG_TCP_ARG(iph,l4));
 				ip_set_del_dst_ip(in, out, skb, "gfwlist");
 			}
@@ -802,7 +802,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn2\n", DEBUG_TCP_ARG(iph,l4));
 					return NF_ACCEPT;
 				}
-				if (!test_and_set_bit(IPS_NATCAP_SYN3_BIT, &ct->status)) {
+				if (test_bit(IPS_NATCAP_SYN1_BIT, &ct->status) && test_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
 					NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": bypass syn3 del target from bypasslist\n", DEBUG_TCP_ARG(iph,l4));
 					ip_set_del_dst_ip(in, out, skb, "bypasslist");
 				}
@@ -1449,7 +1449,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 		NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": after natcap reply\n", DEBUG_TCP_ARG(iph,l4));
 
-		if (!test_and_set_bit(IPS_NATCAP_IPSET_BIT, &ct->status) && !TCPH(l4)->rst) {
+		if (!test_and_set_bit(IPS_NATCAP_MASTER_BIT, &ct->status) && !TCPH(l4)->rst) {
 			if (!is_natcap_server(iph->saddr) && ip_set_test_src_ip(in, out, skb, "cniplist") <= 0) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn natcap got response add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
 				ip_set_add_src_ip(in, out, skb, "gfwlist");
@@ -1474,7 +1474,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			}
 			return NF_DROP;
 		}
-		if (!test_and_set_bit(IPS_NATCAP_IPSET_BIT, &ct->status) && !TCPH(l4)->rst) {
+		if (!test_and_set_bit(IPS_NATCAP_MASTER_BIT, &ct->status) && !TCPH(l4)->rst) {
 			if (ip_set_test_src_ip(in, out, skb, "cniplist") > 0) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn bypass got response add target to bypasslist\n", DEBUG_TCP_ARG(iph,l4));
 				ip_set_add_src_ip(in, out, skb, "bypasslist");
