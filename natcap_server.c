@@ -20,12 +20,24 @@
 #include "natcap_common.h"
 #include "natcap_server.h"
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+static inline int natcap_auth(const struct nf_hook_state *state,
+		const struct net_device *in,
+		const struct net_device *out,
+		struct sk_buff *skb,
+		struct nf_conn *ct,
+		const struct natcap_TCPOPT *tcpopt,
+		struct tuple *server)
+#define NATCAP_AUTH(state, in, out, skb, ct, tcpopt, server) natcap_auth(state, in, out, skb, ct, tcpopt, server)
+#else
 static inline int natcap_auth(const struct net_device *in,
 		const struct net_device *out,
 		struct sk_buff *skb,
 		struct nf_conn *ct,
 		const struct natcap_TCPOPT *tcpopt,
 		struct tuple *server)
+#define NATCAP_AUTH(state, in, out, skb, ct, tcpopt, server) natcap_auth(in, out, skb, ct, tcpopt, server)
+#endif
 {
 	int ret;
 	unsigned char old_mac[ETH_ALEN];
@@ -46,7 +58,7 @@ static inline int natcap_auth(const struct net_device *in,
 			eth = eth_hdr(skb);
 			memcpy(old_mac, eth->h_source, ETH_ALEN);
 			memcpy(eth->h_source, tcpopt->all.data.mac_addr, ETH_ALEN);
-			ret = ip_set_test_src_mac(in, out, skb, "vclist");
+			ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
 			memcpy(eth->h_source, old_mac, ETH_ALEN);
 			if (ret <= 0) {
 				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth failed\n",
@@ -70,7 +82,7 @@ static inline int natcap_auth(const struct net_device *in,
 			eth = eth_hdr(skb);
 			memcpy(old_mac, eth->h_source, ETH_ALEN);
 			memcpy(eth->h_source, tcpopt->user.data.mac_addr, ETH_ALEN);
-			ret = ip_set_test_src_mac(in, out, skb, "vclist");
+			ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
 			memcpy(eth->h_source, old_mac, ETH_ALEN);
 			if (ret <= 0) {
 				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth failed\n",
@@ -424,7 +436,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				NATCAP_ERROR("(SPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				return NF_DROP;
 			}
-			ret = natcap_auth(in, out, skb, ct, &tcpopt, NULL);
+			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, NULL);
 			if (ret != E_NATCAP_OK) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				if (ret == E_NATCAP_AUTH_FAIL) {
@@ -452,7 +464,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				return NF_ACCEPT;
 			}
 
-			ret = natcap_auth(in, out, skb, ct, &tcpopt, &server);
+			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, &server);
 			if (ret != E_NATCAP_OK) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				if (ret == E_NATCAP_AUTH_FAIL) {

@@ -67,8 +67,10 @@ static unsigned int natcap_knock_dnat_hook(void *priv,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
+#endif
 #endif
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
@@ -108,7 +110,7 @@ static unsigned int natcap_knock_dnat_hook(void *priv,
 		return NF_DROP;
 	}
 
-	if (ip_set_test_dst_ip(in, out, skb, "knocklist") > 0) {
+	if (IP_SET_test_dst_ip(state, in, out, skb, "knocklist") > 0) {
 		natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 		NATCAP_INFO("(KD)" DEBUG_TCP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 	} else {

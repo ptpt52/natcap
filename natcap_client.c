@@ -307,8 +307,10 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
+#endif
 #endif
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
@@ -347,13 +349,13 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (ip_set_test_dst_ip(in, out, skb, "knocklist") > 0) {
+		if (IP_SET_test_dst_ip(state, in, out, skb, "knocklist") > 0) {
 			natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
-		} else if (ip_set_test_dst_ip(in, out, skb, "bypasslist") > 0) {
+		} else if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
-		} else if (ip_set_test_dst_ip(in, out, skb, "gfwlist") > 0) {
+		} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0) {
 			if (shadowsocks && hooknum == NF_INET_PRE_ROUTING &&
 					(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(80) ||
 					 ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(443))) {
@@ -419,7 +421,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (ip_set_test_dst_ip(in, out, skb, "udproxylist") > 0) {
+		if (IP_SET_test_dst_ip(state, in, out, skb, "udproxylist") > 0) {
 			natcap_server_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
@@ -491,7 +493,7 @@ natcaped_out:
 			if (test_bit(IPS_NATCAP_SYN1_BIT, &ct->status) && test_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
 				if (!is_natcap_server(iph->daddr)) {
 					NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": natcaped syn3 del target from gfwlist\n", DEBUG_TCP_ARG(iph,l4));
-					ip_set_del_dst_ip(in, out, skb, "gfwlist");
+					IP_SET_del_dst_ip(state, in, out, skb, "gfwlist");
 				}
 			}
 		}
@@ -769,8 +771,10 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
+#endif
 #endif
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
@@ -806,7 +810,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				}
 				if (test_bit(IPS_NATCAP_SYN1_BIT, &ct->status) && test_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
 					NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": bypass syn3 del target from bypasslist\n", DEBUG_TCP_ARG(iph,l4));
-					ip_set_del_dst_ip(in, out, skb, "bypasslist");
+					IP_SET_del_dst_ip(state, in, out, skb, "bypasslist");
 				}
 			}
 		}
@@ -1452,17 +1456,17 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": after natcap reply\n", DEBUG_TCP_ARG(iph,l4));
 
 		if (!test_and_set_bit(IPS_NATCAP_MASTER_BIT, &ct->status) && !TCPH(l4)->rst) {
-			if (!is_natcap_server(iph->saddr) && ip_set_test_src_ip(in, out, skb, "cniplist") <= 0) {
+			if (!is_natcap_server(iph->saddr) && IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn natcap got response add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
-				ip_set_add_src_ip(in, out, skb, "gfwlist");
+				IP_SET_add_src_ip(state, in, out, skb, "gfwlist");
 			}
 		}
 		return NF_ACCEPT;
 	} else {
 		if (TCPH(l4)->rst) {
-			if (TCPH(l4)->source == __constant_htons(80) && ip_set_test_src_ip(in, out, skb, "cniplist") <= 0) {
+			if (TCPH(l4)->source == __constant_htons(80) && IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": bypass get reset add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
-				ip_set_add_src_ip(in, out, skb, "gfwlist");
+				IP_SET_add_src_ip(state, in, out, skb, "gfwlist");
 			}
 		}
 		if (!test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
@@ -1477,9 +1481,9 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			return NF_DROP;
 		}
 		if (!test_and_set_bit(IPS_NATCAP_MASTER_BIT, &ct->status) && !TCPH(l4)->rst) {
-			if (ip_set_test_src_ip(in, out, skb, "cniplist") > 0) {
+			if (IP_SET_test_src_ip(state, in, out, skb, "cniplist") > 0) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn bypass got response add target to bypasslist\n", DEBUG_TCP_ARG(iph,l4));
-				ip_set_add_src_ip(in, out, skb, "bypasslist");
+				IP_SET_add_src_ip(state, in, out, skb, "bypasslist");
 			}
 		}
 	}

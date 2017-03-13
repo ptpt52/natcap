@@ -480,14 +480,20 @@ int natcap_tcp_encode_fwdupdate(struct sk_buff *skb, struct tcphdr *tcph, const 
 	return 0;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+int ip_set_test_src_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
+#else
 int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+#endif
 {
 	int ret = 0;
 	ip_set_id_t id;
 	struct ip_set *set;
 	struct ip_set_adt_opt opt;
 	struct xt_action_param par;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	struct net *net = state->net;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 	struct net *net = &init_net;
 	if (in)
 		net = dev_net(in);
@@ -502,10 +508,15 @@ int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 
+	memset(&par, 0, sizeof(par));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	par.state = state;
+#else
 	par.in = in;
 	par.out = out;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 	par.net = net;
+#endif
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
@@ -529,14 +540,20 @@ int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+int ip_set_test_dst_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
+#else
 int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+#endif
 {
 	int ret = 0;
 	ip_set_id_t id;
 	struct ip_set *set;
 	struct ip_set_adt_opt opt;
 	struct xt_action_param par;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	struct net *net = state->net;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 	struct net *net = &init_net;
 	if (in)
 		net = dev_net(in);
@@ -551,10 +568,15 @@ int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 
+	memset(&par, 0, sizeof(par));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	par.state = state;
+#else
 	par.in = in;
 	par.out = out;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 	par.net = net;
+#endif
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
@@ -578,14 +600,20 @@ int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+int ip_set_add_src_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
+#else
 int ip_set_add_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+#endif
 {
 	int ret = 0;
 	ip_set_id_t id;
 	struct ip_set *set;
 	struct ip_set_adt_opt opt;
 	struct xt_action_param par;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	struct net *net = state->net;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 	struct net *net = &init_net;
 	if (in)
 		net = dev_net(in);
@@ -600,10 +628,15 @@ int ip_set_add_src_ip(const struct net_device *in, const struct net_device *out,
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 
+	memset(&par, 0, sizeof(par));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	par.state = state;
+#else
 	par.in = in;
 	par.out = out;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 	par.net = net;
+#endif
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
@@ -627,14 +660,20 @@ int ip_set_add_src_ip(const struct net_device *in, const struct net_device *out,
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+int ip_set_add_dst_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
+#else
 int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+#endif
 {
 	int ret = 0;
 	ip_set_id_t id;
 	struct ip_set *set;
 	struct ip_set_adt_opt opt;
 	struct xt_action_param par;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	struct net *net = state->net;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 	struct net *net = &init_net;
 	if (in)
 		net = dev_net(in);
@@ -649,10 +688,15 @@ int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out,
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 
+	memset(&par, 0, sizeof(par));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	par.state = state;
+#else
 	par.in = in;
 	par.out = out;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 	par.net = net;
+#endif
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
@@ -676,14 +720,20 @@ int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out,
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+int ip_set_del_src_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
+#else
 int ip_set_del_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+#endif
 {
 	int ret = 0;
 	ip_set_id_t id;
 	struct ip_set *set;
 	struct ip_set_adt_opt opt;
 	struct xt_action_param par;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	struct net *net = state->net;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 	struct net *net = &init_net;
 	if (in)
 		net = dev_net(in);
@@ -698,10 +748,15 @@ int ip_set_del_src_ip(const struct net_device *in, const struct net_device *out,
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 
+	memset(&par, 0, sizeof(par));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	par.state = state;
+#else
 	par.in = in;
 	par.out = out;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 	par.net = net;
+#endif
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
@@ -725,14 +780,20 @@ int ip_set_del_src_ip(const struct net_device *in, const struct net_device *out,
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+int ip_set_del_dst_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
+#else
 int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+#endif
 {
 	int ret = 0;
 	ip_set_id_t id;
 	struct ip_set *set;
 	struct ip_set_adt_opt opt;
 	struct xt_action_param par;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	struct net *net = state->net;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 	struct net *net = &init_net;
 	if (in)
 		net = dev_net(in);
@@ -747,10 +808,15 @@ int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out,
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 
+	memset(&par, 0, sizeof(par));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	par.state = state;
+#else
 	par.in = in;
 	par.out = out;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 	par.net = net;
+#endif
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
@@ -774,14 +840,20 @@ int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out,
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+int ip_set_test_src_mac(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
+#else
 int ip_set_test_src_mac(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+#endif
 {
 	int ret = 0;
 	ip_set_id_t id;
 	struct ip_set *set;
 	struct ip_set_adt_opt opt;
 	struct xt_action_param par;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	struct net *net = state->net;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 	struct net *net = &init_net;
 	if (in)
 		net = dev_net(in);
@@ -796,10 +868,15 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 	opt.cmdflags = 0;
 	opt.ext.timeout = UINT_MAX;
 
+	memset(&par, 0, sizeof(par));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	par.state = state;
+#else
 	par.in = in;
 	par.out = out;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 	par.net = net;
+#endif
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
