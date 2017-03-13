@@ -489,8 +489,10 @@ natcaped_out:
 				return NF_ACCEPT;
 			}
 			if (test_bit(IPS_NATCAP_SYN1_BIT, &ct->status) && test_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
-				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": natcaped syn3 del target from gfwlist\n", DEBUG_TCP_ARG(iph,l4));
-				ip_set_del_dst_ip(in, out, skb, "gfwlist");
+				if (!is_natcap_server(iph->daddr)) {
+					NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": natcaped syn3 del target from gfwlist\n", DEBUG_TCP_ARG(iph,l4));
+					ip_set_del_dst_ip(in, out, skb, "gfwlist");
+				}
 			}
 		}
 	}
