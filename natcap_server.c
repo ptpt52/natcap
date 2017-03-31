@@ -220,8 +220,8 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 
 	niph = ip_hdr(nskb);
 	memset(niph, 0, sizeof(struct iphdr));
-	niph->saddr = oiph->daddr;
-	niph->daddr = oiph->saddr;
+	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 	niph->version = oiph->version;
 	niph->ihl = 5;
 	niph->tos = 0;
@@ -232,8 +232,8 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	niph->frag_off = 0x0;
 
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
-	ntcph->source = otcph->dest;
-	ntcph->dest = otcph->source;
+	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
 	if (protocol == IPPROTO_UDP) {
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
 		*((unsigned int *)((void *)UDPH(ntcph) + 8)) = __constant_htonl(0xFFFF0099);
