@@ -354,6 +354,96 @@ static inline int natcap_auth_convert_tcprst(struct sk_buff *skb)
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned int natcap_server_forward_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_server_forward_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+static unsigned int natcap_server_forward_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	const struct net_device *in = state->in;
+#else
+static unsigned int natcap_server_forward_hook(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	const struct net_device *in = state->in;
+#endif
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
+	struct iphdr *iph;
+	void *l4;
+
+	if (disabled)
+		return NF_ACCEPT;
+
+	iph = ip_hdr(skb);
+	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
+		return NF_ACCEPT;
+	}
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+		return NF_ACCEPT;
+	}
+	if (test_bit(IPS_NATCAP_DROP_BIT, &ct->status)) {
+		return NF_DROP;
+	}
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+		return NF_ACCEPT;
+	}
+
+	if (iph->protocol == IPPROTO_TCP) {
+		if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
+			int data_len;
+			unsigned char *data;
+
+			if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+				return NF_DROP;
+			}
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
+			if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
+				return NF_DROP;
+			}
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
+
+			data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
+			data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
+			if ((data_len > 4 && strncasecmp(data, "GET ", 4) == 0) ||
+					(data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
+				natcap_auth_http_302(in, skb, ct);
+				set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+				return NF_DROP;
+			} else if (data_len > 0) {
+				set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+				return NF_DROP;
+			} else if (TCPH(l4)->ack && !TCPH(l4)->syn) {
+				natcap_auth_convert_tcprst(skb);
+				return NF_ACCEPT;
+			}
+		}
+	}
+
+	return NF_ACCEPT;
+}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_server_pre_ct_in_hook(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
@@ -443,7 +533,6 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
 				} else {
 					set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-					return NF_DROP;
 				}
 			}
 		} else {
@@ -471,7 +560,6 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
 				} else {
 					set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-					return NF_DROP;
 				}
 			}
 
@@ -492,25 +580,6 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 		skb->mark = XT_MARK_NATCAP;
 
 		NATCAP_DEBUG("(SPCI)" DEBUG_TCP_FMT ": after decode\n", DEBUG_TCP_ARG(iph,l4));
-
-		if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
-			int data_len;
-			unsigned char *data;
-			data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
-			data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
-			if ((data_len > 4 && strncasecmp(data, "GET ", 4) == 0) ||
-					(data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
-				natcap_auth_http_302(in, skb, ct);
-				set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-				return NF_DROP;
-			} else if (data_len > 0) {
-				set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-				return NF_DROP;
-			} else if (TCPH(l4)->ack && !TCPH(l4)->syn) {
-				natcap_auth_convert_tcprst(skb);
-				return NF_ACCEPT;
-			}
-		}
 	} else if (iph->protocol == IPPROTO_UDP) {
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
 			return NF_DROP;
@@ -902,6 +971,15 @@ static struct nf_hook_ops server_hooks[] = {
 		.pf = PF_INET,
 		.hooknum = NF_INET_POST_ROUTING,
 		.priority = NF_IP_PRI_LAST,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
+		.hook = natcap_server_forward_hook,
+		.pf = PF_INET,
+		.hooknum = NF_INET_FORWARD,
+		.priority = NF_IP_PRI_FIRST,
 	},
 };
 
