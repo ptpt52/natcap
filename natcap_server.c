@@ -270,6 +270,8 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	dev_queue_xmit(nskb);
 }
 
+char *auth_http_redirect_url = NULL;
+
 static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_buff *skb, struct nf_conn *ct)
 {
 	const char *http_header_fmt = ""
@@ -297,7 +299,11 @@ static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_
 	if (!http)
 		return;
 
-	snprintf(http->location, sizeof(http->location), "http://router-sh.ptpt52.com/index.html?_t=%lu", jiffies);
+	if (auth_http_redirect_url) {
+		snprintf(http->location, sizeof(http->location), "%s", auth_http_redirect_url);
+	} else {
+		snprintf(http->location, sizeof(http->location), "http://router-sh.ptpt52.com/index.html?_t=%lu", jiffies);
+	}
 	http->location[sizeof(http->location) - 1] = 0;
 	snprintf(http->data, sizeof(http->data), http_data_fmt, http->location);
 	http->data[sizeof(http->data) - 1] = 0;
@@ -998,5 +1004,9 @@ int natcap_server_init(void)
 
 void natcap_server_exit(void)
 {
+	if (auth_http_redirect_url) {
+		kfree(auth_http_redirect_url);
+		auth_http_redirect_url = NULL;
+	}
 	nf_unregister_hooks(server_hooks, ARRAY_SIZE(server_hooks));
 }

@@ -77,6 +77,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    knock_port=%u\n"
 				"#    flow_total_tx_bytes=%llu\n"
 				"#    flow_total_rx_bytes=%llu\n"
+				"#    auth_http_redirect_url=%s\n"
 				"#\n"
 				"# Reload cmd:\n"
 				"\n"
@@ -94,6 +95,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				ntohl(default_u_hash),
 				server_seed, disabled, auth_disabled, debug, encode_mode_str[encode_mode], server_persist_timeout, shadowsocks, ntohs(knock_port),
 				flow_total_tx_bytes, flow_total_rx_bytes,
+				auth_http_redirect_url,
 				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout, shadowsocks, ntohs(knock_port));
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
@@ -282,6 +284,22 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		if (n == 1 && d <= 65535) {
 			knock_port = htons((unsigned short)(d & 0xffff));
 			goto done;
+		}
+	} else if (strncmp(data, "auth_http_redirect_url=", 23) == 0) {
+		if (mode == SERVER_MODE) {
+			char *tmp = NULL;
+			tmp = kmalloc(2048, GFP_KERNEL);
+			if (!tmp)
+				return -ENOMEM;
+			n = sscanf(data, "auth_http_redirect_url=%s\n", tmp);
+			if (n == 1 && memcmp("http", tmp, 4) == 0) {
+				if (auth_http_redirect_url) {
+					kfree(auth_http_redirect_url);
+				}
+				auth_http_redirect_url = tmp;
+				goto done;
+			}
+			kfree(tmp);
 		}
 	}
 

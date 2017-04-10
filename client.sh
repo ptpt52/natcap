@@ -39,6 +39,6 @@ debug=3
 disabled=0
 encode_mode=TCP
 server_persist_timeout=6
-server 45.32.40.68:6553-e
+server 104.198.4.132:6553-e
 EOF
 }
