@@ -11,4 +11,6 @@ void natcap_server_exit(void);
 
 extern char *auth_http_redirect_url;
 
+extern unsigned short natcap_redirect_port;
+
 #endif /* _NATCAP_SERVER_H_ */

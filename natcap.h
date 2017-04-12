@@ -8,6 +8,7 @@
 #define MODULE_NAME "natcap"
 #define NATCAP_VERSION "5.0.0"
 
+#ifdef __KERNEL__
 #include <linux/ctype.h>
 #include <asm/types.h>
 #include <net/netfilter/nf_conntrack.h>
@@ -133,8 +134,10 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 
 #define IPS_NATCAP_ACK_BIT 23
 #define IPS_NATCAP_ACK (1 << IPS_NATCAP_ACK_BIT)
-#define IPS_NATCAP_SYN_BIT 22
+#define IPS_NATCAP_SYN_BIT 22 /* only use in client */
 #define IPS_NATCAP_SYN (1 << IPS_NATCAP_SYN_BIT)
+#define IPS_NATCAP_DST_BIT 22 /* only use in server */
+#define IPS_NATCAP_DST (1 << IPS_NATCAP_DST_BIT)
 #define IPS_NATCAP_CFM_BIT 21
 #define IPS_NATCAP_CFM (1 << IPS_NATCAP_CFM_BIT)
 
@@ -143,5 +146,8 @@ enum {
 	E_NATCAP_AUTH_FAIL,
 	E_NATCAP_INVAL,
 };
+#endif /* __KERNEL__ */
+
+#define SO_NATCAP_DST 153
 
 #endif /* _NATCAP_H_ */

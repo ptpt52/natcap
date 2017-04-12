@@ -9,6 +9,7 @@
 #include <linux/udp.h>
 #include <linux/if_ether.h>
 #include <linux/netfilter.h>
+#include <linux/inetdevice.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
@@ -449,6 +450,8 @@ static unsigned int natcap_server_forward_hook(void *priv,
 	return NF_ACCEPT;
 }
 
+unsigned short natcap_redirect_port = 0;
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_server_pre_ct_in_hook(unsigned int hooknum,
 		struct sk_buff *skb,
@@ -571,6 +574,38 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 			if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
 				NATCAP_INFO("(SPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+				if (natcap_redirect_port != 0) {
+					__be32 newdst = 0;
+					struct in_device *indev;
+					struct in_ifaddr *ifa;
+					struct tuple *tup;
+
+					rcu_read_lock();
+					indev = __in_dev_get_rcu(in);
+					if (indev && indev->ifa_list) {
+						ifa = indev->ifa_list;
+						newdst = ifa->ifa_local;
+					}
+					rcu_read_unlock();
+
+					if (!newdst || newdst == server.ip) {
+						goto do_dnat_setup;
+					}
+					if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
+						NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
+						goto do_dnat_setup;
+					}
+					tup = natcap_session_get(ct);
+					if (!tup) {
+						goto do_dnat_setup;
+					}
+					memcpy(tup, &server, sizeof(struct tuple));
+					set_bit(IPS_NATCAP_DST_BIT, &ct->status);
+
+					server.ip = newdst;
+					server.port = natcap_redirect_port;
+				}
+do_dnat_setup:
 				if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 					NATCAP_ERROR("(SPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -992,21 +1027,101 @@ static struct nf_hook_ops server_hooks[] = {
 	},
 };
 
+static int get_natcap_dst(struct sock *sk, int optval, void __user *user, int *len)
+{
+	const struct inet_sock *inet = inet_sk(sk);
+	const struct nf_conntrack_tuple_hash *h;
+	struct nf_conntrack_tuple tuple;
+
+	memset(&tuple, 0, sizeof(tuple));
+	tuple.src.u3.ip = inet->inet_rcv_saddr;
+	tuple.src.u.tcp.port = inet->inet_sport;
+	tuple.dst.u3.ip = inet->inet_daddr;
+	tuple.dst.u.tcp.port = inet->inet_dport;
+	tuple.src.l3num = PF_INET;
+	tuple.dst.protonum = sk->sk_protocol;
+
+	if (sk->sk_protocol != IPPROTO_TCP) {
+		NATCAP_DEBUG("SO_NATCAP_DST: Not a TCP/SCTP socket\n");
+		return -ENOPROTOOPT;
+	}
+
+	if ((unsigned int) *len < sizeof(struct sockaddr_in)) {
+		NATCAP_DEBUG("SO_NATCAP_DST: len %d not %Zu\n",
+				*len, sizeof(struct sockaddr_in));
+		return -EINVAL;
+	}
+
+	h = nf_conntrack_find_get(sock_net(sk), &nf_ct_zone_dflt, &tuple);
+	if (h) {
+		struct sockaddr_in sin;
+		struct nf_conn *ct = nf_ct_tuplehash_to_ctrack(h);
+		struct tuple *tup;
+
+		if (test_bit(IPS_NATCAP_BIT, &ct->status) && test_bit(IPS_NATCAP_DST_BIT, &ct->status)) {
+			tup = natcap_session_get(ct);
+			if (tup) {
+				sin.sin_family = AF_INET;
+				sin.sin_port = tup->port;
+				sin.sin_addr.s_addr = tup->ip;
+				memset(sin.sin_zero, 0, sizeof(sin.sin_zero));
+
+				NATCAP_DEBUG("SO_NATCAP_DST: %pI4 %u\n", &sin.sin_addr.s_addr, ntohs(sin.sin_port));
+				nf_ct_put(ct);
+				if (copy_to_user(user, &sin, sizeof(sin)) != 0)
+					return -EFAULT;
+				else
+					return 0;
+			}
+		}
+		nf_ct_put(ct);
+	}
+	NATCAP_DEBUG("SO_NATCAP_DST: Can't find %pI4/%u-%pI4/%u.\n",
+			&tuple.src.u3.ip, ntohs(tuple.src.u.tcp.port),
+			&tuple.dst.u3.ip, ntohs(tuple.dst.u.tcp.port));
+	return -ENOENT;
+}
+
+static struct nf_sockopt_ops so_natcap_dst = {
+	.pf = PF_INET,
+	.get_optmin = SO_NATCAP_DST,
+	.get_optmax = SO_NATCAP_DST + 1,
+	.get = get_natcap_dst,
+	.owner = THIS_MODULE,
+};
+
 int natcap_server_init(void)
 {
 	int ret = 0;
 
 	need_conntrack();
 
+	ret = nf_register_sockopt(&so_natcap_dst);
+	if (ret < 0) {
+		NATCAP_ERROR("Unable to register netfilter socket option\n");
+		return ret;
+	}
+
 	ret = nf_register_hooks(server_hooks, ARRAY_SIZE(server_hooks));
+	if (ret != 0) {
+		NATCAP_ERROR("nf_register_hooks fail, ret=%d\n", ret);
+		goto cleanup_sockopt;
+	}
+	return ret;
+
+cleanup_sockopt:
+	nf_unregister_sockopt(&so_natcap_dst);
 	return ret;
 }
 
 void natcap_server_exit(void)
 {
+	nf_unregister_hooks(server_hooks, ARRAY_SIZE(server_hooks));
+
 	if (auth_http_redirect_url) {
 		kfree(auth_http_redirect_url);
 		auth_http_redirect_url = NULL;
 	}
-	nf_unregister_hooks(server_hooks, ARRAY_SIZE(server_hooks));
+
+	nf_unregister_sockopt(&so_natcap_dst);
 }

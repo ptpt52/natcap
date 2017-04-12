@@ -75,6 +75,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    server_persist_timeout=%u\n"
 				"#    shadowsocks=%u\n"
 				"#    knock_port=%u\n"
+				"#    natcap_redirect_port=%u\n"
 				"#    flow_total_tx_bytes=%llu\n"
 				"#    flow_total_rx_bytes=%llu\n"
 				"#    auth_http_redirect_url=%s\n"
@@ -94,6 +95,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
 				server_seed, disabled, auth_disabled, debug, encode_mode_str[encode_mode], server_persist_timeout, shadowsocks, ntohs(knock_port),
+				ntohs(natcap_redirect_port),
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
 				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout, shadowsocks, ntohs(knock_port));
@@ -284,6 +286,15 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		if (n == 1 && d <= 65535) {
 			knock_port = htons((unsigned short)(d & 0xffff));
 			goto done;
+		}
+	} else if (strncmp(data, "natcap_redirect_port=", 21) == 0) {
+		if (mode == SERVER_MODE) {
+			unsigned int d;
+			n = sscanf(data, "natcap_redirect_port=%u", &d);
+			if (n == 1 && d <= 65535) {
+				natcap_redirect_port = htons((unsigned short)(d & 0xffff));
+				goto done;
+			}
 		}
 	} else if (strncmp(data, "auth_http_redirect_url=", 23) == 0) {
 		if (mode == SERVER_MODE) {
