@@ -748,7 +748,8 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
 		if (iph->protocol == IPPROTO_TCP) {
-			if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status) && TCPH(l4)->dest == __constant_htons(8388)) {
+			if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status) &&
+					(TCPH(l4)->dest == __constant_htons(8388) || TCPH(l4)->dest == natcap_redirect_port)) {
 				return NF_DROP;
 			}
 			if (test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status) && TCPH(l4)->syn) {
