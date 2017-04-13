@@ -233,18 +233,15 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
 {
 	server_ctx_t *server_recv_ctx = (server_ctx_t *)w;
 	server_t *server              = server_recv_ctx->server;
-	remote_t *remote              = NULL;
+	remote_t *remote              = server->remote;
 
-	buffer_t *buf = server->buf;
-
-	if (server->stage == STAGE_STREAM) {
-		remote = server->remote;
-		buf    = remote->buf;
-		ev_timer_again(EV_A_ & server->recv_ctx->watcher);
+	if (remote == NULL) {
+		printf("invalid remote");
+		close_and_free_server(EV_A_ server);
+		return;
 	}
 
-	ssize_t r = recv(server->fd, buf->data, BUF_SIZE, 0);
-
+	ssize_t r = recv(server->fd, remote->buf->data, BUF_SIZE, 0);
 	if (r == 0) {
 		// connection closed
 		if (verbose) {
@@ -265,12 +262,12 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
 			return;
 		}
 	}
-
 	tx += r;
-	buf->len = r;
+	remote->buf->len = r;
 
-	// handshake and transmit data
 	if (server->stage == STAGE_STREAM) {
+		ev_timer_again(EV_A_ & server->recv_ctx->watcher);
+
 		int s = send(remote->fd, remote->buf->data, remote->buf->len, 0);
 		if (s == -1) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -291,47 +288,9 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
 		}
 		return;
 	} else if (server->stage == STAGE_INIT) {
-		struct sockaddr_in *addr;
-		struct addrinfo info;
-		struct sockaddr_storage storage;
-		memset(&info, 0, sizeof(struct addrinfo));
-		memset(&storage, 0, sizeof(struct sockaddr_storage));
-
-		if (getdestaddr(server->fd, &storage) != 0) {
-			close_and_free_server(EV_A_ server);
-			return;
-		}
-
-		addr = (struct sockaddr_in *)&storage;
-		info.ai_family   = AF_INET;
-		info.ai_socktype = SOCK_STREAM;
-		info.ai_protocol = IPPROTO_TCP;
-		info.ai_addrlen  = sizeof(struct sockaddr_in);
-		info.ai_addr     = (struct sockaddr *)addr;
-
-		remote_t *remote = connect_to_remote(EV_A_ & info, server);
-		if (remote == NULL) {
-			printf("connect error");
-			close_and_free_server(EV_A_ server);
-			return;
-		} else {
-			server->remote = remote;
-			remote->server = server;
-
-			// XXX: should handle buffer carefully
-			if (server->buf->len > 0) {
-				memcpy(remote->buf->data, server->buf->data, server->buf->len);
-				remote->buf->len = server->buf->len;
-				remote->buf->idx = 0;
-				server->buf->len = 0;
-				server->buf->idx = 0;
-			}
-
-			// waiting on remote connected event
-			ev_io_stop(EV_A_ & server_recv_ctx->io);
-			ev_io_start(EV_A_ & remote->send_ctx->io);
-		}
-
+		// waiting on remote connected event
+		ev_io_stop(EV_A_ & server_recv_ctx->io);
+		ev_io_start(EV_A_ & remote->send_ctx->io);
 		return;
 	}
 }
@@ -377,15 +336,7 @@ static void server_send_cb(EV_P_ ev_io *w, int revents)
 			server->buf->len = 0;
 			server->buf->idx = 0;
 			ev_io_stop(EV_A_ & server_send_ctx->io);
-			if (remote != NULL) {
-				ev_io_start(EV_A_ & remote->recv_ctx->io);
-				return;
-			} else {
-				printf("invalid remote");
-				close_and_free_remote(EV_A_ remote);
-				close_and_free_server(EV_A_ server);
-				return;
-			}
+			ev_io_start(EV_A_ & remote->recv_ctx->io);
 		}
 	}
 }
@@ -419,7 +370,6 @@ static void remote_recv_cb(EV_P_ ev_io *w, int revents)
 	ev_timer_again(EV_A_ & server->recv_ctx->watcher);
 
 	ssize_t r = recv(remote->fd, server->buf->data, BUF_SIZE, 0);
-
 	if (r == 0) {
 		// connection closed
 		if (verbose) {
@@ -440,13 +390,10 @@ static void remote_recv_cb(EV_P_ ev_io *w, int revents)
 			return;
 		}
 	}
-
 	rx += r;
-
 	server->buf->len = r;
 
 	int s = send(server->fd, server->buf->data, server->buf->len, 0);
-
 	if (s == -1) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK) {
 			// no data, wait for send
@@ -502,11 +449,10 @@ static void remote_send_cb(EV_P_ ev_io *w, int revents)
 				server->stage = STAGE_STREAM;
 				ev_io_stop(EV_A_ & remote_send_ctx->io);
 				ev_io_start(EV_A_ & server->recv_ctx->io);
-				ev_io_start(EV_A_ & remote->recv_ctx->io);
 				return;
 			}
 		} else {
-			perror("getpeername");
+			perror("remote_send_getpeername");
 			// not connected
 			close_and_free_remote(EV_A_ remote);
 			close_and_free_server(EV_A_ server);
@@ -544,17 +490,7 @@ static void remote_send_cb(EV_P_ ev_io *w, int revents)
 			remote->buf->len = 0;
 			remote->buf->idx = 0;
 			ev_io_stop(EV_A_ & remote_send_ctx->io);
-			if (server != NULL) {
-				ev_io_start(EV_A_ & server->recv_ctx->io);
-				if (server->stage != STAGE_STREAM) {
-					server->stage = STAGE_STREAM;
-					ev_io_start(EV_A_ & remote->recv_ctx->io);
-				}
-			} else {
-				printf("invalid server");
-				close_and_free_remote(EV_A_ remote);
-				close_and_free_server(EV_A_ server);
-			}
+			ev_io_start(EV_A_ & server->recv_ctx->io);
 			return;
 		}
 	}
@@ -722,6 +658,37 @@ static void accept_cb(EV_P_ ev_io *w, int revents)
 	server_t *server = new_server(serverfd, listener);
 	ev_io_start(EV_A_ & server->recv_ctx->io);
 	ev_timer_start(EV_A_ & server->recv_ctx->watcher);
+
+	if (server->stage == STAGE_INIT) {
+		struct sockaddr_in *addr;
+		struct addrinfo info;
+		struct sockaddr_storage storage;
+		memset(&info, 0, sizeof(struct addrinfo));
+		memset(&storage, 0, sizeof(struct sockaddr_storage));
+
+		if (getdestaddr(server->fd, &storage) != 0) {
+			close_and_free_server(EV_A_ server);
+			return;
+		}
+
+		addr = (struct sockaddr_in *)&storage;
+		info.ai_family   = AF_INET;
+		info.ai_socktype = SOCK_STREAM;
+		info.ai_protocol = IPPROTO_TCP;
+		info.ai_addrlen  = sizeof(struct sockaddr_in);
+		info.ai_addr     = (struct sockaddr *)addr;
+
+		remote_t *remote = connect_to_remote(EV_A_ & info, server);
+		if (remote == NULL) {
+			printf("connect error");
+			close_and_free_server(EV_A_ server);
+			return;
+		} else {
+			server->remote = remote;
+			remote->server = server;
+			ev_io_start(EV_A_ & remote->recv_ctx->io);
+		}
+	}
 }
 
 int main(int argc, char **argv)
