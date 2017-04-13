@@ -18,7 +18,6 @@ typedef struct listen_ctx {
 	ev_io io;
 	int fd;
 	int timeout;
-	char *iface;
 	struct ev_loop *loop;
 } listen_ctx_t;
 
@@ -32,7 +31,6 @@ typedef struct server_ctx {
 typedef struct server {
 	int fd;
 	int stage;
-	int frag;
 
 	buffer_t *buf;
 

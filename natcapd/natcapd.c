@@ -571,7 +571,9 @@ static remote_t *new_remote(int fd)
 
 	remote->recv_ctx = malloc(sizeof(remote_ctx_t));
 	remote->send_ctx = malloc(sizeof(remote_ctx_t));
-	remote->buf = malloc(BUF_SIZE);
+	remote->buf = malloc(sizeof(buffer_t));
+	remote->buf->len = 0;
+	remote->buf->idx = 0;
 	memset(remote->recv_ctx, 0, sizeof(remote_ctx_t));
 	memset(remote->send_ctx, 0, sizeof(remote_ctx_t));
 	remote->fd                  = fd;
@@ -629,14 +631,15 @@ static server_t *new_server(int fd, listen_ctx_t *listener)
 	server->send_ctx   = malloc(sizeof(server_ctx_t));
 	memset(server->recv_ctx, 0, sizeof(server_ctx_t));
 	memset(server->send_ctx, 0, sizeof(server_ctx_t));
-	server->buf = malloc(BUF_SIZE);
+	server->buf = malloc(sizeof(buffer_t));
+	server->buf->len = 0;
+	server->buf->idx = 0;
 	server->fd                  = fd;
 	server->recv_ctx->server    = server;
 	server->recv_ctx->connected = 0;
 	server->send_ctx->server    = server;
 	server->send_ctx->connected = 0;
 	server->stage               = STAGE_INIT;
-	server->frag                = 0;
 	server->listen_ctx          = listener;
 	server->remote              = NULL;
 
