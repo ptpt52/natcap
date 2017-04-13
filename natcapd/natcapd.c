@@ -36,10 +36,6 @@
 #define MAXCONN 1024
 #endif
 
-#ifndef MAX_FRAG
-#define MAX_FRAG 1
-#endif
-
 static void signal_cb(EV_P_ ev_signal *w, int revents);
 static void accept_cb(EV_P_ ev_io *w, int revents);
 static void server_send_cb(EV_P_ ev_io *w, int revents);
@@ -105,17 +101,17 @@ int create_and_bind(const char *host, const char *port)
 			break;
 		} else {
 			sleep(pow(2, i));
-			printf("failed to resolve server name, wait %.0f seconds", pow(2, i));
+			printf("failed to resolve server name, wait %.0f seconds\n", pow(2, i));
 		}
 	}
 
 	if (s != 0) {
-		printf("getaddrinfo: %s", gai_strerror(s));
+		printf("getaddrinfo: %s\n", gai_strerror(s));
 		return -1;
 	}
 
 	if (result == NULL) {
-		printf("Could not bind");
+		printf("Could not bind\n");
 		return -1;
 	}
 
@@ -159,7 +155,7 @@ int create_and_bind(const char *host, const char *port)
 		if (reuse_port) {
 			int err = set_reuseport(listen_sock);
 			if (err == 0) {
-				printf("tcp port reuse enabled");
+				printf("tcp port reuse enabled\n");
 			}
 		}
 
@@ -236,7 +232,7 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
 	remote_t *remote              = server->remote;
 
 	if (remote == NULL) {
-		printf("invalid remote");
+		printf("invalid remote\n");
 		close_and_free_server(EV_A_ server);
 		return;
 	}
@@ -245,7 +241,7 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
 	if (r == 0) {
 		// connection closed
 		if (verbose) {
-			printf("server_recv close the connection");
+			printf("server_recv close the connection\n");
 		}
 		close_and_free_remote(EV_A_ remote);
 		close_and_free_server(EV_A_ server);
@@ -302,7 +298,7 @@ static void server_send_cb(EV_P_ ev_io *w, int revents)
 	remote_t *remote              = server->remote;
 
 	if (remote == NULL) {
-		printf("invalid server");
+		printf("invalid server\n");
 		close_and_free_server(EV_A_ server);
 		return;
 	}
@@ -310,7 +306,7 @@ static void server_send_cb(EV_P_ ev_io *w, int revents)
 	if (server->buf->len == 0) {
 		// close and free
 		if (verbose) {
-			printf("server_send close the connection");
+			printf("server_send close the connection\n");
 		}
 		close_and_free_remote(EV_A_ remote);
 		close_and_free_server(EV_A_ server);
@@ -348,7 +344,7 @@ static void server_timeout_cb(EV_P_ ev_timer *watcher, int revents)
 	remote_t *remote = server->remote;
 
 	if (verbose) {
-		printf("TCP connection timeout");
+		printf("TCP connection timeout\n");
 	}
 
 	close_and_free_remote(EV_A_ remote);
@@ -362,7 +358,7 @@ static void remote_recv_cb(EV_P_ ev_io *w, int revents)
 	server_t *server              = remote->server;
 
 	if (server == NULL) {
-		printf("invalid server");
+		printf("invalid server\n");
 		close_and_free_remote(EV_A_ remote);
 		return;
 	}
@@ -373,7 +369,7 @@ static void remote_recv_cb(EV_P_ ev_io *w, int revents)
 	if (r == 0) {
 		// connection closed
 		if (verbose) {
-			printf("remote_recv close the connection");
+			printf("remote_recv close the connection\n");
 		}
 		close_and_free_remote(EV_A_ remote);
 		close_and_free_server(EV_A_ server);
@@ -429,7 +425,7 @@ static void remote_send_cb(EV_P_ ev_io *w, int revents)
 	server_t *server              = remote->server;
 
 	if (server == NULL) {
-		printf("invalid server");
+		printf("invalid server\n");
 		close_and_free_remote(EV_A_ remote);
 		return;
 	}
@@ -441,7 +437,7 @@ static void remote_send_cb(EV_P_ ev_io *w, int revents)
 		int r = getpeername(remote->fd, (struct sockaddr *)&addr, &len);
 		if (r == 0) {
 			if (verbose) {
-				printf("remote connected");
+				printf("remote connected\n");
 			}
 			remote_send_ctx->connected = 1;
 
@@ -463,7 +459,7 @@ static void remote_send_cb(EV_P_ ev_io *w, int revents)
 	if (remote->buf->len == 0) {
 		// close and free
 		if (verbose) {
-			printf("remote_send close the connection");
+			printf("remote_send close the connection\n");
 		}
 		close_and_free_remote(EV_A_ remote);
 		close_and_free_server(EV_A_ server);
@@ -547,7 +543,7 @@ static void close_and_free_remote(EV_P_ remote_t *remote)
 		free_remote(remote);
 		if (verbose) {
 			remote_conn--;
-			printf("current remote connection: %d", remote_conn);
+			printf("current remote connection: %d\n", remote_conn);
 		}
 	}
 }
@@ -614,7 +610,7 @@ static void close_and_free_server(EV_P_ server_t *server)
 		free_server(server);
 		if (verbose) {
 			server_conn--;
-			printf("current server connection: %d", server_conn);
+			printf("current server connection: %d\n", server_conn);
 		}
 	}
 }
@@ -652,7 +648,7 @@ static void accept_cb(EV_P_ ev_io *w, int revents)
 	setnonblocking(serverfd);
 
 	if (verbose) {
-		printf("accept a connection");
+		printf("accept a connection\n");
 	}
 
 	server_t *server = new_server(serverfd, listener);
@@ -680,7 +676,7 @@ static void accept_cb(EV_P_ ev_io *w, int revents)
 
 		remote_t *remote = connect_to_remote(EV_A_ & info, server);
 		if (remote == NULL) {
-			printf("connect error");
+			printf("connect error\n");
 			close_and_free_server(EV_A_ server);
 			return;
 		} else {
@@ -757,14 +753,14 @@ int main(int argc, char **argv)
 
 
 	if (geteuid() == 0) {
-		printf("running from root user");
+		printf("running from root user\n");
 	}
 
 	// start ev loop
 	ev_run(loop, 0);
 
 	if (verbose) {
-		printf("closed gracefully");
+		printf("closed gracefully\n");
 	}
 
 	// Clean up

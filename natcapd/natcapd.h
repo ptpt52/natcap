@@ -6,11 +6,10 @@
 #include <ev.h>
 #include "natcap.h"
 
-#define BUF_SIZE 2048
-
 typedef struct {
 	int idx;
 	int len;
+#define BUF_SIZE 2048
 	unsigned char data[BUF_SIZE];
 } buffer_t;
 
