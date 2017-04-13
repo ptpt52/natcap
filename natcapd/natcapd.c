@@ -687,14 +687,55 @@ static void accept_cb(EV_P_ ev_io *w, int revents)
 	}
 }
 
+void usage()
+{
+	printf("\n");
+	printf("natcapd %s\n\n", "1.0");
+	printf("  Chen Minqiang <ptpt52@gmail.com>\n\n");
+	printf("  usage:\n\n");
+	printf("       [-l <local_port>]          Port number of your local server.\n");
+	printf("       [-t <timeout>]             Socket timeout in seconds.\n");
+	printf("       [-v]                       Verbose mode.\n");
+	printf("       [-h, --help]               Print this message.\n");
+	printf("\n");
+}
+
 int main(int argc, char **argv)
 {
+	int c;
 	char *timeout   = NULL;
-
 	char *server_port = "1080";
 
 	int server_num = 0;
 	const char *server_host[MAX_REMOTE_NUM];
+
+	opterr = 0;
+
+	while ((c = getopt_long(argc, argv, "l:t:hv", NULL, NULL)) != -1) {
+		switch (c) {
+			case 'l':
+				server_port = optarg;
+				break;
+			case 't':
+				timeout = optarg;
+				break;
+			case 'v':
+				verbose = 1;
+				break;
+			case 'h':
+				usage();
+				exit(EXIT_SUCCESS);
+			case '?':
+				// The option character is not recognized.
+				opterr = 1;
+				break;
+		}
+	}
+
+	if (opterr) {
+		usage();
+		exit(EXIT_FAILURE);
+	}
 
 	if (server_num == 0) {
 		server_host[server_num++] = "0.0.0.0";
