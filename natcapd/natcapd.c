@@ -252,7 +252,7 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
 			// continue to wait for recv
 			return;
 		} else {
-			perror("server recv");
+			//perror("server recv");
 			close_and_free_remote(EV_A_ remote);
 			close_and_free_server(EV_A_ server);
 			return;
@@ -262,8 +262,6 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
 	remote->buf->len = r;
 
 	if (server->stage == STAGE_STREAM) {
-		ev_timer_again(EV_A_ & server->recv_ctx->watcher);
-
 		int s = send(remote->fd, remote->buf->data, remote->buf->len, 0);
 		if (s == -1) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -363,8 +361,6 @@ static void remote_recv_cb(EV_P_ ev_io *w, int revents)
 		return;
 	}
 
-	ev_timer_again(EV_A_ & server->recv_ctx->watcher);
-
 	ssize_t r = recv(remote->fd, server->buf->data, BUF_SIZE, 0);
 	if (r == 0) {
 		// connection closed
@@ -380,7 +376,7 @@ static void remote_recv_cb(EV_P_ ev_io *w, int revents)
 			// continue to wait for recv
 			return;
 		} else {
-			perror("remote recv");
+			//perror("remote recv");
 			close_and_free_remote(EV_A_ remote);
 			close_and_free_server(EV_A_ server);
 			return;
@@ -415,6 +411,10 @@ static void remote_recv_cb(EV_P_ ev_io *w, int revents)
 		setsockopt(server->fd, SOL_TCP, TCP_NODELAY, &opt, sizeof(opt));
 		setsockopt(remote->fd, SOL_TCP, TCP_NODELAY, &opt, sizeof(opt));
 		remote->recv_ctx->connected = 1;
+		if (server->stage != STAGE_STREAM) {
+			server->stage = STAGE_STREAM;
+			ev_timer_stop(EV_A_ & server->recv_ctx->watcher);
+		}
 	}
 }
 
@@ -440,9 +440,12 @@ static void remote_send_cb(EV_P_ ev_io *w, int revents)
 				printf("remote connected\n");
 			}
 			remote_send_ctx->connected = 1;
+			if (server->stage != STAGE_STREAM) {
+				server->stage = STAGE_STREAM;
+				ev_timer_stop(EV_A_ & server->recv_ctx->watcher);
+			}
 
 			if (remote->buf->len == 0) {
-				server->stage = STAGE_STREAM;
 				ev_io_stop(EV_A_ & remote_send_ctx->io);
 				ev_io_start(EV_A_ & server->recv_ctx->io);
 				return;
@@ -742,7 +745,7 @@ int main(int argc, char **argv)
 	}
 
 	if (timeout == NULL) {
-		timeout = "60";
+		timeout = "30";
 	}
 
 	// ignore SIGPIPE

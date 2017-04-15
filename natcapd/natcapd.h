@@ -70,7 +70,7 @@ typedef struct remote {
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
-#define MAX_REQUEST_TIMEOUT 60
+#define MAX_REQUEST_TIMEOUT 30
 #define MAX_REMOTE_NUM 10
 
 void
