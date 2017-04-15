@@ -47,6 +47,7 @@ struct natcap_TCPOPT_user {
 
 #define NATCAP_TCPOPT_SYN_BIT (1<<7)
 #define NATCAP_TCPOPT_TARGET_BIT (1<<6)
+#define NATCAP_TCPOPT_SPROXY_BIT (1<<5)
 
 #define NATCAP_TCPOPT_TYPE_MASK (0x0F)
 #define NTCAP_TCPOPT_TYPE(t) ((t) & NATCAP_TCPOPT_TYPE_MASK)

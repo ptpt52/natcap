@@ -29,6 +29,7 @@ module_param(server_persist_timeout, int, 0);
 MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
 
 unsigned int shadowsocks = 0;
+unsigned int sproxy = 0;
 
 u32 default_u_hash = 0;
 unsigned char default_mac_addr[ETH_ALEN];
@@ -869,6 +870,9 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
 				tcpopt.header.type |= NATCAP_TCPOPT_TARGET_BIT;
 			}
+			if (sproxy) {
+				tcpopt.header.type |= NATCAP_TCPOPT_SPROXY_BIT;
+			}
 			ret = natcap_tcp_encode(skb2, &tcpopt);
 			if (ret != 0) {
 				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
@@ -881,6 +885,9 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		if (ret == 0) {
 			if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
 				tcpopt.header.type |= NATCAP_TCPOPT_TARGET_BIT;
+			}
+			if (sproxy) {
+				tcpopt.header.type |= NATCAP_TCPOPT_SPROXY_BIT;
 			}
 			ret = natcap_tcp_encode(skb, &tcpopt);
 			iph = ip_hdr(skb);
@@ -1220,6 +1227,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
 			tcpopt.header.type |= NATCAP_TCPOPT_TARGET_BIT;
 		}
+		if (sproxy) {
+			tcpopt.header.type |= NATCAP_TCPOPT_SPROXY_BIT;
+		}
 		ret = natcap_tcp_encode(skb2, &tcpopt);
 		if (ret != 0) {
 			NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
@@ -1234,6 +1244,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	if (ret == 0) {
 		if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
 			tcpopt.header.type |= NATCAP_TCPOPT_TARGET_BIT;
+		}
+		if (sproxy) {
+			tcpopt.header.type |= NATCAP_TCPOPT_SPROXY_BIT;
 		}
 		ret = natcap_tcp_encode(skb, &tcpopt);
 		iph = ip_hdr(skb);

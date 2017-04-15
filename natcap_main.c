@@ -74,6 +74,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    encode_mode=%s\n"
 				"#    server_persist_timeout=%u\n"
 				"#    shadowsocks=%u\n"
+				"#    sproxy=%u\n"
 				"#    knock_port=%u\n"
 				"#    natcap_redirect_port=%u\n"
 				"#    flow_total_tx_bytes=%llu\n"
@@ -89,16 +90,17 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"u_hash=%u\n"
 				"server_persist_timeout=%u\n"
 				"shadowsocks=%u\n"
+				"sproxy=%u\n"
 				"knock_port=%u\n"
 				"\n",
 				mode_str[mode], mode,
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
-				server_seed, disabled, auth_disabled, debug, encode_mode_str[encode_mode], server_persist_timeout, shadowsocks, ntohs(knock_port),
+				server_seed, disabled, auth_disabled, debug, encode_mode_str[encode_mode], server_persist_timeout, shadowsocks, sproxy, ntohs(knock_port),
 				ntohs(natcap_redirect_port),
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
-				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout, shadowsocks, ntohs(knock_port));
+				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout, shadowsocks, sproxy, ntohs(knock_port));
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -270,6 +272,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		n = sscanf(data, "shadowsocks=%u", &d);
 		if (n == 1) {
 			shadowsocks = d;
+			goto done;
+		}
+	} else if (strncmp(data, "sproxy=", 7) == 0) {
+		int d;
+		n = sscanf(data, "sproxy=%u", &d);
+		if (n == 1) {
+			sproxy = d;
 			goto done;
 		}
 	} else if (strncmp(data, "encode_mode=", 12) == 0) {

@@ -574,7 +574,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 			if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
 				NATCAP_INFO("(SPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
-				if (natcap_redirect_port != 0) {
+				if (natcap_redirect_port != 0 && (tcpopt.header.type & NATCAP_TCPOPT_SPROXY_BIT)) {
 					__be32 newdst = 0;
 					struct in_device *indev;
 					struct in_ifaddr *ifa;
