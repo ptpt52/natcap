@@ -262,6 +262,8 @@ static void server_recv_cb(EV_P_ ev_io *w, int revents)
 	remote->buf->len = r;
 
 	if (server->stage == STAGE_STREAM) {
+		ev_timer_again(EV_A_ & server->recv_ctx->watcher);
+
 		int s = send(remote->fd, remote->buf->data, remote->buf->len, 0);
 		if (s == -1) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -311,8 +313,7 @@ static void server_send_cb(EV_P_ ev_io *w, int revents)
 		return;
 	} else {
 		// has data to send
-		ssize_t s = send(server->fd, server->buf->data + server->buf->idx,
-		                 server->buf->len, 0);
+		ssize_t s = send(server->fd, server->buf->data + server->buf->idx, server->buf->len, 0);
 		if (s == -1) {
 			if (errno != EAGAIN && errno != EWOULDBLOCK) {
 				perror("server_send_send");
@@ -360,6 +361,8 @@ static void remote_recv_cb(EV_P_ ev_io *w, int revents)
 		close_and_free_remote(EV_A_ remote);
 		return;
 	}
+
+	ev_timer_again(EV_A_ & server->recv_ctx->watcher);
 
 	ssize_t r = recv(remote->fd, server->buf->data, BUF_SIZE, 0);
 	if (r == 0) {
@@ -411,10 +414,6 @@ static void remote_recv_cb(EV_P_ ev_io *w, int revents)
 		setsockopt(server->fd, SOL_TCP, TCP_NODELAY, &opt, sizeof(opt));
 		setsockopt(remote->fd, SOL_TCP, TCP_NODELAY, &opt, sizeof(opt));
 		remote->recv_ctx->connected = 1;
-		if (server->stage != STAGE_STREAM) {
-			server->stage = STAGE_STREAM;
-			ev_timer_stop(EV_A_ & server->recv_ctx->watcher);
-		}
 	}
 }
 
@@ -442,7 +441,7 @@ static void remote_send_cb(EV_P_ ev_io *w, int revents)
 			remote_send_ctx->connected = 1;
 			if (server->stage != STAGE_STREAM) {
 				server->stage = STAGE_STREAM;
-				ev_timer_stop(EV_A_ & server->recv_ctx->watcher);
+				ev_io_start(EV_A_ & remote->recv_ctx->io);
 			}
 
 			if (remote->buf->len == 0) {
@@ -469,28 +468,29 @@ static void remote_send_cb(EV_P_ ev_io *w, int revents)
 		return;
 	} else {
 		// has data to send
-		ssize_t s = send(remote->fd, remote->buf->data + remote->buf->idx,
-		                 remote->buf->len, 0);
+		ssize_t s = send(remote->fd, remote->buf->data + remote->buf->idx, remote->buf->len, 0);
 		if (s == -1) {
 			if (errno != EAGAIN && errno != EWOULDBLOCK) {
 				perror("remote_send_send");
 				// close and free
 				close_and_free_remote(EV_A_ remote);
 				close_and_free_server(EV_A_ server);
+				return;
 			}
-			return;
 		} else if (s < remote->buf->len) {
 			// partly sent, move memory, wait for the next time to send
 			remote->buf->len -= s;
 			remote->buf->idx += s;
-			return;
 		} else {
 			// all sent out, wait for reading
 			remote->buf->len = 0;
 			remote->buf->idx = 0;
 			ev_io_stop(EV_A_ & remote_send_ctx->io);
 			ev_io_start(EV_A_ & server->recv_ctx->io);
-			return;
+		}
+		if (server->stage != STAGE_STREAM) {
+			server->stage = STAGE_STREAM;
+			ev_io_start(EV_A_ & remote->recv_ctx->io);
 		}
 	}
 }
@@ -655,7 +655,7 @@ static void accept_cb(EV_P_ ev_io *w, int revents)
 	}
 
 	server_t *server = new_server(serverfd, listener);
-	ev_io_start(EV_A_ & server->recv_ctx->io);
+	//ev_io_start(EV_A_ & server->recv_ctx->io);
 	ev_timer_start(EV_A_ & server->recv_ctx->watcher);
 
 	if (server->stage == STAGE_INIT) {
@@ -685,7 +685,8 @@ static void accept_cb(EV_P_ ev_io *w, int revents)
 		} else {
 			server->remote = remote;
 			remote->server = server;
-			ev_io_start(EV_A_ & remote->recv_ctx->io);
+			//ev_io_start(EV_A_ & remote->recv_ctx->io);
+			ev_io_start(EV_A_ & remote->send_ctx->io);
 		}
 	}
 }
@@ -745,7 +746,7 @@ int main(int argc, char **argv)
 	}
 
 	if (timeout == NULL) {
-		timeout = "30";
+		timeout = "60";
 	}
 
 	// ignore SIGPIPE
