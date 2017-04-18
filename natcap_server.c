@@ -360,6 +360,45 @@ static inline int natcap_auth_convert_tcprst(struct sk_buff *skb)
 	return 0;
 }
 
+static inline unsigned int natcap_try_http_redirect(struct iphdr *iph, struct sk_buff *skb, struct nf_conn *ct, const struct net_device *in)
+{
+	void *l4;
+	int data_len;
+	unsigned char *data;
+
+	if (!in) {
+		return NF_ACCEPT;
+	}
+
+	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+		return NF_DROP;
+	}
+	iph = ip_hdr(skb);
+	l4 = (void *)iph + iph->ihl * 4;
+	if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
+		return NF_DROP;
+	}
+	iph = ip_hdr(skb);
+	l4 = (void *)iph + iph->ihl * 4;
+
+	data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
+	data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
+	if ((data_len > 4 && strncasecmp(data, "GET ", 4) == 0) ||
+			(data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
+		natcap_auth_http_302(in, skb, ct);
+		set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+		return NF_DROP;
+	} else if (data_len > 0) {
+		set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+		return NF_DROP;
+	} else if (TCPH(l4)->ack && !TCPH(l4)->syn) {
+		natcap_auth_convert_tcprst(skb);
+		return NF_ACCEPT;
+	}
+
+	return NF_ACCEPT;
+}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_server_forward_hook(unsigned int hooknum,
 		struct sk_buff *skb,
@@ -390,7 +429,6 @@ static unsigned int natcap_server_forward_hook(void *priv,
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct iphdr *iph;
-	void *l4;
 
 	if (disabled)
 		return NF_ACCEPT;
@@ -416,34 +454,7 @@ static unsigned int natcap_server_forward_hook(void *priv,
 
 	if (iph->protocol == IPPROTO_TCP) {
 		if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
-			int data_len;
-			unsigned char *data;
-
-			if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
-				return NF_DROP;
-			}
-			iph = ip_hdr(skb);
-			l4 = (void *)iph + iph->ihl * 4;
-			if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
-				return NF_DROP;
-			}
-			iph = ip_hdr(skb);
-			l4 = (void *)iph + iph->ihl * 4;
-
-			data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
-			data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
-			if ((data_len > 4 && strncasecmp(data, "GET ", 4) == 0) ||
-					(data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
-				natcap_auth_http_302(in, skb, ct);
-				set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-				return NF_DROP;
-			} else if (data_len > 0) {
-				set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-				return NF_DROP;
-			} else if (TCPH(l4)->ack && !TCPH(l4)->syn) {
-				natcap_auth_convert_tcprst(skb);
-				return NF_ACCEPT;
-			}
+			return natcap_try_http_redirect(iph, skb, ct, in);
 		}
 	}
 
@@ -708,7 +719,7 @@ static unsigned int natcap_server_post_out_hook(const struct nf_hook_ops *ops,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
-	//const struct net_device *in = state->in;
+	const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #else
 static unsigned int natcap_server_post_out_hook(void *priv,
@@ -716,7 +727,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
-	//const struct net_device *in = state->in;
+	const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #endif
 	int ret = 0;
@@ -748,9 +759,13 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
 		if (iph->protocol == IPPROTO_TCP) {
-			if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status) &&
-					(TCPH(l4)->dest == __constant_htons(8388) || TCPH(l4)->dest == natcap_redirect_port)) {
-				return NF_DROP;
+			if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
+				if (TCPH(l4)->dest == __constant_htons(8388)) {
+					return NF_DROP;
+				}
+				if (TCPH(l4)->dest == natcap_redirect_port) {
+					return natcap_try_http_redirect(iph, skb, ct, in);
+				}
 			}
 			if (test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status) && TCPH(l4)->syn) {
 				natcap_tcpmss_adjust(skb, TCPH(l4), -8);
