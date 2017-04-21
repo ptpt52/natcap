@@ -353,7 +353,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		if (IP_SET_test_dst_ip(state, in, out, skb, "knocklist") > 0) {
 			natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
-		} else if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0) {
+		} else if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 || IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0) {
