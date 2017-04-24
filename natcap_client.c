@@ -50,7 +50,11 @@ static void default_mac_addr_init(void)
 		if (strcmp("eth0", dev->name) == 0) {
 			memcpy(default_mac_addr, dev->dev_addr, ETH_ALEN);
 			break;
+		} else if (strcmp("eth1", dev->name) == 0) {
+			memcpy(default_mac_addr, dev->dev_addr, ETH_ALEN);
+			// sometimes we use eth1
 		}
+
 		dev = next_net_device(dev);
 	}
 }

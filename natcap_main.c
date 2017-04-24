@@ -321,6 +321,24 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			}
 			kfree(tmp);
 		}
+	} else if (strncmp(data, "default_mac_addr=", 17) == 0) {
+		unsigned int a, b, c, d, e, f;
+		n = sscanf(data, "default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n", &a, &b, &c, &d, &e, &f);
+		if ( n == 6 &&
+				((a & 0xff) == a) &&
+				((b & 0xff) == b) &&
+				((c & 0xff) == c) &&
+				((d & 0xff) == d) &&
+				((e & 0xff) == e) &&
+				((f & 0xff) == f) ) {
+			default_mac_addr[0] = a;
+			default_mac_addr[1] = b;
+			default_mac_addr[2] = c;
+			default_mac_addr[3] = d;
+			default_mac_addr[4] = e;
+			default_mac_addr[5] = f;
+			goto done;
+		}
 	}
 
 	NATCAP_println("ignoring line[%s]", data);
