@@ -297,13 +297,11 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			goto done;
 		}
 	} else if (strncmp(data, "natcap_redirect_port=", 21) == 0) {
-		if (mode == SERVER_MODE) {
-			unsigned int d;
-			n = sscanf(data, "natcap_redirect_port=%u", &d);
-			if (n == 1 && d <= 65535) {
-				natcap_redirect_port = htons((unsigned short)(d & 0xffff));
-				goto done;
-			}
+		unsigned int d;
+		n = sscanf(data, "natcap_redirect_port=%u", &d);
+		if (n == 1 && d <= 65535) {
+			natcap_redirect_port = htons((unsigned short)(d & 0xffff));
+			goto done;
 		}
 	} else if (strncmp(data, "auth_http_redirect_url=", 23) == 0) {
 		if (mode == SERVER_MODE) {

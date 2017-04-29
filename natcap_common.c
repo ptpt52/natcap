@@ -22,6 +22,8 @@
 #include "natcap_common.h"
 #include "natcap_client.h"
 
+unsigned short natcap_redirect_port = 0;
+
 unsigned int disabled = 1;
 unsigned long long flow_total_tx_bytes = 0;
 unsigned long long flow_total_rx_bytes = 0;

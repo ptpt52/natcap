@@ -34,6 +34,8 @@ enum {
 	UDP_ENCODE = 1,
 };
 
+extern unsigned short natcap_redirect_port;
+
 extern unsigned long long flow_total_tx_bytes;
 extern unsigned long long flow_total_rx_bytes;
 

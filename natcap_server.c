@@ -461,8 +461,6 @@ static unsigned int natcap_server_forward_hook(void *priv,
 	return NF_ACCEPT;
 }
 
-unsigned short natcap_redirect_port = 0;
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_server_pre_ct_in_hook(unsigned int hooknum,
 		struct sk_buff *skb,

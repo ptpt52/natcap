@@ -369,6 +369,12 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
+			if (natcap_redirect_port != 0 && hooknum == NF_INET_PRE_ROUTING) {
+				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection match gfwlist, use natcapd proxy\n", DEBUG_TCP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
 			natcap_server_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
