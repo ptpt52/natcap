@@ -5,7 +5,9 @@ ECHO = echo
 
 CC = gcc
 
-CFLAGS = -g -O3 -Werror -Wall -Wno-strict-aliasing
+EXTRA_CFLAGS +=
+
+CFLAGS = -g -O3 -Werror -Wall -Wno-strict-aliasing $(EXTRA_CFLAGS)
 
 FLAGS =
 

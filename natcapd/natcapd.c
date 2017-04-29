@@ -22,6 +22,7 @@
 
 #include <net/if.h>
 #include <sys/ioctl.h>
+#include <linux/netfilter_ipv4.h>
 #include "natcapd.h"
 
 #ifndef EAGAIN
@@ -213,6 +214,19 @@ static remote_t *connect_to_remote(EV_P_ struct addrinfo *res, server_t *server)
 	return remote;
 }
 
+#ifdef NATCAP_CLIENT_MODE
+int getdestaddr(int fd, struct sockaddr_storage *destaddr)
+{
+    socklen_t socklen = sizeof(*destaddr);
+    int error = 0;
+
+	error = getsockopt(fd, SOL_IP, SO_ORIGINAL_DST, destaddr, &socklen);
+	if (error) {
+		return -1;
+	}
+	return 0;
+}
+#else
 static int getdestaddr(int fd, struct sockaddr_storage *destaddr)
 {
 	socklen_t socklen = sizeof(*destaddr);
@@ -224,6 +238,7 @@ static int getdestaddr(int fd, struct sockaddr_storage *destaddr)
 	}
 	return 0;
 }
+#endif
 
 static void server_recv_cb(EV_P_ ev_io *w, int revents)
 {
