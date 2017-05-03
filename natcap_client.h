@@ -12,6 +12,7 @@
 extern unsigned int server_persist_timeout;
 extern unsigned int shadowsocks;
 extern unsigned int sproxy;
+extern unsigned int enable_hosts;
 
 extern u32 default_u_hash;
 extern unsigned char default_mac_addr[ETH_ALEN];

@@ -30,6 +30,7 @@ MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
 
 unsigned int shadowsocks = 0;
 unsigned int sproxy = 0;
+unsigned int enable_hosts = 0;
 
 u32 default_u_hash = 0;
 unsigned char default_mac_addr[ETH_ALEN];
@@ -371,6 +372,14 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			}
 			if (natcap_redirect_port != 0 && hooknum == NF_INET_PRE_ROUTING) {
 				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection match gfwlist, use natcapd proxy\n", DEBUG_TCP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
+			if (enable_hosts &&
+					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(443) &&
+					IP_SET_test_dst_ip(state, in, out, skb, "gfwhosts") > 0) {
+				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection match gfwlist, use natcapd hosts\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
