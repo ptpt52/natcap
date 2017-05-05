@@ -176,6 +176,182 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	dev_queue_xmit(nskb);
 }
 
+static inline void natcap_auth_tcp_send_rst(const struct net_device *dev, struct sk_buff *oskb, struct nf_conn *ct)
+{
+	struct sk_buff *nskb;
+	struct ethhdr *neth, *oeth;
+	struct iphdr *niph, *oiph;
+	struct tcphdr *otcph, *ntcph;
+	int offset, header_len;
+	int add_len = 0;
+	u8 protocol = IPPROTO_TCP;
+
+	oeth = (struct ethhdr *)skb_mac_header(oskb);
+	oiph = ip_hdr(oskb);
+	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
+
+	if (test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
+		add_len = 8;
+		protocol = IPPROTO_UDP;
+	}
+
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + add_len - oskb->len;
+	header_len = offset < 0 ? 0 : offset;
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
+	if (!nskb) {
+		NATCAP_ERROR("alloc_skb fail\n");
+		return;
+	}
+	if (offset <= 0) {
+		if (pskb_trim(nskb, nskb->len + offset)) {
+			NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+			consume_skb(nskb);
+			return;
+		}
+	} else {
+		nskb->len += offset;
+		nskb->tail += offset;
+	}
+
+	neth = eth_hdr(nskb);
+	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+	//neth->h_proto = htons(ETH_P_IP);
+
+	niph = ip_hdr(nskb);
+	memset(niph, 0, sizeof(struct iphdr));
+	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
+	niph->version = oiph->version;
+	niph->ihl = 5;
+	niph->tos = 0;
+	niph->tot_len = htons(nskb->len);
+	niph->ttl = 0x80;
+	niph->protocol = protocol;
+	niph->id = __constant_htons(0xDEAD);
+	niph->frag_off = 0x0;
+
+	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
+	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
+	if (protocol == IPPROTO_UDP) {
+		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
+		*((unsigned int *)((void *)UDPH(ntcph) + 8)) = __constant_htonl(0xFFFF0099);
+		ntcph = (struct tcphdr *)((char *)ntcph + 8);
+	}
+	ntcph->seq = otcph->ack_seq;
+	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4 + 1);
+	ntcph->res1 = 0;
+	ntcph->doff = 5;
+	ntcph->syn = 0;
+	ntcph->rst = 1;
+	ntcph->psh = 0;
+	ntcph->ack = 0;
+	ntcph->fin = 0;
+	ntcph->urg = 0;
+	ntcph->ece = 0;
+	ntcph->cwr = 0;
+	ntcph->window = 0;
+	ntcph->check = 0;
+	ntcph->urg_ptr = 0;
+
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(nskb);
+
+	skb_push(nskb, (char *)niph - (char *)neth);
+	nskb->dev = (struct net_device *)dev;
+
+	dev_queue_xmit(nskb);
+}
+
+static inline void natcap_auth_tcp_send_rstack(const struct net_device *dev, struct sk_buff *oskb, struct nf_conn *ct)
+{
+	struct sk_buff *nskb;
+	struct ethhdr *neth, *oeth;
+	struct iphdr *niph, *oiph;
+	struct tcphdr *otcph, *ntcph;
+	int offset, header_len;
+	int add_len = 0;
+	u8 protocol = IPPROTO_TCP;
+
+	oeth = (struct ethhdr *)skb_mac_header(oskb);
+	oiph = ip_hdr(oskb);
+	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
+
+	if (test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
+		add_len = 8;
+		protocol = IPPROTO_UDP;
+	}
+
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + add_len - oskb->len;
+	header_len = offset < 0 ? 0 : offset;
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
+	if (!nskb) {
+		NATCAP_ERROR("alloc_skb fail\n");
+		return;
+	}
+	if (offset <= 0) {
+		if (pskb_trim(nskb, nskb->len + offset)) {
+			NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+			consume_skb(nskb);
+			return;
+		}
+	} else {
+		nskb->len += offset;
+		nskb->tail += offset;
+	}
+
+	neth = eth_hdr(nskb);
+	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+	//neth->h_proto = htons(ETH_P_IP);
+
+	niph = ip_hdr(nskb);
+	memset(niph, 0, sizeof(struct iphdr));
+	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
+	niph->version = oiph->version;
+	niph->ihl = 5;
+	niph->tos = 0;
+	niph->tot_len = htons(nskb->len);
+	niph->ttl = 0x80;
+	niph->protocol = protocol;
+	niph->id = __constant_htons(0xDEAD);
+	niph->frag_off = 0x0;
+
+	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
+	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
+	if (protocol == IPPROTO_UDP) {
+		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
+		*((unsigned int *)((void *)UDPH(ntcph) + 8)) = __constant_htonl(0xFFFF0099);
+		ntcph = (struct tcphdr *)((char *)ntcph + 8);
+	}
+	ntcph->seq = otcph->ack_seq;
+	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4 + 1);
+	ntcph->res1 = 0;
+	ntcph->doff = 5;
+	ntcph->syn = 0;
+	ntcph->rst = 1;
+	ntcph->psh = 0;
+	ntcph->ack = 1;
+	ntcph->fin = 0;
+	ntcph->urg = 0;
+	ntcph->ece = 0;
+	ntcph->cwr = 0;
+	ntcph->window = 0;
+	ntcph->check = 0;
+	ntcph->urg_ptr = 0;
+
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(nskb);
+
+	skb_push(nskb, (char *)niph - (char *)neth);
+	nskb->dev = (struct net_device *)dev;
+
+	dev_queue_xmit(nskb);
+}
+
 static inline void natcap_auth_reply_payload(const char *payload, int payload_len, struct sk_buff *oskb, const struct net_device *dev, struct nf_conn *ct)
 {
 	struct sk_buff *nskb;
@@ -316,7 +492,7 @@ static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_
 	kfree(http);
 }
 
-static inline int natcap_auth_convert_tcprst(struct sk_buff *skb)
+static inline int natcap_auth_tcp_to_rst(struct sk_buff *skb)
 {
 	int offset = 0;
 	struct iphdr *iph;
@@ -386,14 +562,19 @@ static inline unsigned int natcap_try_http_redirect(struct iphdr *iph, struct sk
 	if ((data_len > 4 && strncasecmp(data, "GET ", 4) == 0) ||
 			(data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
 		natcap_auth_http_302(in, skb, ct);
-		set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-		return NF_DROP;
+		set_bit(IPS_NATCAP_NEED_REPLY_FINACK_BIT, &ct->status);
+		natcap_auth_tcp_to_rst(skb);
+		return NF_ACCEPT;
 	} else if (data_len > 0) {
 		set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-		return NF_DROP;
-	} else if (TCPH(l4)->ack && !TCPH(l4)->syn) {
-		natcap_auth_convert_tcprst(skb);
+		natcap_auth_tcp_send_rst(in, skb, ct);
+		natcap_auth_tcp_to_rst(skb);
 		return NF_ACCEPT;
+	} else if (test_bit(IPS_NATCAP_NEED_REPLY_FINACK_BIT, &ct->status)) {
+		if (TCPH(l4)->fin && TCPH(l4)->ack) {
+			natcap_auth_tcp_send_rstack(in, skb, ct);
+		}
+		return NF_DROP;
 	}
 
 	return NF_ACCEPT;

@@ -142,6 +142,9 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_CFM_BIT 21
 #define IPS_NATCAP_CFM (1 << IPS_NATCAP_CFM_BIT)
 
+#define IPS_NATCAP_NEED_REPLY_FINACK_BIT 18
+#define IPS_NATCAP_NEED_REPLY_FINACK (1 << IPS_NATCAP_NEED_REPLY_FINACK_BIT)
+
 enum {
 	E_NATCAP_OK = 0,
 	E_NATCAP_AUTH_FAIL,
