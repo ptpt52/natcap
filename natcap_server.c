@@ -173,6 +173,8 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
+
+	nf_reset(nskb);
 	dev_queue_xmit(nskb);
 }
 
@@ -251,16 +253,30 @@ static inline void natcap_auth_tcp_send_rst(const struct net_device *dev, struct
 	ntcph->urg = 0;
 	ntcph->ece = 0;
 	ntcph->cwr = 0;
-	ntcph->window = 0;
+	ntcph->window = __constant_htons(0);
 	ntcph->check = 0;
 	ntcph->urg_ptr = 0;
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
 
+	/*FIXME make TCP state happy */
+	nf_reset(nskb);
+	niph->saddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip;
+	ntcph->source = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.tcp.port;
+	/*XXX don't care what is returned */
+	nf_conntrack_in(dev_net(dev), PF_INET, NF_INET_PRE_ROUTING, nskb);
+	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
+	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
+
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
 
+	nf_reset(nskb);
 	dev_queue_xmit(nskb);
 }
 
@@ -339,16 +355,30 @@ static inline void natcap_auth_tcp_send_rstack(const struct net_device *dev, str
 	ntcph->urg = 0;
 	ntcph->ece = 0;
 	ntcph->cwr = 0;
-	ntcph->window = 0;
+	ntcph->window = __constant_htons(0);
 	ntcph->check = 0;
 	ntcph->urg_ptr = 0;
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
 
+	/*FIXME make TCP state happy */
+	nf_reset(nskb);
+	niph->saddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip;
+	ntcph->source = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.tcp.port;
+	/*XXX don't care what is returned */
+	nf_conntrack_in(dev_net(dev), PF_INET, NF_INET_PRE_ROUTING, nskb);
+	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
+	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
+
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
 
+	nf_reset(nskb);
 	dev_queue_xmit(nskb);
 }
 
@@ -430,7 +460,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	ntcph->urg = 0;
 	ntcph->ece = 0;
 	ntcph->cwr = 0;
-	ntcph->window = 65535;
+	ntcph->window = __constant_htons(65535);
 	ntcph->check = 0;
 	ntcph->urg_ptr = 0;
 
@@ -441,9 +471,23 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
 
+	/*FIXME make TCP state happy */
+	nf_reset(nskb);
+	niph->saddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip;
+	ntcph->source = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.tcp.port;
+	/*XXX don't care what is returned */
+	nf_conntrack_in(dev_net(dev), PF_INET, NF_INET_PRE_ROUTING, nskb);
+	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
+	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
+
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
 
+	nf_reset(nskb);
 	dev_queue_xmit(nskb);
 }
 
