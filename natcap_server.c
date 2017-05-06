@@ -178,7 +178,7 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	dev_queue_xmit(nskb);
 }
 
-static inline void natcap_auth_tcp_send_rst(const struct net_device *dev, struct sk_buff *oskb, struct nf_conn *ct)
+static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struct sk_buff *oskb, struct nf_conn *ct, int dir)
 {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
@@ -222,8 +222,8 @@ static inline void natcap_auth_tcp_send_rst(const struct net_device *dev, struct
 
 	niph = ip_hdr(nskb);
 	memset(niph, 0, sizeof(struct iphdr));
-	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
-	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
+	niph->saddr = ct->tuplehash[dir].tuple.dst.u3.ip;
+	niph->daddr = ct->tuplehash[dir].tuple.src.u3.ip;
 	niph->version = oiph->version;
 	niph->ihl = 5;
 	niph->tos = 0;
@@ -234,8 +234,8 @@ static inline void natcap_auth_tcp_send_rst(const struct net_device *dev, struct
 	niph->frag_off = 0x0;
 
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
-	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
-	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
+	ntcph->source = ct->tuplehash[dir].tuple.dst.u.tcp.port;
+	ntcph->dest = ct->tuplehash[dir].tuple.src.u.tcp.port;
 	if (protocol == IPPROTO_UDP) {
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
 		*((unsigned int *)((void *)UDPH(ntcph) + 8)) = __constant_htonl(0xFFFF0099);
@@ -262,16 +262,16 @@ static inline void natcap_auth_tcp_send_rst(const struct net_device *dev, struct
 
 	/*FIXME make TCP state happy */
 	nf_reset(nskb);
-	niph->saddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
-	niph->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip;
-	ntcph->source = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.tcp.port;
-	ntcph->dest = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.tcp.port;
+	niph->saddr = ct->tuplehash[!dir].tuple.src.u3.ip;
+	niph->daddr = ct->tuplehash[!dir].tuple.dst.u3.ip;
+	ntcph->source = ct->tuplehash[!dir].tuple.src.u.tcp.port;
+	ntcph->dest = ct->tuplehash[!dir].tuple.dst.u.tcp.port;
 	/*XXX don't care what is returned */
 	nf_conntrack_in(dev_net(dev), PF_INET, NF_INET_PRE_ROUTING, nskb);
-	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
-	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
-	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
-	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
+	niph->saddr = ct->tuplehash[dir].tuple.dst.u3.ip;
+	niph->daddr = ct->tuplehash[dir].tuple.src.u3.ip;
+	ntcph->source = ct->tuplehash[dir].tuple.dst.u.tcp.port;
+	ntcph->dest = ct->tuplehash[dir].tuple.src.u.tcp.port;
 
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
@@ -280,7 +280,7 @@ static inline void natcap_auth_tcp_send_rst(const struct net_device *dev, struct
 	dev_queue_xmit(nskb);
 }
 
-static inline void natcap_auth_tcp_send_rstack(const struct net_device *dev, struct sk_buff *oskb, struct nf_conn *ct)
+static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, struct sk_buff *oskb, struct nf_conn *ct)
 {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
@@ -611,12 +611,13 @@ static inline unsigned int natcap_try_http_redirect(struct iphdr *iph, struct sk
 		return NF_ACCEPT;
 	} else if (data_len > 0) {
 		set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-		natcap_auth_tcp_send_rst(in, skb, ct);
+		natcap_auth_tcp_reply_rst(in, skb, ct, IP_CT_DIR_ORIGINAL);
 		natcap_auth_tcp_to_rst(skb);
 		return NF_ACCEPT;
 	} else if (test_bit(IPS_NATCAP_NEED_REPLY_FINACK_BIT, &ct->status)) {
 		if (TCPH(l4)->fin && TCPH(l4)->ack) {
-			natcap_auth_tcp_send_rstack(in, skb, ct);
+			natcap_auth_tcp_reply_rstack(in, skb, ct);
+			set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
 		}
 		return NF_DROP;
 	}
@@ -673,13 +674,32 @@ static unsigned int natcap_server_forward_hook(void *priv,
 	if (test_bit(IPS_NATCAP_DROP_BIT, &ct->status)) {
 		return NF_DROP;
 	}
-	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
-		return NF_ACCEPT;
-	}
 
 	if (iph->protocol == IPPROTO_TCP) {
 		if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
-			return natcap_try_http_redirect(iph, skb, ct, in);
+			if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
+				return natcap_try_http_redirect(iph, skb, ct, in);
+			} else {
+				void *l4;
+
+				if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+					return NF_DROP;
+				}
+				iph = ip_hdr(skb);
+				l4 = (void *)iph + iph->ihl * 4;
+				if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
+					return NF_DROP;
+				}
+				iph = ip_hdr(skb);
+				l4 = (void *)iph + iph->ihl * 4;
+
+				if (!(TCPH(l4)->syn && TCPH(l4)->ack)) {
+					set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+					natcap_auth_tcp_reply_rst(in, skb, ct, IP_CT_DIR_REPLY);
+					natcap_auth_tcp_to_rst(skb);
+					return NF_ACCEPT;
+				}
+			}
 		}
 	}
 
