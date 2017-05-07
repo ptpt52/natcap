@@ -681,6 +681,7 @@ static void accept_cb(EV_P_ ev_io *w, int revents)
 		memset(&storage, 0, sizeof(struct sockaddr_storage));
 
 		if (getdestaddr(server->fd, &storage) != 0) {
+			perror("getdestaddr");
 			close_and_free_server(EV_A_ server);
 			return;
 		}
