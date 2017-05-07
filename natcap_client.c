@@ -13,6 +13,7 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
+#include <linux/inetdevice.h>
 #include <linux/netfilter.h>
 #include <linux/skbuff.h>
 #include <linux/string.h>
@@ -313,8 +314,8 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 	const struct net_device *in = state->in;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 	const struct net_device *out = state->out;
 #endif
 #endif
@@ -370,12 +371,6 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
-			if (natcap_redirect_port != 0 && hooknum == NF_INET_PRE_ROUTING) {
-				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection match gfwlist, use natcapd proxy\n", DEBUG_TCP_ARG(iph,l4));
-				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-				return NF_ACCEPT;
-			}
 			if (enable_hosts &&
 					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(443) &&
 					IP_SET_test_dst_ip(state, in, out, skb, "gfwhosts") > 0) {
@@ -383,6 +378,28 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
+			}
+			if (natcap_redirect_port != 0 && hooknum == NF_INET_PRE_ROUTING) {
+				__be32 newdst = 0;
+				struct in_device *indev;
+				struct in_ifaddr *ifa;
+
+				rcu_read_lock();
+				indev = __in_dev_get_rcu(in);
+				if (indev && indev->ifa_list) {
+					ifa = indev->ifa_list;
+					newdst = ifa->ifa_local;
+				}
+				rcu_read_unlock();
+
+				if (newdst) {
+					natcap_dnat_setup(ct, newdst, natcap_redirect_port);
+					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+
+					NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection match gfwlist, use natcapd proxy\n", DEBUG_TCP_ARG(iph,l4));
+					return NF_ACCEPT;
+				}
 			}
 			natcap_server_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
