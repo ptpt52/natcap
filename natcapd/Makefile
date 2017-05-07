@@ -11,23 +11,32 @@ CFLAGS = -g -O3 -Werror -Wall -Wno-strict-aliasing $(EXTRA_CFLAGS)
 
 FLAGS =
 
-INCS = -I../
+INCS = -I..
 
-LIBS = -L./ -lev -lm
+LIBS = -L. -lev -lm
 
-BIN = natcapd
+SERVER_BIN = natcapd_server
+SERVER_CFLAGS = 
+CLIENT_BIN = natcapd_client
+CLIENT_CFLAGS = -DNATCAP_CLIENT_MODE
 
 SRCS = natcapd.c
 
-.SUFFIXES: .c .o .test.o
-.c.o:
-	$(CC) -c $*.c -o $*.o $(CFLAGS) $(INCS)
+.SUFFIXES: .c .o .server.o .client.o
+.c.server.o:
+	$(CC) -c $*.c -o $*.server.o $(CFLAGS) $(SERVER_CFLAGS) $(INCS)
 
-default: binary
+.c.client.o:
+	$(CC) -c $*.c -o $*.client.o $(CFLAGS) $(CLIENT_CFLAGS) $(INCS)
 
-binary: $(SRCS:.c=.o)
-	$(CC) $^ -o $(BIN) $(FLAGS) $(LIBS)
+default: $(SERVER_BIN) $(CLIENT_BIN)
+
+$(SERVER_BIN): $(SRCS:.c=.server.o)
+	$(CC) $^ -o $@ $(FLAGS) $(LIBS)
+
+$(CLIENT_BIN): $(SRCS:.c=.client.o)
+	$(CC) $^ -o $@ $(FLAGS) $(LIBS)
 
 clean:
-	$(RM) $(BIN) $(SRCS:.c=.o)
+	$(RM) $(SERVER_BIN) $(CLIENT_BIN) $(SRCS:.c=.server.o) $(SRCS:.c=.client.o)
 
