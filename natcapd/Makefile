@@ -1,8 +1,8 @@
 INCS += -I..
 LIBS += -L. -lev -lm
 
-SERVER_BIN = natcapd_server
-CLIENT_BIN = natcapd_client
+SERVER_BIN = natcapd-server
+CLIENT_BIN = natcapd-client
 
 SERVER_CFLAGS = 
 CLIENT_CFLAGS = -DNATCAP_CLIENT_MODE
