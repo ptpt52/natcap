@@ -668,6 +668,9 @@ static unsigned int natcap_server_forward_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
+	if (!test_bit(IPS_NATCAP_SERVER_BIT, &ct->status)) {
+		return NF_ACCEPT;
+	}
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
@@ -700,6 +703,102 @@ static unsigned int natcap_server_forward_hook(void *priv,
 					return NF_ACCEPT;
 				}
 			}
+		}
+	}
+
+	return NF_ACCEPT;
+}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned int natcap_server_pre_ct_test_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_server_pre_ct_test_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+	unsigned int hooknum = ops->hooknum;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+static unsigned int natcap_server_pre_ct_test_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	//unsigned int hooknum = state->hook;
+	//const struct net_device *in = state->in;
+	//const struct net_device *out = state->out;
+#else
+static unsigned int natcap_server_pre_ct_test_hook(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	//unsigned int hooknum = state->hook;
+	//const struct net_device *in = state->in;
+	//const struct net_device *out = state->out;
+#endif
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
+	struct iphdr *iph;
+	void *l4;
+
+	if (disabled)
+		return NF_ACCEPT;
+
+	iph = ip_hdr(skb);
+	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
+		return NF_ACCEPT;
+	}
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+		return NF_ACCEPT;
+	}
+	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+		return NF_ACCEPT;
+	}
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+		return NF_ACCEPT;
+	}
+
+	if (iph->protocol == IPPROTO_TCP) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+			return NF_DROP;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
+			return NF_DROP;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+
+		if (!TCPH(l4)->syn || TCPH(l4)->ack) {
+			return NF_ACCEPT;
+		}
+
+		if (natcap_tcp_decode_header(TCPH(l4)) == NULL) {
+			return NF_ACCEPT;
+		}
+		set_bit(IPS_NATCAP_SERVER_BIT, &ct->status);
+		return NF_ACCEPT;
+	} else if (iph->protocol == IPPROTO_UDP) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
+			return NF_DROP;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
+				*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == __constant_htonl(0xFFFE0099)) {
+			set_bit(IPS_NATCAP_SERVER_BIT, &ct->status);
+			return NF_ACCEPT;
 		}
 	}
 
@@ -756,6 +855,9 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+	if (!test_bit(IPS_NATCAP_SERVER_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
@@ -992,6 +1094,9 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+	if (!test_bit(IPS_NATCAP_SERVER_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
@@ -1247,6 +1352,15 @@ static struct nf_hook_ops server_hooks[] = {
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
 		.priority = NF_IP_PRI_CONNTRACK - 5,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
+		.hook = natcap_server_pre_ct_test_hook,
+		.pf = PF_INET,
+		.hooknum = NF_INET_PRE_ROUTING,
+		.priority = NF_IP_PRI_CONNTRACK + 1,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)

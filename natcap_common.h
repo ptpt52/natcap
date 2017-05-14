@@ -26,7 +26,8 @@ enum {
 	CLIENT_MODE = 0,
 	SERVER_MODE = 1,
 	FORWARD_MODE = 2,
-	KNOCK_MODE = 3,
+	MIXING_MODE = 3,
+	KNOCK_MODE = 4,
 };
 
 enum {

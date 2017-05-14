@@ -141,6 +141,8 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_DST (1 << IPS_NATCAP_DST_BIT)
 #define IPS_NATCAP_CFM_BIT 21
 #define IPS_NATCAP_CFM (1 << IPS_NATCAP_CFM_BIT)
+#define IPS_NATCAP_SERVER_BIT 20
+#define IPS_NATCAP_SERVER (1 << IPS_NATCAP_SERVER_BIT)
 
 #define IPS_NATCAP_NEED_REPLY_FINACK_BIT 18
 #define IPS_NATCAP_NEED_REPLY_FINACK (1 << IPS_NATCAP_NEED_REPLY_FINACK_BIT)

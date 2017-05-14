@@ -34,7 +34,7 @@ MODULE_PARM_DESC(debug, "Debug level (0=none,1=error,2=warn,4=info,8=debug,16=fi
 
 unsigned int mode = CLIENT_MODE;
 module_param(mode, int, 0);
-MODULE_PARM_DESC(mode, "Working mode (0=client,1=server,2=forward) default=0");
+MODULE_PARM_DESC(mode, "Working mode (0=client,1=server,2=forward,3=client+server) default=0");
 
 unsigned int auth_disabled = 0;
 module_param(auth_disabled, int, 0);

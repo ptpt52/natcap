@@ -339,6 +339,9 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
+	if (test_bit(IPS_NATCAP_SERVER_BIT, &ct->status)) {
+		return NF_ACCEPT;
+	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
@@ -589,6 +592,9 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
+	if (test_bit(IPS_NATCAP_SERVER_BIT, &ct->status)) {
+		return NF_ACCEPT;
+	}
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
@@ -693,6 +699,7 @@ static unsigned natcap_client_pre_in_hook(unsigned int hooknum,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
 {
+	u_int8_t pf = PF_INET;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_client_pre_in_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
@@ -700,29 +707,33 @@ static unsigned int natcap_client_pre_in_hook(const struct nf_hook_ops *ops,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
 {
-	//u_int8_t pf = state->pf;
+	u_int8_t pf = ops->pf;
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_client_pre_in_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 {
-	//u_int8_t pf = state->pf;
+	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
-	//const struct net_device *in = state->in;
-	//const struct net_device *out = state->out;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_client_pre_in_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 {
-	//u_int8_t pf = state->pf;
+	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
-	//const struct net_device *in = state->in;
-	//const struct net_device *out = state->out;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
 #endif
+	int ret = 0;
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
 	struct iphdr *iph;
 	void *l4;
+	struct net *net = &init_net;
 
 	if (disabled)
 		return NF_ACCEPT;
@@ -774,6 +785,23 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		iph->protocol = IPPROTO_TCP;
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 		skb_rcsum_tcpudp(skb);
+
+		if (in)
+			net = dev_net(in);
+		else if (out)
+			net = dev_net(out);
+		ret = nf_conntrack_in(net, pf, hooknum, skb);
+		if (ret != NF_ACCEPT) {
+			return ret;
+		}
+		ct = nf_ct_get(skb, &ctinfo);
+		if (!ct) {
+			return NF_DROP;
+		}
+
+		if (!test_and_set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) { /* first time in */
+			return NF_ACCEPT;
+		}
 	}
 
 	return NF_ACCEPT;
@@ -832,6 +860,9 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+	if (test_bit(IPS_NATCAP_SERVER_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
@@ -1137,6 +1168,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
+	if (test_bit(IPS_NATCAP_SERVER_BIT, &ct->status)) {
+		return NF_ACCEPT;
+	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
@@ -1430,6 +1464,9 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+	if (test_bit(IPS_NATCAP_SERVER_BIT, &ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (!test_bit(IPS_NATCAP_SYN_BIT, &ct->status)) {
