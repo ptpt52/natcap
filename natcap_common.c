@@ -32,7 +32,7 @@ unsigned int debug = 0;
 module_param(debug, int, 0);
 MODULE_PARM_DESC(debug, "Debug level (0=none,1=error,2=warn,4=info,8=debug,16=fixme,...,31=all) default=0");
 
-unsigned int mode = CLIENT_MODE;
+unsigned int mode = MIXING_MODE;
 module_param(mode, int, 0);
 MODULE_PARM_DESC(mode, "Working mode (0=client,1=server,2=forward,3=client+server) default=0");
 
@@ -48,6 +48,7 @@ const char *const mode_str[] = {
 	[CLIENT_MODE] = "CLIENT",
 	[SERVER_MODE] = "SERVER",
 	[FORWARD_MODE] = "FORWARD",
+	[MIXING_MODE] = "CLIENT+SERVER",
 	[KNOCK_MODE] = "KNOCK",
 };
 
