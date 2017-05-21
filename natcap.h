@@ -147,6 +147,9 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_NEED_REPLY_FINACK_BIT 18
 #define IPS_NATCAP_NEED_REPLY_FINACK (1 << IPS_NATCAP_NEED_REPLY_FINACK_BIT)
 
+#define NATCAP_UDP_GET_TYPE(x) (0xFF & ntohs(x))
+#define NATCAP_UDP_GET_ENC(x) ((0xFF00 & ntohs(x)) >> 8)
+
 enum {
 	E_NATCAP_OK = 0,
 	E_NATCAP_AUTH_FAIL,

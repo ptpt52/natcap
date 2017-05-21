@@ -686,6 +686,15 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			return NF_DROP;
 		}
 
+		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+			if (skb_make_writable(skb, skb->len)) {
+				NATCAP_ERROR("(CPCI)" DEBUG_UDP_FMT ": natcap_udp_decode() failed\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_DROP;
+			}
+			skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_decode);
+			skb_rcsum_tcpudp(skb);
+		}
+
 		NATCAP_DEBUG("(CPCI)" DEBUG_UDP_FMT ": after decode\n", DEBUG_UDP_ARG(iph,l4));
 	}
 
@@ -1041,6 +1050,15 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 		return NF_STOLEN;
 	} else if (iph->protocol == IPPROTO_UDP) {
+		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+			if (skb_make_writable(skb, skb->len)) {
+				NATCAP_ERROR("(CPO)" DEBUG_UDP_FMT ": natcap_udp_encode() failed\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_DROP;
+			}
+			skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode);
+			skb_rcsum_tcpudp(skb);
+		}
+
 		if (!test_bit(IPS_NATCAP_ACK_BIT, &ct->status)) {
 			if (skb->len > 1280) {
 				struct sk_buff *nskb;
@@ -1071,7 +1089,12 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				*((unsigned int *)(l4 + sizeof(struct udphdr))) = __constant_htonl(0xFFFE0099);
 				*((unsigned int *)(l4 + sizeof(struct udphdr) + 4)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 				*((unsigned short *)(l4 + sizeof(struct udphdr) + 8)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
-				*((unsigned short *)(l4 + sizeof(struct udphdr) + 10)) = __constant_htons(0x1);
+				*((unsigned short *)(l4 + sizeof(struct udphdr) + 10)) = __constant_htons(0x01);
+
+				if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+					*((unsigned short *)(l4 + sizeof(struct udphdr) + 10)) = __constant_htons(0x0100 | 0x01);
+				}
+
 				skb_rcsum_tcpudp(nskb);
 
 				NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
@@ -1097,7 +1120,12 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				*((unsigned int *)(l4 + sizeof(struct udphdr))) = __constant_htonl(0xFFFE0099);
 				*((unsigned int *)(l4 + sizeof(struct udphdr) + 4)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 				*((unsigned short *)(l4 + sizeof(struct udphdr) + 8)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
-				*((unsigned short *)(l4 + sizeof(struct udphdr) + 10)) = __constant_htons(0x2);
+				*((unsigned short *)(l4 + sizeof(struct udphdr) + 10)) = __constant_htons(0x02);
+
+				if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+					*((unsigned short *)(l4 + sizeof(struct udphdr) + 10)) = __constant_htons(0x0100 | 0x02);
+				}
+
 				skb_rcsum_tcpudp(skb);
 
 				NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));

@@ -115,7 +115,7 @@ void natcap_data_decode(unsigned char *buf, int len)
 	}
 }
 
-static void skb_data_hook(struct sk_buff *skb, int offset, int len, void (*update)(unsigned char *, int))
+void skb_data_hook(struct sk_buff *skb, int offset, int len, void (*update)(unsigned char *, int))
 {
 	int start = skb_headlen(skb);
 	int i, copy = start - offset;
