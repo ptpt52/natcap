@@ -688,7 +688,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		}
 
 		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
-			if (skb_make_writable(skb, skb->len)) {
+			if (!skb_make_writable(skb, skb->len)) {
 				NATCAP_ERROR("(CPCI)" DEBUG_UDP_FMT ": natcap_udp_decode() failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
@@ -1052,7 +1052,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		return NF_STOLEN;
 	} else if (iph->protocol == IPPROTO_UDP) {
 		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
-			if (skb_make_writable(skb, skb->len)) {
+			if (!skb_make_writable(skb, skb->len)) {
 				NATCAP_ERROR("(CPO)" DEBUG_UDP_FMT ": natcap_udp_encode() failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}

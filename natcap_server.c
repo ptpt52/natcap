@@ -1044,7 +1044,7 @@ udp_decode:
 			skb->mark = XT_MARK_NATCAP;
 
 			if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
-				if (skb_make_writable(skb, skb->len)) {
+				if (!skb_make_writable(skb, skb->len)) {
 					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": natcap_udp_decode() failed\n", DEBUG_UDP_ARG(iph,l4));
 					return NF_DROP;
 				}
@@ -1242,7 +1242,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	} else if (iph->protocol == IPPROTO_UDP) {
 		NATCAP_DEBUG("(SPO)" DEBUG_UDP_FMT ": pass data reply\n", DEBUG_UDP_ARG(iph,l4));
 		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
-			if (skb_make_writable(skb, skb->len)) {
+			if (!skb_make_writable(skb, skb->len)) {
 				NATCAP_ERROR("(SPO)" DEBUG_UDP_FMT ": natcap_udp_encode() failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
