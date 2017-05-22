@@ -984,10 +984,6 @@ do_dnat_setup:
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
-			goto udp_decode;
-		}
-
 		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
 				*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == __constant_htonl(0xFFFE0099)) {
 			iph = ip_hdr(skb);
@@ -1001,6 +997,10 @@ do_dnat_setup:
 				skb->csum = 0;
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
 			}
+
+			NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
+			//reply ACK pkt
+			natcap_udp_reply_cfm(in, skb);
 
 			server.ip = *((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr) + 4));
 			server.port = *((unsigned short *)((void *)UDPH(l4) + sizeof(struct udphdr) + 8));
@@ -1017,7 +1017,11 @@ do_dnat_setup:
 			if (NATCAP_UDP_GET_ENC(*((unsigned short *)((void *)UDPH(l4) + sizeof(struct udphdr) + 10))) == 0x01) {
 				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 			}
-			if (NATCAP_UDP_GET_TYPE(*((unsigned short *)((void *)UDPH(l4) + sizeof(struct udphdr) + 10))) == 0x02) {
+			if (NATCAP_UDP_GET_TYPE(*((unsigned short *)((void *)UDPH(l4) + sizeof(struct udphdr) + 10))) == 0x01) {
+				flow_total_rx_bytes += skb->len;
+				skb->mark = XT_MARK_NATCAP;
+				return NF_ACCEPT;
+			} else if (NATCAP_UDP_GET_TYPE(*((unsigned short *)((void *)UDPH(l4) + sizeof(struct udphdr) + 10))) == 0x02) {
 				int offlen;
 
 				offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct udphdr) - 12;
@@ -1029,20 +1033,12 @@ do_dnat_setup:
 				skb->tail -= 12;
 				skb_rcsum_tcpudp(skb);
 			}
-
-			NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
-			//reply ACK pkt
-			natcap_udp_reply_cfm(in, skb);
 		}
 
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-udp_decode:
 		if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
-			flow_total_rx_bytes += skb->len;
-			skb->mark = XT_MARK_NATCAP;
-
 			if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
 				if (!skb_make_writable(skb, skb->len)) {
 					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": natcap_udp_decode() failed\n", DEBUG_UDP_ARG(iph,l4));
@@ -1051,6 +1047,9 @@ udp_decode:
 				skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_decode);
 				skb_rcsum_tcpudp(skb);
 			}
+
+			flow_total_rx_bytes += skb->len;
+			skb->mark = XT_MARK_NATCAP;
 			return NF_ACCEPT;
 		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
