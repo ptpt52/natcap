@@ -176,10 +176,12 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 		dst->port = ((jiffies^ip) & 0xFFFF);
 	}
 
+#if 0
 	//XXX: encode for port 80 and 53 only
 	if (port != __constant_htons(80) && port != __constant_htons(53)) {
 		dst->encryption = 0;
 	}
+#endif
 }
 
 static inline int is_natcap_server(__be32 ip)
