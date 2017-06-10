@@ -69,7 +69,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    default_u_hash=%u\n"
 				"#    server_seed=%u\n"
 				"#    disabled=%u\n"
-				"#    auth_disabled=%u\n"
+				"#    auth_enabled=%u\n"
 				"#    debug=%u\n"
 				"#    encode_mode=%s\n"
 				"#    server_persist_timeout=%u\n"
@@ -97,7 +97,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				mode_str[mode], mode,
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
-				server_seed, disabled, auth_disabled, debug, encode_mode_str[encode_mode], server_persist_timeout, shadowsocks, sproxy, enable_hosts, ntohs(knock_port),
+				server_seed, disabled, auth_enabled, debug, encode_mode_str[encode_mode], server_persist_timeout, shadowsocks, sproxy, enable_hosts, ntohs(knock_port),
 				ntohs(natcap_redirect_port),
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,

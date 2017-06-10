@@ -36,9 +36,9 @@ unsigned int mode = MIXING_MODE;
 module_param(mode, int, 0);
 MODULE_PARM_DESC(mode, "Working mode (0=client,1=server,2=forward,3=client+server) default=0");
 
-unsigned int auth_disabled = 1;
-module_param(auth_disabled, int, 1);
-MODULE_PARM_DESC(auth_disabled, "Disable auth default=1");
+unsigned int auth_enabled = 0;
+module_param(auth_enabled, int, 0);
+MODULE_PARM_DESC(auth_enabled, "Disable auth default=0");
 
 unsigned int server_seed = 0;
 module_param(server_seed, int, 0);

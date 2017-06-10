@@ -55,7 +55,7 @@ static inline int natcap_auth(const struct net_device *in,
 				server->ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 			}
 		}
-		if (!auth_disabled) {
+		if (auth_enabled) {
 			eth = eth_hdr(skb);
 			memcpy(old_mac, eth->h_source, ETH_ALEN);
 			memcpy(eth->h_source, tcpopt->all.data.mac_addr, ETH_ALEN);
@@ -79,7 +79,7 @@ static inline int natcap_auth(const struct net_device *in,
 		if (server) {
 			return E_NATCAP_INVAL;
 		}
-		if (!auth_disabled) {
+		if (auth_enabled) {
 			eth = eth_hdr(skb);
 			memcpy(old_mac, eth->h_source, ETH_ALEN);
 			memcpy(eth->h_source, tcpopt->user.data.mac_addr, ETH_ALEN);
