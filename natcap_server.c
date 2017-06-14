@@ -925,7 +925,13 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
 				} else {
 					set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+					return NF_DROP;
 				}
+			}
+			if (server.ip == iph->saddr) {
+				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": connect target=%pI4 is saddr\n", DEBUG_TCP_ARG(iph,l4), &server.ip);
+				set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+				return NF_DROP;
 			}
 
 			if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
