@@ -1380,8 +1380,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			ret = natcap_tcpopt_setup(status, skb2, ct, &tcpopt);
 			if (ret != 0) {
 				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
-				consume_skb(skb2);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				consume_skb(skb2);
 				consume_skb(skb);
 				return NF_ACCEPT;
 			}
@@ -1392,8 +1392,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			ret = natcap_tcp_encode(skb2, &tcpopt);
 			if (ret != 0) {
 				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
-				consume_skb(skb2);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				consume_skb(skb2);
 				consume_skb(skb);
 				return NF_ACCEPT;
 			}
@@ -1410,10 +1410,10 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 		if (ret != 0) {
 			NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d, skb2=%p\n", DEBUG_TCP_ARG(iph,l4), ret, skb2);
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			if (skb2) {
 				consume_skb(skb2);
 			}
-			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			consume_skb(skb);
 			return NF_ACCEPT;
 		}
@@ -1481,10 +1481,11 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 			skb = nskb;
 		} while (skb);
+
 	} else {
 		if (test_bit(IPS_NATCAP_ENC_BIT, &master->status)) {
 			if (!skb_make_writable(skb, skb->len)) {
-				NATCAP_ERROR("(CPO)" DEBUG_UDP_FMT ": natcap_udp_encode() failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_ERROR("(CPMO)" DEBUG_UDP_FMT ": natcap_udp_encode() failed\n", DEBUG_UDP_ARG(iph,l4));
 				consume_skb(skb);
 				return NF_ACCEPT;
 			}
@@ -1532,7 +1533,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 				skb_rcsum_tcpudp(nskb);
 
-				NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
+
+				NF_OKFN(nskb);
 			} else {
 				int offlen;
 
@@ -1562,7 +1565,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 				skb_rcsum_tcpudp(skb);
 
-				NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 			}
 		}
 
