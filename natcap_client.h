@@ -14,6 +14,9 @@ extern unsigned int shadowsocks;
 extern unsigned int sproxy;
 extern unsigned int enable_hosts;
 
+extern unsigned int dns_server;
+extern unsigned short dns_port;
+
 extern u32 default_u_hash;
 extern unsigned char default_mac_addr[ETH_ALEN];
 

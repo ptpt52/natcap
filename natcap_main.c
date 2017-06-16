@@ -93,6 +93,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"shadowsocks=%u\n"
 				"sproxy=%u\n"
 				"knock_port=%u\n"
+				"dns_server=%pI4:%u\n"
 				"\n",
 				mode_str[mode], mode,
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
@@ -101,7 +102,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				ntohs(natcap_redirect_port),
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
-				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout, shadowsocks, sproxy, ntohs(knock_port));
+				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout, shadowsocks, sproxy, ntohs(knock_port), &dns_server, ntohs(dns_port));
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -206,6 +207,18 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	if (strncmp(data, "clean", 5) == 0) {
 		natcap_server_info_cleanup();
 		goto done;
+	} else if (strncmp(data, "dns_server=", 11) == 0) {
+		unsigned int a, b, c, d, e;
+		n = sscanf(data, "dns_server=%u.%u.%u.%u:%u", &a, &b, &c, &d, &e);
+		if ( (n == 5 && e <= 0xffff) &&
+				(((a & 0xff) == a) &&
+				 ((b & 0xff) == b) &&
+				 ((c & 0xff) == c) &&
+				 ((d & 0xff) == d)) ) {
+			dns_server = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+			dns_port = htons(e);
+			goto done;
+		}
 	} else if (strncmp(data, "server ", 7) == 0) {
 		unsigned int a, b, c, d, e;
 		char f;
