@@ -32,8 +32,8 @@ MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
 unsigned int shadowsocks = 0;
 unsigned int sproxy = 0;
 unsigned int enable_hosts = 0;
-unsigned int dns_server = 0;
-unsigned short dns_port = 0;
+unsigned int dns_server = __constant_htonl((8<<24)|(8<<16)|(8<<8)|(8<<0));
+unsigned short dns_port = __constant_htons(53);
 
 u32 default_u_hash = 0;
 unsigned char default_mac_addr[ETH_ALEN];
@@ -502,13 +502,6 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				set_bit(IPS_NATCAP_SYN_BIT, &ct->status);
 
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": dns out to server=%pI4\n", DEBUG_UDP_ARG(iph,l4), &server.ip);
-				if (dns_server) {
-					if (natcap_dnat_setup(ct, dns_server, dns_port) != NF_ACCEPT) {
-						NATCAP_ERROR("(CD)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
-						set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-						return NF_DROP;
-					}
-				}
 			}
 			return NF_ACCEPT;
 		}
@@ -1526,8 +1519,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				iph->tot_len = htons(nskb->len);
 				UDPH(l4)->len = ntohs(ntohs(iph->tot_len) - iph->ihl * 4);
 				*((unsigned int *)(l4 + sizeof(struct udphdr))) = __constant_htonl(0xFFFE0099);
-				*((unsigned int *)(l4 + sizeof(struct udphdr) + 4)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
-				*((unsigned short *)(l4 + sizeof(struct udphdr) + 8)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
+				*((unsigned int *)(l4 + sizeof(struct udphdr) + 4)) = dns_server;
+				*((unsigned short *)(l4 + sizeof(struct udphdr) + 8)) = dns_port;
 				*((unsigned short *)(l4 + sizeof(struct udphdr) + 10)) = __constant_htons(0x01);
 
 				if (test_bit(IPS_NATCAP_ENC_BIT, &master->status)) {
@@ -1556,8 +1549,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				skb->len += 12;
 				skb->tail += 12;
 				*((unsigned int *)(l4 + sizeof(struct udphdr))) = __constant_htonl(0xFFFE0099);
-				*((unsigned int *)(l4 + sizeof(struct udphdr) + 4)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
-				*((unsigned short *)(l4 + sizeof(struct udphdr) + 8)) = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
+				*((unsigned int *)(l4 + sizeof(struct udphdr) + 4)) = dns_server;
+				*((unsigned short *)(l4 + sizeof(struct udphdr) + 8)) = dns_port;
 				*((unsigned short *)(l4 + sizeof(struct udphdr) + 10)) = __constant_htons(0x02);
 
 				if (test_bit(IPS_NATCAP_ENC_BIT, &master->status)) {
@@ -1854,7 +1847,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 				qclass = htons(get_byte2(p + pos));
 				pos += 2;
-				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": qname=%s, qtype=%d, qclass=%d\n", DEBUG_UDP_ARG(iph,l4), qname, qtype, qclass);
+				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": qname=%s, qtype=%d, qclass=%d\n", DEBUG_UDP_ARG(iph,l4), qname, qtype, qclass);
 			}
 			for(i = 0; i < an_count; i++) {
 				char *name;
@@ -1889,7 +1882,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 				if (rdlength == 4 && type == 1) {
 					ip = get_byte4(p + pos);
-					NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=%d type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
+					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=%d type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
 				}
 				pos += rdlength;
 			}

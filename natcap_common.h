@@ -320,9 +320,23 @@ extern int natcap_common_init(void);
 
 extern void natcap_common_exit(void);
 
+#define NF_GW_REROUTE(skb) do { \
+	struct dst_entry *dst = skb_dst(skb); \
+	struct rtable *rt = (struct rtable *)dst; \
+	if (!rt->rt_gateway) { \
+		rt = ip_route_output(dev_net(dst->dev), iph->daddr, 0, RT_TOS(iph->tos), 0); \
+		if (!IS_ERR(rt)) { \
+			skb_dst_drop(skb); \
+			skb_dst_set(skb, &rt->dst); \
+			skb->dev = rt->dst.dev; \
+		} \
+	} \
+} while (0)
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 #define NF_OKFN(skb) do { \
 	if (okfn) { \
+		NF_GW_REROUTE(skb); \
 		okfn(skb); \
 	} else { \
 		kfree_skb(skb); \
@@ -333,6 +347,7 @@ extern void natcap_common_exit(void);
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 #define NF_OKFN(skb) do { \
 	if (okfn) { \
+		NF_GW_REROUTE(skb); \
 		okfn(skb); \
 	} else { \
 		kfree_skb(skb); \
@@ -343,6 +358,7 @@ extern void natcap_common_exit(void);
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 #define NF_OKFN(skb) do { \
 	if (state->okfn) { \
+		NF_GW_REROUTE(skb); \
 		state->okfn(state->sk, skb); \
 	} else { \
 		kfree_skb(skb); \
@@ -353,6 +369,7 @@ extern void natcap_common_exit(void);
 #else
 #define NF_OKFN(skb) do { \
 	if (state->net && state->okfn) { \
+		NF_GW_REROUTE(skb); \
 		state->okfn(state->net, state->sk, skb); \
 	} else { \
 		kfree_skb(skb); \
