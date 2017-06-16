@@ -78,6 +78,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    enable_hosts=%u\n"
 				"#    knock_port=%u\n"
 				"#    natcap_redirect_port=%u\n"
+				"#    natcap_random_int=%u\n"
 				"#    flow_total_tx_bytes=%llu\n"
 				"#    flow_total_rx_bytes=%llu\n"
 				"#    auth_http_redirect_url=%s\n"
@@ -100,6 +101,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				ntohl(default_u_hash),
 				server_seed, disabled, auth_enabled, debug, encode_mode_str[encode_mode], server_persist_timeout, shadowsocks, sproxy, enable_hosts, ntohs(knock_port),
 				ntohs(natcap_redirect_port),
+				natcap_random_int,
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
 				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout, shadowsocks, sproxy, ntohs(knock_port), &dns_server, ntohs(dns_port));

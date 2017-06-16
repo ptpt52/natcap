@@ -28,6 +28,8 @@ unsigned int disabled = 1;
 unsigned long long flow_total_tx_bytes = 0;
 unsigned long long flow_total_rx_bytes = 0;
 
+unsigned int natcap_random_int = 0;
+
 unsigned int debug = 0;
 module_param(debug, int, 0);
 MODULE_PARM_DESC(debug, "Debug level (0=none,1=error,2=warn,4=info,8=debug,16=fixme,...,31=all) default=0");
@@ -1029,6 +1031,7 @@ struct tuple *natcap_session_get(struct nf_conn *ct)
 
 int natcap_common_init(void)
 {
+	get_random_bytes(&natcap_random_int, sizeof(natcap_random_int));
 	dnatcap_map_init();
 	return 0;
 }

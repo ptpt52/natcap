@@ -164,6 +164,9 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 
 	if (time_after(jiffies, server_jiffies + server_persist_timeout * HZ)) {
 		server_jiffies = jiffies;
+		if (server_index == 0) {
+			server_index = natcap_random_int + (unsigned int)server_jiffies;
+		}
 		server_index++;
 	}
 
