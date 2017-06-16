@@ -400,4 +400,19 @@ static inline unsigned int get_byte4(const unsigned char *p)
 	return v;
 }
 
+static inline void set_byte1(unsigned char *p, unsigned char v)
+{
+	p[0] = v;
+}
+
+static inline void set_byte2(unsigned char *p, unsigned short v)
+{
+	memcpy(p, &v, sizeof(v));
+}
+
+static inline void set_byte4(unsigned char *p, unsigned int v)
+{
+	memcpy(p, &v, sizeof(v));
+}
+
 #endif /* _NATCAP_COMMON_H_ */

@@ -135,7 +135,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
-				*((unsigned int *)((void *)UDPH(l4) + sizeof(struct udphdr))) == __constant_htonl(0xFFFE0099)) {
+				get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099)) {
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 
@@ -165,7 +165,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 
 			NATCAP_INFO("(FPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
 		} else if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 8) &&
-				*((unsigned int *)((void *)UDPH(l4) + 8)) == __constant_htonl(0xFFFF0099)) {
+				get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xFFFF0099)) {
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 			if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4)) {
@@ -294,7 +294,7 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (*((unsigned int *)((void *)UDPH(l4) + 8)) == __constant_htonl(0xFFFF0099)) {
+		if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xFFFF0099)) {
 			struct net *net = &init_net;
 
 			if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4)) {
@@ -363,7 +363,7 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
 			skb->len += 8;
 			skb->tail += 8;
-			*((unsigned int *)((void *)UDPH(l4) + 8)) = __constant_htonl(0xFFFF0099);
+			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(0xFFFF0099));
 			iph->protocol = IPPROTO_UDP;
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
@@ -446,7 +446,7 @@ static unsigned int natcap_forward_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (*((unsigned int *)((void *)UDPH(l4) + 8)) == __constant_htonl(0xFFFF0099)) {
+	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xFFFF0099)) {
 		int offlen;
 
 		if (skb->ip_summed == CHECKSUM_NONE) {
