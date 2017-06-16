@@ -362,4 +362,23 @@ extern void natcap_common_exit(void);
 
 #endif
 
+static inline unsigned char get_byte1(const unsigned char *p)
+{
+	return p[0];
+}
+
+static inline unsigned short get_byte2(const unsigned char *p)
+{
+	unsigned short v;
+	memcpy(&v, p, sizeof(v));
+	return v;
+}
+
+static inline unsigned int get_byte4(const unsigned char *p)
+{
+	unsigned int v;
+	memcpy(&v, p, sizeof(v));
+	return v;
+}
+
 #endif /* _NATCAP_COMMON_H_ */
