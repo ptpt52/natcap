@@ -1601,7 +1601,7 @@ static inline int get_rdata(const unsigned char *src_ptr, int src_len, int src_p
 			if (++ptr_count >= ptr_limit) {
 				return -2;
 			}
-			pos = ntohs(get_byte2(src_ptr + pos)) & 0x3F;
+			pos = ntohs(get_byte2(src_ptr + pos)) & 0x3FFF;
 			continue;
 		} else {
 			if (pos + v >= src_len) {
