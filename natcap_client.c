@@ -1972,29 +1972,57 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				if (rdlength == 0 || pos + rdlength - 1 >= len) {
 					break;
 				}
-				if (rdlength == 4 && type == 1) {
-					ip = get_byte4(p + pos);
-					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
-					break;
-				} else {
-					if (IS_NATCAP_INFO()) {
-						int name_len;
-						char *name = kmalloc(2048, GFP_ATOMIC);
 
-						if (name != NULL) {
-							if ((name_len = get_rdata(p, len, pos, name, 2047)) >= 0) {
-								name[name_len] = 0;
-								NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
+				switch(type)
+				{
+					case 1: //A
+						if (rdlength == 4) {
+							ip = get_byte4(p + pos);
+							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
+							if (!IS_NATCAP_INFO()) {
+								goto dns_done;
 							}
-							kfree(name);
 						}
-					}
-					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
+						break;
+
+					case 28: //AAAA
+						if (rdlength == 16) {
+							unsigned char *ipv6 = p + pos;
+							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ipv6=%pI6\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, ipv6);
+						}
+						break;
+
+					case 2: //NS
+					case 3: //MD
+					case 4: //MF
+					case 5: //CNAME
+					case 15: //MX
+					case 16: //TXT
+						if (IS_NATCAP_INFO()) {
+							int name_len;
+							char *name = kmalloc(2048, GFP_ATOMIC);
+
+							if (name != NULL) {
+								if ((name_len = get_rdata(p, len, pos, name, 2047)) >= 0) {
+									name[name_len] = 0;
+									NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
+								}
+								kfree(name);
+							}
+						}
+						NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
+						break;
+
+					default:
+						NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
+						break;
 				}
+
 				pos += rdlength;
 			}
 		} while (0);
 
+dns_done:
 		if (ip != 0) {
 			unsigned int old_ip;
 
