@@ -1812,6 +1812,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 		do {
 			int i, pos;
+			unsigned int v;
 			unsigned short id;
 			unsigned short flags;
 			unsigned short qd_count;
@@ -1828,31 +1829,41 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			an_count = htons(get_byte2(p + 6));
 			ns_count = htons(get_byte2(p + 8));
 			ar_count = htons(get_byte2(p + 10));
-			NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=%04x, flags=%04x, qd=%u, an=%u, ns=%u, ar=%u\n", DEBUG_UDP_ARG(iph,l4), id, flags, qd_count, an_count, ns_count, ar_count);
+			NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, flags=0x%04x, qd=%u, an=%u, ns=%u, ar=%u\n",
+					DEBUG_UDP_ARG(iph,l4),
+					id, flags, qd_count, an_count, ns_count, ar_count);
 
 			pos = 12;
 			for(i = 0; i < qd_count; i++) {
 				char *qname;
 				unsigned short qtype, qclass;
 
-				qname = p + pos;
-				if (get_byte1(p + pos) > 63) {
-					pos += 2;
-				} else {
-					while (len > pos && get_byte1(p + pos)) {
-						pos++;
-					}
-					if (len <= pos) {
-						break;
-					}
-					pos++;
+				if (pos >= len) {
+					break;
 				}
+				qname = p + pos;
+				while (pos < len && ((v = get_byte1(p + pos)) != 0)) {
+					if (v > 0x3F) {
+						pos++;
+						break;
+					} else {
+						pos += v + 1;
+					}
+				}
+				pos++;
 
+				if (pos + 1 >= len) {
+					break;
+				}
 				qtype = htons(get_byte2(p + pos));
 				pos += 2;
 
+				if (pos + 1 >= len) {
+					break;
+				}
 				qclass = htons(get_byte2(p + pos));
 				pos += 2;
+
 				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": qname=%s, qtype=%d, qclass=%d\n", DEBUG_UDP_ARG(iph,l4), qname, qtype, qclass);
 			}
 			for(i = 0; i < an_count; i++) {
@@ -1861,34 +1872,51 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				unsigned short type, class;
 				unsigned short rdlength;
 
-				name = p + pos;
-				if (get_byte1(p + pos) > 63) {
-					pos += 2;
-				} else {
-					while (len > pos && get_byte1(p + pos)) {
-						pos++;
-					}
-					if (len <= pos) {
-						break;
-					}
-					pos++;
+				if (pos >= len) {
+					break;
 				}
+				name = p + pos;
+				while (pos < len && ((v = get_byte1(p + pos)) != 0)) {
+					if (v > 0x3F) {
+						pos++;
+						break;
+					} else {
+						pos += v + 1;
+					}
+				}
+				pos++;
 
+				if (pos + 1 >= len) {
+					break;
+				}
 				type = htons(get_byte2(p + pos));
 				pos += 2;
 
+				if (pos + 1 >= len) {
+					break;
+				}
 				class = htons(get_byte2(p + pos));
 				pos += 2;
 
+				if (pos + 3 >= len) {
+					break;
+				}
 				ttl = htonl(get_byte4(p + pos));
 				pos += 4;
 
+				if (pos + 1 >= len) {
+					break;
+				}
 				rdlength = htons(get_byte2(p + pos));
 				pos += 2;
 
+				if (rdlength == 0 || pos + rdlength - 1 >= len) {
+					break;
+				}
 				if (rdlength == 4 && type == 1) {
 					ip = get_byte4(p + pos);
 					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=%d type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
+					break;
 				}
 				pos += rdlength;
 			}
