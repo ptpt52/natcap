@@ -1586,6 +1586,41 @@ out:
 	return NF_ACCEPT;
 }
 
+static inline int get_rdata(const unsigned char *src_ptr, int src_len, int src_pos, unsigned char *dst_ptr, int dst_size)
+{
+	int ptr_count = 0;
+	int ptr_limit = src_len / 2;
+	int pos = src_pos;
+	int dst_len = 0;
+	unsigned int v;
+	while (dst_len < dst_size && pos < src_len && (v = get_byte1(src_ptr + pos)) != 0) {
+		if (v > 0x3F) {
+			if (pos + 1 >= src_len) {
+				return -1;
+			}
+			if (++ptr_count >= ptr_limit) {
+				return -2;
+			}
+			pos = ntohs(get_byte2(src_ptr + pos)) & 0x3F;
+			continue;
+		} else {
+			if (pos + v >= src_len) {
+				return -3;
+			}
+			if (dst_len + v >= dst_size) {
+				return -4;
+			}
+			memcpy(dst_ptr, src_ptr + pos + 1, v);
+			dst_ptr += v;
+			*dst_ptr = '.';
+			dst_ptr += 1;
+			dst_len += v + 1;
+			pos += v + 1;
+		}
+	}
+
+	return dst_len;
+}
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned natcap_client_pre_master_in_hook(unsigned int hooknum,
@@ -1835,13 +1870,25 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 			pos = 12;
 			for(i = 0; i < qd_count; i++) {
-				char *qname;
 				unsigned short qtype, qclass;
 
 				if (pos >= len) {
 					break;
 				}
-				qname = p + pos;
+
+				if (IS_NATCAP_INFO()) {
+					int qname_len;
+					char *qname = kmalloc(2048, GFP_ATOMIC);
+
+					if (qname != NULL) {
+						if ((qname_len = get_rdata(p, len, pos, qname, 2047)) >= 0) {
+							qname[qname_len] = 0;
+							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": qname=%s\n", DEBUG_UDP_ARG(iph,l4), qname);
+						}
+						kfree(qname);
+					}
+				}
+
 				while (pos < len && ((v = get_byte1(p + pos)) != 0)) {
 					if (v > 0x3F) {
 						pos++;
@@ -1864,10 +1911,9 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				qclass = htons(get_byte2(p + pos));
 				pos += 2;
 
-				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": qname=%s, qtype=%d, qclass=%d\n", DEBUG_UDP_ARG(iph,l4), qname, qtype, qclass);
+				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": qtype=%d, qclass=%d\n", DEBUG_UDP_ARG(iph,l4), qtype, qclass);
 			}
 			for(i = 0; i < an_count; i++) {
-				char *name;
 				unsigned int ttl;
 				unsigned short type, class;
 				unsigned short rdlength;
@@ -1875,7 +1921,20 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				if (pos >= len) {
 					break;
 				}
-				name = p + pos;
+
+				if (IS_NATCAP_INFO()) {
+					int name_len;
+					char *name = kmalloc(2048, GFP_ATOMIC);
+
+					if (name != NULL) {
+						if ((name_len = get_rdata(p, len, pos, name, 2047)) >= 0) {
+							name[name_len] = 0;
+							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": name=%s\n", DEBUG_UDP_ARG(iph,l4), name);
+						}
+						kfree(name);
+					}
+				}
+
 				while (pos < len && ((v = get_byte1(p + pos)) != 0)) {
 					if (v > 0x3F) {
 						pos++;
@@ -1917,10 +1976,25 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					ip = get_byte4(p + pos);
 					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=%d type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
 					break;
+				} else {
+					if (IS_NATCAP_INFO()) {
+						int name_len;
+						char *name = kmalloc(2048, GFP_ATOMIC);
+
+						if (name != NULL) {
+							if ((name_len = get_rdata(p, len, pos, name, 2047)) >= 0) {
+								name[name_len] = 0;
+								NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": name=%s\n", DEBUG_UDP_ARG(iph,l4), name);
+							}
+							kfree(name);
+						}
+					}
+					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=%d type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
 				}
 				pos += rdlength;
 			}
 		} while (0);
+
 		if (ip != 0) {
 			unsigned int old_ip;
 

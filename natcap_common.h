@@ -55,6 +55,12 @@ extern unsigned int server_seed;
 
 extern const char *const hooknames[];
 
+#define IS_NATCAP_FIXME() (debug & 0x10)
+#define IS_NATCAP_DEBUG() (debug & 0x8)
+#define IS_NATCAP_INFO() (debug & 0x4)
+#define IS_NATCAP_WARN() (debug & 0x2)
+#define IS_NATCAP_ERROR() (debug & 0x1)
+
 #define NATCAP_println(fmt, ...) \
 	do { \
 		printk(KERN_DEFAULT "{" MODULE_NAME "}:%s(): " pr_fmt(fmt) "\n", __FUNCTION__, ##__VA_ARGS__); \
@@ -62,35 +68,35 @@ extern const char *const hooknames[];
 
 #define NATCAP_FIXME(fmt, ...) \
 	do { \
-		if (debug & 0x10) { \
+		if (IS_NATCAP_FIXME()) { \
 			printk(KERN_ALERT "fixme: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_DEBUG(fmt, ...) \
 	do { \
-		if (debug & 0x8) { \
+		if (IS_NATCAP_DEBUG()) { \
 			printk(KERN_DEBUG "debug: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_INFO(fmt, ...) \
 	do { \
-		if (debug & 0x4) { \
+		if (IS_NATCAP_INFO()) { \
 			printk(KERN_DEFAULT "info: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_WARN(fmt, ...) \
 	do { \
-		if (debug & 0x2) { \
+		if (IS_NATCAP_WARN()) { \
 			printk(KERN_WARNING "warning: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_ERROR(fmt, ...) \
 	do { \
-		if (debug & 0x1) { \
+		if (IS_NATCAP_ERROR()) { \
 			printk(KERN_ERR "error: " pr_fmt(fmt), ##__VA_ARGS__); \
 		} \
 	} while (0)
