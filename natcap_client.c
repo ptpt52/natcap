@@ -1787,6 +1787,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		}
 	} else {
 		unsigned int ip = 0;
+		unsigned short id = 0;
 
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
 			return NF_DROP;
@@ -1848,7 +1849,6 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		do {
 			int i, pos;
 			unsigned int v;
-			unsigned short id;
 			unsigned short flags;
 			unsigned short qd_count;
 			unsigned short an_count;
@@ -1864,7 +1864,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			an_count = htons(get_byte2(p + 6));
 			ns_count = htons(get_byte2(p + 8));
 			ar_count = htons(get_byte2(p + 10));
-			NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, flags=0x%04x, qd=%u, an=%u, ns=%u, ar=%u\n",
+			NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, flags=0x%04x, qd=%u, an=%u, ns=%u, ar=%u\n",
 					DEBUG_UDP_ARG(iph,l4),
 					id, flags, qd_count, an_count, ns_count, ar_count);
 
@@ -1883,7 +1883,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					if (qname != NULL) {
 						if ((qname_len = get_rdata(p, len, pos, qname, 2047)) >= 0) {
 							qname[qname_len] = 0;
-							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": qname=%s\n", DEBUG_UDP_ARG(iph,l4), qname);
+							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, qname=%s\n", DEBUG_UDP_ARG(iph,l4), id, qname);
 						}
 						kfree(qname);
 					}
@@ -1911,7 +1911,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				qclass = htons(get_byte2(p + pos));
 				pos += 2;
 
-				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": qtype=%d, qclass=%d\n", DEBUG_UDP_ARG(iph,l4), qtype, qclass);
+				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, qtype=%d, qclass=%d\n", DEBUG_UDP_ARG(iph,l4), id, qtype, qclass);
 			}
 			for(i = 0; i < an_count; i++) {
 				unsigned int ttl;
@@ -1929,7 +1929,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					if (name != NULL) {
 						if ((name_len = get_rdata(p, len, pos, name, 2047)) >= 0) {
 							name[name_len] = 0;
-							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": name=%s\n", DEBUG_UDP_ARG(iph,l4), name);
+							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
 						}
 						kfree(name);
 					}
@@ -1974,7 +1974,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				}
 				if (rdlength == 4 && type == 1) {
 					ip = get_byte4(p + pos);
-					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=%d type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
+					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
 					break;
 				} else {
 					if (IS_NATCAP_INFO()) {
@@ -1984,12 +1984,12 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 						if (name != NULL) {
 							if ((name_len = get_rdata(p, len, pos, name, 2047)) >= 0) {
 								name[name_len] = 0;
-								NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": name=%s\n", DEBUG_UDP_ARG(iph,l4), name);
+								NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
 							}
 							kfree(name);
 						}
 					}
-					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=%d type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
+					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
 				}
 				pos += rdlength;
 			}
@@ -2002,7 +2002,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				old_ip = iph->daddr;
 				iph->daddr = ip;
 				if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) {
-					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": proxy DNS ANS is in cniplist ip = %pI4, drop\n", DEBUG_UDP_ARG(iph,l4), &ip);
+					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS is in cniplist ip = %pI4, drop\n", DEBUG_UDP_ARG(iph,l4), id, &ip);
 					return NF_DROP;
 				}
 				iph->daddr = old_ip;
@@ -2010,7 +2010,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				old_ip = iph->daddr;
 				iph->daddr = ip;
 				if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") <= 0) {
-					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": direct DNS ANS is not cniplist ip = %pI4, drop\n", DEBUG_UDP_ARG(iph,l4), &ip);
+					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is not cniplist ip = %pI4, drop\n", DEBUG_UDP_ARG(iph,l4), id, &ip);
 					return NF_DROP;
 				}
 				iph->daddr = old_ip;
