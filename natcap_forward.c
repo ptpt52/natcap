@@ -78,6 +78,8 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
+		struct natcap_TCPOPT *opt;
+
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
 			return NF_DROP;
 		}
@@ -98,8 +100,31 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
-		if (natcap_tcp_decode_header(TCPH(l4)) == NULL) {
+		if ((opt = natcap_tcp_decode_header(TCPH(l4))) == NULL) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			return NF_ACCEPT;
+		}
+
+		if (opt->header.opcode == TCPOPT_NATCAP && (opt->header.type & NATCAP_TCPOPT_TARGET_BIT)) {
+			if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_DST) {
+				server.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+				server.port = opt->dst.data.port;
+				server.encryption = opt->header.encryption;
+				if (natcap_dnat_setup(ct, server.ip, server.port) == NF_ACCEPT) {
+					NATCAP_DEBUG("(FPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup ok, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+				}
+			} else if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_ALL) {
+				server.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+				server.port = opt->all.data.port;
+				server.encryption = opt->header.encryption;
+				if (natcap_dnat_setup(ct, server.ip, server.port) == NF_ACCEPT) {
+					NATCAP_DEBUG("(FPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup ok, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+				}
+			}
+
+			skb->mark = XT_MARK_NATCAP;
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			NATCAP_DEBUG("(FPCI)" DEBUG_TCP_FMT ": set mark 0x%x\n", DEBUG_TCP_ARG(iph,l4), XT_MARK_NATCAP);
 			return NF_ACCEPT;
 		}
 
