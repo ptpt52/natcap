@@ -46,6 +46,25 @@ unsigned int server_seed = 0;
 module_param(server_seed, int, 0);
 MODULE_PARM_DESC(server_seed, "Server side seed number for encode");
 
+char htp_confusion_req[1024] = ""
+		"GET / HTTP/1.1\r\n"
+		"Host: www.189.cn\r\n"
+		"Connection: keep-alive\r\n"
+		"Pragma: no-cache\r\n"
+		"Cache-Control: no-cache\r\n"
+		"User-Agent: Mozilla/5.0 (X11; Linux x86_64)\r\n"
+		"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8\r\n"
+		"Accept-Encoding: gzip, deflate, sdch\r\n"
+		"Accept-Language: zh-CN,en-US;q=0.8,en;q=0.6,zh;q=0.4\r\n"
+		"\r\n";
+
+char htp_confusion_rep[1024] = ""
+		"HTTP/1.1 200 OK\r\n"
+		"Content-Type: text/html;charset=ISO-8859-1\r\n"
+		"Content-Length: 0\r\n"
+		"Connection: keep-alive\r\n"
+		"\r\n";
+
 const char *const mode_str[] = {
 	[CLIENT_MODE] = "CLIENT",
 	[SERVER_MODE] = "SERVER",
@@ -422,10 +441,10 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 	}
 
 	memcpy((void *)tcpopt, (void *)opt, opt->header.opsize);
-	if (mode == FORWARD_MODE) {
+	if (mode == FORWARD_MODE || NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_CONFUSION) {
 		goto done;
 	}
-	if ((tcpopt->header.type & NATCAP_TCPOPT_SYN_BIT)) {
+	if ((tcpopt->header.type & NATCAP_TCPOPT_SYN)) {
 		tcph->seq = TCPOPT_NATCAP;
 		tcph->ack_seq = TCPOPT_NATCAP;
 		goto do_decode;
@@ -476,9 +495,9 @@ int natcap_tcp_encode_fwdupdate(struct sk_buff *skb, struct tcphdr *tcph, const 
 	oldopt = (tcpopt->header.type << 8) | tcpopt->header.encryption;
 
 	if (target_ip == server->ip) {
-		tcpopt->header.type |= NATCAP_TCPOPT_TARGET_BIT;
+		tcpopt->header.type |= NATCAP_TCPOPT_TARGET;
 	} else {
-		tcpopt->header.type &= ~NATCAP_TCPOPT_TARGET_BIT;
+		tcpopt->header.type &= ~NATCAP_TCPOPT_TARGET;
 	}
 
 	newopt = (tcpopt->header.type << 8) | tcpopt->header.encryption;

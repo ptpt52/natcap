@@ -51,7 +51,7 @@ static inline int natcap_auth(const struct net_device *in,
 			server->ip = tcpopt->all.data.ip;
 			server->port = tcpopt->all.data.port;
 			server->encryption = tcpopt->header.encryption;
-			if ((tcpopt->header.type & NATCAP_TCPOPT_TARGET_BIT)) {
+			if ((tcpopt->header.type & NATCAP_TCPOPT_TARGET)) {
 				server->ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 			}
 		}
@@ -104,7 +104,7 @@ static inline int natcap_auth(const struct net_device *in,
 			server->ip = tcpopt->dst.data.ip;
 			server->port = tcpopt->dst.data.port;
 			server->encryption = tcpopt->header.encryption;
-			if ((tcpopt->header.type & NATCAP_TCPOPT_TARGET_BIT)) {
+			if ((tcpopt->header.type & NATCAP_TCPOPT_TARGET)) {
 				server->ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 			}
 		} else if (!tcph->syn || tcph->ack) {
@@ -891,6 +891,9 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				NATCAP_ERROR("(SPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				return NF_DROP;
 			}
+			if (NTCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_CONFUSION) {
+				return NF_DROP;
+			}
 			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, NULL);
 			if (ret != E_NATCAP_OK) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
@@ -936,7 +939,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 			if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
 				NATCAP_INFO("(SPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
-				if (mode == SERVER_MODE && natcap_redirect_port != 0 && (tcpopt.header.type & NATCAP_TCPOPT_SPROXY_BIT)) {
+				if (mode == SERVER_MODE && natcap_redirect_port != 0 && (tcpopt.header.type & NATCAP_TCPOPT_SPROXY)) {
 					__be32 newdst = 0;
 					struct in_device *indev;
 					struct in_ifaddr *ifa;

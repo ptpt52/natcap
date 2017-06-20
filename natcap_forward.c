@@ -105,7 +105,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
-		if (opt->header.opcode == TCPOPT_NATCAP && (opt->header.type & NATCAP_TCPOPT_TARGET_BIT)) {
+		if (opt->header.opcode == TCPOPT_NATCAP && (opt->header.type & NATCAP_TCPOPT_TARGET)) {
 			if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_DST) {
 				server.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 				server.port = opt->dst.data.port;

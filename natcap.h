@@ -45,9 +45,9 @@ struct natcap_TCPOPT_user {
 	u8 mac_addr[ETH_ALEN];
 };
 
-#define NATCAP_TCPOPT_SYN_BIT (1<<7)
-#define NATCAP_TCPOPT_TARGET_BIT (1<<6)
-#define NATCAP_TCPOPT_SPROXY_BIT (1<<5)
+#define NATCAP_TCPOPT_SYN (1<<7)
+#define NATCAP_TCPOPT_TARGET (1<<6)
+#define NATCAP_TCPOPT_SPROXY (1<<5)
 
 #define NATCAP_TCPOPT_TYPE_MASK (0x0F)
 #define NTCAP_TCPOPT_TYPE(t) ((t) & NATCAP_TCPOPT_TYPE_MASK)
@@ -69,6 +69,7 @@ struct natcap_TCPOPT {
 			struct natcap_TCPOPT_user data;
 		} user;
 	};
+#define NATCAP_TCPOPT_CONFUSION 4
 };
 
 #pragma pack(pop)
@@ -143,6 +144,9 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_CFM (1 << IPS_NATCAP_CFM_BIT)
 #define IPS_NATCAP_SERVER_BIT 20
 #define IPS_NATCAP_SERVER (1 << IPS_NATCAP_SERVER_BIT)
+
+#define IPS_NATCAP_CONFUSION_BIT 19
+#define IPS_NATCAP_CONFUSION (1 << IPS_NATCAP_CONFUSION_BIT)
 
 #define IPS_NATCAP_NEED_REPLY_FINACK_BIT 18
 #define IPS_NATCAP_NEED_REPLY_FINACK (1 << IPS_NATCAP_NEED_REPLY_FINACK_BIT)

@@ -55,6 +55,9 @@ extern unsigned int server_seed;
 
 extern const char *const hooknames[];
 
+extern char htp_confusion_req[1024];
+extern char htp_confusion_rep[1024];
+
 #define IS_NATCAP_FIXME() (debug & 0x10)
 #define IS_NATCAP_DEBUG() (debug & 0x8)
 #define IS_NATCAP_INFO() (debug & 0x4)
@@ -167,7 +170,11 @@ static inline struct natcap_TCPOPT *natcap_tcp_decode_header(struct tcphdr *tcph
 				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int)) &&
 				 opt->header.opcode == TCPOPT_NATCAP &&
 				 NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_USER &&
-				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int)))
+				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int))) ||
+				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)) &&
+				 opt->header.opcode == TCPOPT_NATCAP &&
+				 NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_CONFUSION &&
+				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)))
 			 )
 	   )
 	{
