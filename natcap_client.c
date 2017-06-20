@@ -969,7 +969,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				struct natcap_TCPOPT *tcpopt;
 				struct sk_buff *nskb;
 				int offset, header_len;
-				int size = sizeof(struct natcap_TCPOPT_header); //4 bytes aligned
+				int size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
 
 				offset = iph->ihl * 4 + sizeof(struct tcphdr) + size + strlen(htp_confusion_req) - skb->len;
 				header_len = offset < 0 ? 0 : offset;
@@ -1400,7 +1400,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				struct natcap_TCPOPT *tcpopt;
 				struct sk_buff *nskb;
 				int offset, header_len;
-				int size = sizeof(struct natcap_TCPOPT_header); //4 bytes aligned
+				int size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
 
 				offset = iph->ihl * 4 + sizeof(struct tcphdr) + size + strlen(htp_confusion_req) - skb->len;
 				header_len = offset < 0 ? 0 : offset;
