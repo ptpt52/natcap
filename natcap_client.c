@@ -29,6 +29,7 @@ unsigned int server_persist_timeout = 0;
 module_param(server_persist_timeout, int, 0);
 MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
 
+unsigned int http_confusion = 0;
 unsigned int shadowsocks = 0;
 unsigned int sproxy = 0;
 unsigned int enable_hosts = 0;
@@ -964,7 +965,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 	if (iph->protocol == IPPROTO_TCP) {
 		struct sk_buff *skb2 = NULL;
 
-		if (TCPH(l4)->ack) {
+		if (http_confusion && TCPH(l4)->ack) {
 			if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
 				//TODO send confuse pkt
 				struct natcap_TCPOPT *tcpopt;
@@ -1425,7 +1426,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
-		if (TCPH(l4)->ack) {
+		if (http_confusion && TCPH(l4)->ack) {
 			if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
 				//TODO send confuse pkt
 				struct natcap_TCPOPT *tcpopt;

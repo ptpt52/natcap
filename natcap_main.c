@@ -74,6 +74,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    encode_mode=%s\n"
 				"#    server_persist_timeout=%u\n"
 				"#    shadowsocks=%u\n"
+				"#    http_confusion=%u\n"
 				"#    sproxy=%u\n"
 				"#    enable_hosts=%u\n"
 				"#    knock_port=%u\n"
@@ -92,6 +93,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"u_hash=%u\n"
 				"server_persist_timeout=%u\n"
 				"shadowsocks=%u\n"
+				"http_confusion=%u\n"
 				"sproxy=%u\n"
 				"knock_port=%u\n"
 				"dns_server=%pI4:%u\n"
@@ -99,12 +101,12 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				mode_str[mode], mode,
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
-				server_seed, disabled, auth_enabled, debug, encode_mode_str[encode_mode], server_persist_timeout, shadowsocks, sproxy, enable_hosts, ntohs(knock_port),
+				server_seed, disabled, auth_enabled, debug, encode_mode_str[encode_mode], server_persist_timeout, shadowsocks, http_confusion, sproxy, enable_hosts, ntohs(knock_port),
 				ntohs(natcap_redirect_port),
 				natcap_random_int,
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
-				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout, shadowsocks, sproxy, ntohs(knock_port), &dns_server, ntohs(dns_port));
+				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout, shadowsocks, http_confusion, sproxy, ntohs(knock_port), &dns_server, ntohs(dns_port));
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -288,6 +290,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		n = sscanf(data, "shadowsocks=%u", &d);
 		if (n == 1) {
 			shadowsocks = d;
+			goto done;
+		}
+	} else if (strncmp(data, "http_confusion=", 15) == 0) {
+		int d;
+		n = sscanf(data, "http_confusion=%u", &d);
+		if (n == 1) {
+			http_confusion = d;
 			goto done;
 		}
 	} else if (strncmp(data, "sproxy=", 7) == 0) {

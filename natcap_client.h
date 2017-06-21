@@ -10,6 +10,7 @@
 #include "natcap.h"
 
 extern unsigned int server_persist_timeout;
+extern unsigned int http_confusion;
 extern unsigned int shadowsocks;
 extern unsigned int sproxy;
 extern unsigned int enable_hosts;
