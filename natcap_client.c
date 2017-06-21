@@ -148,6 +148,7 @@ void *natcap_server_info_get(loff_t idx)
 
 void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 {
+	static atomic_t server_port = ATOMIC_INIT(0);
 	static unsigned int server_index = 0;
 	static unsigned long server_jiffies = 0;
 	struct natcap_server_info *nsi = &natcap_server_info;
@@ -178,7 +179,7 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 	if (dst->port == __constant_htons(0)) {
 		dst->port = port;
 	} else if (dst->port == __constant_htons(65535)) {
-		dst->port = ((jiffies^ip) & 0xFFFF);
+		dst->port = atomic_add_return(1, &server_port) ^ (ip & 0xFFFF) ^ ((ip >> 16) & 0xFFFF);
 	}
 
 #if 0
@@ -1324,19 +1325,29 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	l4 = (void *)iph + iph->ihl * 4;
 
 	if (iph->protocol == IPPROTO_TCP) {
+		__be16 new_source = iph->saddr ^ (iph->saddr >> 16) ^ iph->daddr ^ (iph->daddr >> 16) ^ TCPH(l4)->source ^ TCPH(l4)->dest;
 		NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": before natcap post out\n", DEBUG_TCP_ARG(iph,l4));
 		csum_replace4(&iph->check, iph->daddr, tup->ip);
 		inet_proto_csum_replace4(&TCPH(l4)->check, skb, iph->daddr, tup->ip, true);
+		inet_proto_csum_replace2(&TCPH(l4)->check, skb, TCPH(l4)->source, new_source, false);
 		inet_proto_csum_replace2(&TCPH(l4)->check, skb, TCPH(l4)->dest, tup->port, false);
-		iph->daddr = tup->ip;
+		TCPH(l4)->source = new_source;
 		TCPH(l4)->dest = tup->port;
+		iph->daddr = tup->ip;
 	} else {
+		__be16 new_source = iph->saddr ^ (iph->saddr >> 16) ^ iph->daddr ^ (iph->daddr >> 16) ^ UDPH(l4)->source ^ UDPH(l4)->dest;
 		NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": before natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 		csum_replace4(&iph->check, iph->daddr, tup->ip);
 		inet_proto_csum_replace4(&UDPH(l4)->check, skb, iph->daddr, tup->ip, true);
+		inet_proto_csum_replace2(&UDPH(l4)->check, skb, UDPH(l4)->source, new_source, false);
+		if (UDPH(l4)->check == 0)
+			UDPH(l4)->check = CSUM_MANGLED_0;
 		inet_proto_csum_replace2(&UDPH(l4)->check, skb, UDPH(l4)->dest, tup->port, false);
-		iph->daddr = tup->ip;
+		if (UDPH(l4)->check == 0)
+			UDPH(l4)->check = CSUM_MANGLED_0;
+		UDPH(l4)->source = new_source;
 		UDPH(l4)->dest = tup->port;
+		iph->daddr = tup->ip;
 	}
 
 	if (in)
@@ -1383,13 +1394,33 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	}
 
 	if (master->master != ct) {
-		consume_skb(skb);
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 		if (iph->protocol == IPPROTO_TCP) {
-			NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": bad ct=%p and master=%p\n", DEBUG_TCP_ARG(iph,l4), ct, master);
+			NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
+					DEBUG_TCP_ARG(iph,l4),
+					&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+					&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+					&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+					&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+					&master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+					&master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+					&master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+					&master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
+					);
 		} else {
-			NATCAP_ERROR("(CPMO)" DEBUG_UDP_FMT ": bad ct=%p and master=%p\n", DEBUG_UDP_ARG(iph,l4), ct, master);
+			NATCAP_ERROR("(CPMO)" DEBUG_UDP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
+					DEBUG_UDP_ARG(iph,l4),
+					&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+					&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+					&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+					&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+					&master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+					&master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+					&master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+					&master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
+					);
 		}
+		consume_skb(skb);
 		return NF_ACCEPT;
 	}
 
@@ -1822,8 +1853,10 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 			csum_replace4(&iph->check, iph->saddr, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 			inet_proto_csum_replace4(&TCPH(l4)->check, skb, iph->saddr, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, true);
+			inet_proto_csum_replace2(&TCPH(l4)->check, skb, TCPH(l4)->dest, master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all, false);
 			inet_proto_csum_replace2(&TCPH(l4)->check, skb, TCPH(l4)->source, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all, false);
 			iph->saddr = master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
+			TCPH(l4)->dest = master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all;
 			TCPH(l4)->source = master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all;
 
 			if (in)
@@ -1910,8 +1943,14 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 			csum_replace4(&iph->check, iph->saddr, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 			inet_proto_csum_replace4(&UDPH(l4)->check, skb, iph->saddr, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, true);
+			inet_proto_csum_replace2(&UDPH(l4)->check, skb, UDPH(l4)->dest, master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all, false);
+			if (UDPH(l4)->check == 0)
+				UDPH(l4)->check = CSUM_MANGLED_0;
 			inet_proto_csum_replace2(&UDPH(l4)->check, skb, UDPH(l4)->source, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all, false);
+			if (UDPH(l4)->check == 0)
+				UDPH(l4)->check = CSUM_MANGLED_0;
 			iph->saddr = master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
+			UDPH(l4)->dest = master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all;
 			UDPH(l4)->source = master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all;
 
 			if (in)
