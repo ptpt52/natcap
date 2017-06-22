@@ -428,4 +428,21 @@ static inline void set_byte4(unsigned char *p, unsigned int v)
 	memcpy(p, &v, sizeof(v));
 }
 
+#ifndef SKB_NFCT_PTRMASK
+static inline struct nf_conntrack *skb_nfct(const struct sk_buff *skb)
+{
+	return (void *)skb->nfct;
+}
+#endif
+
+static inline void skb_nfct_reset(struct sk_buff *skb)
+{
+	nf_conntrack_put(skb_nfct(skb));
+#ifndef SKB_NFCT_PTRMASK
+	skb->nfct = NULL;
+#else
+	skb->_nfct = 0;
+#endif
+}
+
 #endif /* _NATCAP_COMMON_H_ */

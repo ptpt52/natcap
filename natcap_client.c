@@ -1320,8 +1320,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		NATCAP_ERROR("alloc_skb fail\n");
 		return NF_ACCEPT;
 	}
-	nf_conntrack_put(skb->nfct);
-	skb->nfct = NULL;
+	skb_nfct_reset(skb);
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
 
@@ -1848,8 +1847,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				return ret;
 			}
 
-			nf_conntrack_put(skb->nfct);
-			skb->nfct = NULL;
+			skb_nfct_reset(skb);
 
 			csum_replace4(&iph->check, iph->saddr, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 			inet_proto_csum_replace4(&TCPH(l4)->check, skb, iph->saddr, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, true);
@@ -1867,7 +1865,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			if (ret != NF_ACCEPT) {
 				return ret;
 			}
-			if ((struct nf_conn *)skb->nfct != master) {
+			if ((struct nf_conn *)skb_nfct(skb) != master) {
 				NATCAP_ERROR("(CPMI)" DEBUG_TCP_FMT ": skb->nfct != master, ignore and drop\n", DEBUG_TCP_ARG(iph,l4));
 				return NF_DROP;
 			}
@@ -1937,8 +1935,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				return ret;
 			}
 
-			nf_conntrack_put(skb->nfct);
-			skb->nfct = NULL;
+			skb_nfct_reset(skb);
 
 			csum_replace4(&iph->check, iph->saddr, master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 			if (UDPH(l4)->check) {
@@ -1960,7 +1957,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			if (ret != NF_ACCEPT) {
 				return ret;
 			}
-			if ((struct nf_conn *)skb->nfct != master) {
+			if ((struct nf_conn *)skb_nfct(skb) != master) {
 				NATCAP_ERROR("(CPMI)" DEBUG_UDP_FMT ": skb->nfct != master, ignore and drop\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
