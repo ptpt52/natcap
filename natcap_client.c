@@ -671,14 +671,14 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 				if (opt != NULL) {
 					if (opt->header.opcode == TCPOPT_NATCAP) {
 						struct tuple server;
-						if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_DST) {
+						if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_DST) {
 							server.ip = opt->dst.data.ip;
 							server.port = opt->dst.data.port;
 							//server.encryption = opt->header.encryption;
 							if (natcap_dnat_setup(ct, server.ip, server.port) == NF_ACCEPT) {
 								NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup ok, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 							}
-						} else if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_ALL) {
+						} else if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_ALL) {
 							server.ip = opt->all.data.ip;
 							server.port = opt->all.data.port;
 							//server.encryption = opt->header.encryption;
@@ -997,7 +997,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 				iph->tot_len = htons(nskb->len);
 				TCPH(l4)->doff = (sizeof(struct tcphdr) + size) / 4;
-				tcpopt->header.type = NATCAP_TCPOPT_CONFUSION;
+				tcpopt->header.type = NATCAP_TCPOPT_TYPE_CONFUSION;
 				tcpopt->header.opcode = TCPOPT_NATCAP;
 				tcpopt->header.opsize = size;
 				tcpopt->header.encryption = 0;
@@ -1052,7 +1052,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				consume_skb(skb2);
 				return NF_DROP;
 			}
-			tcpopt.header.type = NATCAP_TCPOPT_NONE;
+			tcpopt.header.type = NATCAP_TCPOPT_TYPE_NONE;
 			tcpopt.header.opsize = 0;
 		}
 		if (ret == 0) {
@@ -1457,7 +1457,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 				iph->tot_len = htons(nskb->len);
 				TCPH(l4)->doff = (sizeof(struct tcphdr) + size) / 4;
-				tcpopt->header.type = NATCAP_TCPOPT_CONFUSION;
+				tcpopt->header.type = NATCAP_TCPOPT_TYPE_CONFUSION;
 				tcpopt->header.opcode = TCPOPT_NATCAP;
 				tcpopt->header.opsize = size;
 				tcpopt->header.encryption = 0;
@@ -1516,7 +1516,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				consume_skb(skb);
 				return NF_ACCEPT;
 			}
-			tcpopt.header.type = NATCAP_TCPOPT_NONE;
+			tcpopt.header.type = NATCAP_TCPOPT_TYPE_NONE;
 			tcpopt.header.opsize = 0;
 		}
 		if (ret == 0) {

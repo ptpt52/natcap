@@ -340,13 +340,13 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		//not syn
 		if (!(tcph->syn && !tcph->ack)) {
 			if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
-				tcpopt->header.type = NATCAP_TCPOPT_NONE;
+				tcpopt->header.type = NATCAP_TCPOPT_TYPE_NONE;
 				tcpopt->header.opsize = 0;
 				return 0;
 			}
 			size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int));
 			if (tcph->doff * 4 + size <= 60) {
-				tcpopt->header.type = NATCAP_TCPOPT_USER;
+				tcpopt->header.type = NATCAP_TCPOPT_TYPE_USER;
 				tcpopt->header.opcode = TCPOPT_NATCAP;
 				tcpopt->header.opsize = size;
 				memcpy(tcpopt->user.data.mac_addr, default_mac_addr, ETH_ALEN);
@@ -354,7 +354,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 				set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
 				return 0;
 			}
-			tcpopt->header.type = NATCAP_TCPOPT_NONE;
+			tcpopt->header.type = NATCAP_TCPOPT_TYPE_NONE;
 			tcpopt->header.opsize = 0;
 			return 0;
 		}
@@ -362,7 +362,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data), sizeof(unsigned int));
 		if (tcph->doff * 4 + size <= 60)
 		{
-			tcpopt->header.type = NATCAP_TCPOPT_ALL;
+			tcpopt->header.type = NATCAP_TCPOPT_TYPE_ALL;
 			tcpopt->header.opcode = TCPOPT_NATCAP;
 			tcpopt->header.opsize = size;
 			tcpopt->all.data.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
@@ -374,7 +374,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		}
 		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int));
 		if (tcph->doff * 4 + size <= 60) {
-			tcpopt->header.type = NATCAP_TCPOPT_DST;
+			tcpopt->header.type = NATCAP_TCPOPT_TYPE_DST;
 			tcpopt->header.opcode = TCPOPT_NATCAP;
 			tcpopt->header.opsize = size;
 			tcpopt->dst.data.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
@@ -383,7 +383,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		}
 		return -1;
 	} else {
-		tcpopt->header.type = NATCAP_TCPOPT_NONE;
+		tcpopt->header.type = NATCAP_TCPOPT_TYPE_NONE;
 		tcpopt->header.opsize = 0;
 		return 0;
 	}
@@ -398,7 +398,7 @@ int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt)
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_NONE) {
+	if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_NONE) {
 		goto do_encode;
 	}
 
@@ -427,7 +427,7 @@ do_encode:
 		}
 		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
 	}
-	if (tcpopt->header.encryption || NTCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_NONE) {
+	if (tcpopt->header.encryption || NTCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_TYPE_NONE) {
 		skb_rcsum_tcpudp(skb);
 	}
 
@@ -446,14 +446,14 @@ int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt)
 
 	tcpopt->header.opcode = 0;
 	tcpopt->header.opsize = 0;
-	tcpopt->header.type = NATCAP_TCPOPT_NONE;
+	tcpopt->header.type = NATCAP_TCPOPT_TYPE_NONE;
 	opt = natcap_tcp_decode_header(tcph);
 	if (opt == NULL) {
 		goto do_decode;
 	}
 
 	memcpy((void *)tcpopt, (void *)opt, opt->header.opsize);
-	if (mode == FORWARD_MODE || NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_CONFUSION) {
+	if (mode == FORWARD_MODE || NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_CONFUSION) {
 		goto done;
 	}
 	if ((tcpopt->header.type & NATCAP_TCPOPT_SYN)) {
@@ -478,7 +478,7 @@ do_decode:
 		}
 		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_decode);
 	}
-	if (tcpopt->header.encryption || NTCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_NONE) {
+	if (tcpopt->header.encryption || NTCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_TYPE_NONE) {
 		skb_rcsum_tcpudp(skb);
 	}
 done:
@@ -496,9 +496,9 @@ int natcap_tcp_encode_fwdupdate(struct sk_buff *skb, struct tcphdr *tcph, const 
 		return -1;
 	}
 
-	if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_ALL) {
+	if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_ALL) {
 		target_ip = tcpopt->all.data.ip;
-	} else if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_DST) {
+	} else if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_DST) {
 		target_ip = tcpopt->dst.data.ip;
 	} else {
 		return -1;

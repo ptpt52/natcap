@@ -53,23 +53,23 @@ struct natcap_TCPOPT_user {
 #define NTCAP_TCPOPT_TYPE(t) ((t) & NATCAP_TCPOPT_TYPE_MASK)
 
 struct natcap_TCPOPT {
-#define NATCAP_TCPOPT_NONE 0
+#define NATCAP_TCPOPT_TYPE_NONE 0
 	struct natcap_TCPOPT_header header;
 	union {
 		struct {
-#define NATCAP_TCPOPT_ALL 1
+#define NATCAP_TCPOPT_TYPE_ALL 1
 			struct natcap_TCPOPT_data data;
 		} all;
 		struct {
-#define NATCAP_TCPOPT_DST 2
+#define NATCAP_TCPOPT_TYPE_DST 2
 			struct natcap_TCPOPT_dst data;
 		} dst;
 		struct {
-#define NATCAP_TCPOPT_USER 3
+#define NATCAP_TCPOPT_TYPE_USER 3
 			struct natcap_TCPOPT_user data;
 		} user;
 	};
-#define NATCAP_TCPOPT_CONFUSION 4
+#define NATCAP_TCPOPT_TYPE_CONFUSION 4
 };
 
 #pragma pack(pop)
