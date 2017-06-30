@@ -340,18 +340,34 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		int add_len = 0;
 		//not syn
 		if (!(tcph->syn && !tcph->ack)) {
+			if (http_confusion && !test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status) && !test_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
+				add_len += sizeof(unsigned int);
+			}
 			if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
+				if (add_len == sizeof(unsigned int)) {
+					size = ALIGN(sizeof(struct natcap_TCPOPT_header) + add_len, sizeof(unsigned int));
+					tcpopt->header.type = NATCAP_TCPOPT_TYPE_ADD;
+					tcpopt->header.opcode = TCPOPT_NATCAP;
+					tcpopt->header.opsize = size;
+					set_byte4((unsigned char *)tcpopt + size - add_len, htonl(strlen(htp_confusion_req)));
+					tcpopt->header.type |= NATCAP_TCPOPT_CONFUSION;
+					return 0;
+				}
 				tcpopt->header.type = NATCAP_TCPOPT_TYPE_NONE;
 				tcpopt->header.opsize = 0;
 				return 0;
 			}
-			size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int));
+			size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user) + add_len, sizeof(unsigned int));
 			if (tcph->doff * 4 + size <= 60) {
 				tcpopt->header.type = NATCAP_TCPOPT_TYPE_USER;
 				tcpopt->header.opcode = TCPOPT_NATCAP;
 				tcpopt->header.opsize = size;
 				memcpy(tcpopt->user.data.mac_addr, default_mac_addr, ETH_ALEN);
 				tcpopt->user.data.u_hash = default_u_hash;
+				if (add_len == sizeof(unsigned int)) {
+					set_byte4((unsigned char *)tcpopt + size - add_len, htonl(strlen(htp_confusion_req)));
+					tcpopt->header.type |= NATCAP_TCPOPT_CONFUSION;
+				}
 				set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
 				return 0;
 			}
@@ -451,6 +467,8 @@ int natcap_tcp_encode(struct nf_conn *ct, struct sk_buff *skb, const struct natc
 			} else {
 				tcph->ack_seq = htonl(ntohl(tcph->ack_seq) - add_len);
 			}
+		} else {
+			tcph->seq = htonl(ntohl(tcph->seq) - add_len);
 		}
 	}
 
@@ -519,6 +537,8 @@ int natcap_tcp_decode(struct nf_conn *ct, struct sk_buff *skb, struct natcap_TCP
 			} else {
 				tcph->ack_seq = htonl(ntohl(tcph->ack_seq) + add_len);
 			}
+		} else {
+			tcph->seq = htonl(ntohl(tcph->seq) + add_len);
 		}
 	}
 
