@@ -360,7 +360,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			return 0;
 		}
 		//syn
-		if (http_confusion) {
+		if (http_confusion && !test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
 			add_len += sizeof(unsigned int);
 		}
 		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data) + add_len, sizeof(unsigned int));

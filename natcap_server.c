@@ -676,13 +676,7 @@ static inline void natcap_confusion_tcp_reply_ack(const struct net_device *dev, 
 	niph->id = __constant_htons(0xDEAD);
 	niph->frag_off = 0x0;
 
-	tcpopt = (struct natcap_TCPOPT *)((char *)ip_hdr(nskb) + sizeof(struct tcphdr));
-	tcpopt->header.type = NATCAP_TCPOPT_TYPE_CONFUSION;
-	tcpopt->header.opcode = TCPOPT_NATCAP;
-	tcpopt->header.opsize = size;
-	tcpopt->header.encryption = 0;
-
-	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr) + size);
+	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
 	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
 	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
 	ntcph->seq = otcph->ack_seq;
@@ -697,25 +691,18 @@ static inline void natcap_confusion_tcp_reply_ack(const struct net_device *dev, 
 	ntcph->urg = 0;
 	ntcph->ece = 0;
 	ntcph->cwr = 0;
-	ntcph->window = __constant_htons(0);
+	ntcph->window = __constant_htons(65535);
 	ntcph->check = 0;
 	ntcph->urg_ptr = 0;
 
+	tcpopt = (struct natcap_TCPOPT *)((char *)ntcph + sizeof(struct tcphdr));
+	tcpopt->header.type = NATCAP_TCPOPT_TYPE_CONFUSION;
+	tcpopt->header.opcode = TCPOPT_NATCAP;
+	tcpopt->header.opsize = size;
+	tcpopt->header.encryption = 0;
+
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
-
-	/*FIXME make TCP state happy */
-	nf_reset(nskb);
-	niph->saddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
-	niph->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip;
-	ntcph->source = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.tcp.port;
-	ntcph->dest = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.tcp.port;
-	/*XXX don't care what is returned */
-	nf_conntrack_in(dev_net(dev), PF_INET, NF_INET_PRE_ROUTING, nskb);
-	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
-	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
-	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
-	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
 
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;

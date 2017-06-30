@@ -1000,6 +1000,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 				iph->tot_len = htons(nskb->len);
 				TCPH(l4)->doff = (sizeof(struct tcphdr) + size) / 4;
+				TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - strlen(htp_confusion_req));
 				tcpopt->header.type = NATCAP_TCPOPT_TYPE_CONFUSION;
 				tcpopt->header.opcode = TCPOPT_NATCAP;
 				tcpopt->header.opsize = size;
@@ -1460,6 +1461,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 				iph->tot_len = htons(nskb->len);
 				TCPH(l4)->doff = (sizeof(struct tcphdr) + size) / 4;
+				TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - strlen(htp_confusion_req));
 				tcpopt->header.type = NATCAP_TCPOPT_TYPE_CONFUSION;
 				tcpopt->header.opcode = TCPOPT_NATCAP;
 				tcpopt->header.opsize = size;
