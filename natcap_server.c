@@ -625,6 +625,105 @@ static inline unsigned int natcap_try_http_redirect(struct iphdr *iph, struct sk
 	return NF_ACCEPT;
 }
 
+static inline void natcap_confusion_tcp_reply_ack(const struct net_device *dev, struct sk_buff *oskb, struct nf_conn *ct)
+{
+	struct sk_buff *nskb;
+	struct ethhdr *neth, *oeth;
+	struct iphdr *niph, *oiph;
+	struct tcphdr *otcph, *ntcph;
+	int offset, header_len;
+	u8 protocol = IPPROTO_TCP;
+	struct natcap_TCPOPT *tcpopt;
+	int size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
+
+	oeth = (struct ethhdr *)skb_mac_header(oskb);
+	oiph = ip_hdr(oskb);
+	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
+
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + size - oskb->len;
+	header_len = offset < 0 ? 0 : offset;
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
+	if (!nskb) {
+		NATCAP_ERROR("alloc_skb fail\n");
+		return;
+	}
+	if (offset <= 0) {
+		if (pskb_trim(nskb, nskb->len + offset)) {
+			NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+			consume_skb(nskb);
+			return;
+		}
+	} else {
+		nskb->len += offset;
+		nskb->tail += offset;
+	}
+
+	neth = eth_hdr(nskb);
+	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+	//neth->h_proto = htons(ETH_P_IP);
+
+	niph = ip_hdr(nskb);
+	memset(niph, 0, sizeof(struct iphdr));
+	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
+	niph->version = oiph->version;
+	niph->ihl = 5;
+	niph->tos = 0;
+	niph->tot_len = htons(nskb->len);
+	niph->ttl = 0x80;
+	niph->protocol = protocol;
+	niph->id = __constant_htons(0xDEAD);
+	niph->frag_off = 0x0;
+
+	tcpopt = (struct natcap_TCPOPT *)((char *)ip_hdr(nskb) + sizeof(struct tcphdr));
+	tcpopt->header.type = NATCAP_TCPOPT_TYPE_CONFUSION;
+	tcpopt->header.opcode = TCPOPT_NATCAP;
+	tcpopt->header.opsize = size;
+	tcpopt->header.encryption = 0;
+
+	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr) + size);
+	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
+	ntcph->seq = otcph->ack_seq;
+	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4);
+	ntcph->res1 = 0;
+	ntcph->doff = (sizeof(struct tcphdr) + size) / 4;
+	ntcph->syn = 0;
+	ntcph->rst = 0;
+	ntcph->psh = 0;
+	ntcph->ack = 1;
+	ntcph->fin = 0;
+	ntcph->urg = 0;
+	ntcph->ece = 0;
+	ntcph->cwr = 0;
+	ntcph->window = __constant_htons(0);
+	ntcph->check = 0;
+	ntcph->urg_ptr = 0;
+
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(nskb);
+
+	/*FIXME make TCP state happy */
+	nf_reset(nskb);
+	niph->saddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip;
+	ntcph->source = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.tcp.port;
+	/*XXX don't care what is returned */
+	nf_conntrack_in(dev_net(dev), PF_INET, NF_INET_PRE_ROUTING, nskb);
+	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
+	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
+
+	skb_push(nskb, (char *)niph - (char *)neth);
+	nskb->dev = (struct net_device *)dev;
+
+	nf_reset(nskb);
+	dev_queue_xmit(nskb);
+}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_server_forward_hook(unsigned int hooknum,
 		struct sk_buff *skb,
@@ -892,6 +991,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				return NF_DROP;
 			}
 			if (NTCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION) {
+				natcap_confusion_tcp_reply_ack(in, skb, ct);
 				return NF_DROP;
 			}
 			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, NULL);

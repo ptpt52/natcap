@@ -722,6 +722,9 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			NATCAP_ERROR("(CPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 			return NF_DROP;
 		}
+		if (NTCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION) {
+			return NF_DROP;
+		}
 
 		NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": after decode\n", DEBUG_TCP_ARG(iph,l4));
 	} else if (iph->protocol == IPPROTO_UDP) {
@@ -965,7 +968,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 	if (iph->protocol == IPPROTO_TCP) {
 		struct sk_buff *skb2 = NULL;
 
-		if (http_confusion && TCPH(l4)->ack) {
+		if (http_confusion && TCPH(l4)->ack && !test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
 			if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
 				//TODO send confuse pkt
 				struct natcap_TCPOPT *tcpopt;
@@ -1425,7 +1428,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
-		if (http_confusion && TCPH(l4)->ack) {
+		if (http_confusion && TCPH(l4)->ack && !test_bit(IPS_NATCAP_UDPENC_BIT, &master->status)) {
 			if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
 				//TODO send confuse pkt
 				struct natcap_TCPOPT *tcpopt;
