@@ -295,6 +295,9 @@ int skb_rcsum_tcpudp(struct sk_buff *skb)
 			tcph->check = 0;
 			skb->csum = skb_checksum(skb, iph->ihl * 4, len - iph->ihl * 4, 0);
 			tcph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, len - iph->ihl * 4, iph->protocol, skb->csum);
+			if (skb->ip_summed == CHECKSUM_COMPLETE) {
+				skb->ip_summed = CHECKSUM_UNNECESSARY;
+			}
 		}
 	} else if (iph->protocol == IPPROTO_UDP) {
 		struct udphdr *udph = (struct udphdr *)((void *)iph + iph->ihl*4);
@@ -316,6 +319,9 @@ int skb_rcsum_tcpudp(struct sk_buff *skb)
 				udph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, len - iph->ihl * 4, iph->protocol, skb->csum);
 				if (udph->check == 0)
 					udph->check = CSUM_MANGLED_0;
+			}
+			if (skb->ip_summed == CHECKSUM_COMPLETE) {
+				skb->ip_summed = CHECKSUM_UNNECESSARY;
 			}
 		}
 	} else {
