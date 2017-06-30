@@ -333,11 +333,12 @@ int skb_rcsum_tcpudp(struct sk_buff *skb)
 	return 0;
 }
 
-int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_conn *ct, struct natcap_TCPOPT *tcpopt)
+int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_conn *ct, struct natcap_TCPOPT *tcpopt, __be32 ip, __be16 port)
 {
 	int size;
 	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+	struct natcap_session *ns = natcap_session_get(ct);
 
 	if ((status & NATCAP_NEED_ENC))
 		tcpopt->header.encryption = 1;
@@ -348,7 +349,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		int add_len = 0;
 		//not syn
 		if (!(tcph->syn && !tcph->ack)) {
-			if (http_confusion && !test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status) && !test_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
+			if (http_confusion && !test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status) && !test_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status) && ns && ns->tcp_seq_offset) {
 				add_len += sizeof(unsigned int);
 			}
 			if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
@@ -357,7 +358,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 					tcpopt->header.type = NATCAP_TCPOPT_TYPE_ADD;
 					tcpopt->header.opcode = TCPOPT_NATCAP;
 					tcpopt->header.opsize = size;
-					set_byte4((unsigned char *)tcpopt + size - add_len, htonl(strlen(htp_confusion_req)));
+					set_byte4((unsigned char *)tcpopt + size - add_len, htonl(ns->tcp_seq_offset));
 					tcpopt->header.type |= NATCAP_TCPOPT_CONFUSION;
 					return 0;
 				}
@@ -373,7 +374,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 				memcpy(tcpopt->user.data.mac_addr, default_mac_addr, ETH_ALEN);
 				tcpopt->user.data.u_hash = default_u_hash;
 				if (add_len == sizeof(unsigned int)) {
-					set_byte4((unsigned char *)tcpopt + size - add_len, htonl(strlen(htp_confusion_req)));
+					set_byte4((unsigned char *)tcpopt + size - add_len, htonl(ns->tcp_seq_offset));
 					tcpopt->header.type |= NATCAP_TCPOPT_CONFUSION;
 				}
 				set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
@@ -384,8 +385,11 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			return 0;
 		}
 		//syn
-		if (http_confusion && !test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
+		if (http_confusion && !test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status) && ns) {
 			add_len += sizeof(unsigned int);
+			if (ns->tcp_seq_offset == 0) {
+				ns->tcp_seq_offset = sizeof(htp_confusion_req) / 2 + jiffies % (sizeof(htp_confusion_req) / 4);
+			}
 		}
 		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data) + add_len, sizeof(unsigned int));
 		if (tcph->doff * 4 + size <= 60)
@@ -393,12 +397,12 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			tcpopt->header.type = NATCAP_TCPOPT_TYPE_ALL;
 			tcpopt->header.opcode = TCPOPT_NATCAP;
 			tcpopt->header.opsize = size;
-			tcpopt->all.data.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
-			tcpopt->all.data.port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
+			tcpopt->all.data.ip = ip;
+			tcpopt->all.data.port = port;
 			memcpy(tcpopt->all.data.mac_addr, default_mac_addr, ETH_ALEN);
 			tcpopt->all.data.u_hash = default_u_hash;
 			if (add_len == sizeof(unsigned int)) {
-				set_byte4((unsigned char *)tcpopt + size - add_len, htonl(strlen(htp_confusion_req)));
+				set_byte4((unsigned char *)tcpopt + size - add_len, htonl(ns->tcp_seq_offset));
 				tcpopt->header.type |= NATCAP_TCPOPT_CONFUSION;
 			}
 			set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
@@ -409,10 +413,10 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			tcpopt->header.type = NATCAP_TCPOPT_TYPE_DST;
 			tcpopt->header.opcode = TCPOPT_NATCAP;
 			tcpopt->header.opsize = size;
-			tcpopt->dst.data.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
-			tcpopt->dst.data.port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
+			tcpopt->dst.data.ip = ip;
+			tcpopt->dst.data.port = port;
 			if (add_len == sizeof(unsigned int)) {
-				set_byte4((unsigned char *)tcpopt + size - add_len, htonl(strlen(htp_confusion_req)));
+				set_byte4((unsigned char *)tcpopt + size - add_len, htonl(ns->tcp_seq_offset));
 				tcpopt->header.type |= NATCAP_TCPOPT_CONFUSION;
 			}
 			return 0;
@@ -422,8 +426,6 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		if (test_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
 			int add_len = 0;
 			if (tcph->syn && tcph->ack) {
-				struct natcap_session *ns = natcap_session_get(ct);
-
 				add_len += sizeof(unsigned int);
 				size = ALIGN(sizeof(struct natcap_TCPOPT_header) + add_len, sizeof(unsigned int));
 				tcpopt->header.type = NATCAP_TCPOPT_TYPE_ADD;
@@ -1078,6 +1080,7 @@ unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto
 
 int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 {
+	struct natcap_session *ns;
 	struct nf_ct_ext *old, *new;
 	struct nf_conn_nat *nat = NULL;
 	unsigned int newoff, newlen = 0;
@@ -1132,6 +1135,9 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		return -1;
 	}
 
+	ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), sizeof(unsigned long)));
+	ns->check_ptr = ct;
+
 	NATCAP_DEBUG("nat ext offset(%u) newoff:%u newlen:%u var_alloc_len:%u\n",
 			ct->ext->offset[NF_CT_EXT_NAT], newoff, newlen, (unsigned int)var_alloc_len);
 
@@ -1140,6 +1146,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 
 struct natcap_session *natcap_session_get(struct nf_conn *ct)
 {
+	struct natcap_session *ns;
 	struct nf_conn_nat *nat;
 
 	nat  = nfct_nat(ct);
@@ -1147,7 +1154,12 @@ struct natcap_session *natcap_session_get(struct nf_conn *ct)
 		return NULL;
 	}
 
-	return (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), sizeof(unsigned long)));
+	ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), sizeof(unsigned long)));
+	if (ns->check_ptr != ct) {
+		return NULL;
+	}
+
+	return ns;
 }
 
 int natcap_common_init(void)

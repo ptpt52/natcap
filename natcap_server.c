@@ -1274,7 +1274,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			status |= NATCAP_NEED_ENC;
 		}
 
-		ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
+		ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt, 0, 0);
 		if (ret == 0) {
 			ret = natcap_tcp_encode(ct, skb, &tcpopt);
 			iph = ip_hdr(skb);

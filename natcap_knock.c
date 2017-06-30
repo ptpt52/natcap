@@ -199,7 +199,7 @@ static unsigned int natcap_knock_post_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
+	ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 	if (ret == 0) {
 		ret = natcap_tcp_encode(ct, skb, &tcpopt);
 		iph = ip_hdr(skb);
