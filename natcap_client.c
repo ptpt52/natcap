@@ -967,6 +967,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 	if (iph->protocol == IPPROTO_TCP) {
 		struct sk_buff *skb2 = NULL;
+		struct sk_buff *skb_htp = NULL;
 
 		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
 			status |= NATCAP_NEED_ENC;
@@ -1013,45 +1014,47 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			}
 			tcpopt.header.type = NATCAP_TCPOPT_TYPE_NONE;
 			tcpopt.header.opsize = 0;
+
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
 		}
 
 		if (http_confusion && TCPH(l4)->ack && !test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
 			if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
 				//TODO send confuse pkt
 				struct natcap_TCPOPT *tcpopt;
-				struct sk_buff *nskb;
 				int offset, header_len;
 				int size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
 
 				offset = iph->ihl * 4 + sizeof(struct tcphdr) + size + strlen(htp_confusion_req) - skb->len;
 				header_len = offset < 0 ? 0 : offset;
-				nskb = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
-				if (!nskb) {
+				skb_htp = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
+				if (!skb_htp) {
 					NATCAP_ERROR("alloc_skb fail\n");
 					if (skb2) {
 						consume_skb(skb2);
 					}
-					return NF_ACCEPT;
+					return NF_DROP;
 				}
 				if (offset <= 0) {
-					if (pskb_trim(nskb, nskb->len + offset)) {
-						NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
-						consume_skb(nskb);
+					if (pskb_trim(skb_htp, skb_htp->len + offset)) {
+						NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", skb_htp->len, offset);
 						if (skb2) {
 							consume_skb(skb2);
 						}
+						consume_skb(skb_htp);
 						return NF_DROP;
 					}
 				} else {
-					nskb->len += offset;
-					nskb->tail += offset;
+					skb_htp->len += offset;
+					skb_htp->tail += offset;
 				}
 
-				iph = ip_hdr(nskb);
+				iph = ip_hdr(skb_htp);
 				l4 = (void *)iph + iph->ihl * 4;
 				tcpopt = (struct natcap_TCPOPT *)(l4 + sizeof(struct tcphdr));
 
-				iph->tot_len = htons(nskb->len);
+				iph->tot_len = htons(skb_htp->len);
 				TCPH(l4)->doff = (sizeof(struct tcphdr) + size) / 4;
 				TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - strlen(htp_confusion_req));
 				tcpopt->header.type = NATCAP_TCPOPT_TYPE_CONFUSION;
@@ -1060,9 +1063,10 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				tcpopt->header.encryption = 0;
 				strcpy((void *)tcpopt + size, htp_confusion_req);
 
-				skb_rcsum_tcpudp(nskb);
+				skb_rcsum_tcpudp(skb_htp);
 
-				NF_OKFN(nskb);
+				iph = ip_hdr(skb);
+				l4 = (void *)iph + iph->ihl * 4;
 			}
 		}
 
@@ -1082,6 +1086,9 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			if (skb2) {
 				consume_skb(skb2);
 			}
+			if (skb_htp) {
+				consume_skb(skb_htp);
+			}
 			return NF_DROP;
 		}
 
@@ -1091,8 +1098,20 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			if (skb2) {
 				NF_OKFN(skb2);
 			}
+			if (skb_htp) {
+				ret = nf_conntrack_confirm(skb);
+				if (ret != NF_ACCEPT) {
+					consume_skb(skb_htp);
+					return ret;
+				}
+				NF_OKFN(skb);
+				NF_OKFN(skb_htp);
+				return NF_STOLEN;
+			}
 			return NF_ACCEPT;
 		}
+
+		BUG_ON(skb_htp != NULL);
 
 		/* XXX I just confirm it first  */
 		ret = nf_conntrack_confirm(skb);
@@ -1436,6 +1455,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
+		struct sk_buff *skb_htp = NULL;
+
 		if (test_bit(IPS_NATCAP_ENC_BIT, &master->status)) {
 			status |= NATCAP_NEED_ENC;
 		}
@@ -1485,45 +1506,47 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			}
 			tcpopt.header.type = NATCAP_TCPOPT_TYPE_NONE;
 			tcpopt.header.opsize = 0;
+
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
 		}
 
 		if (http_confusion && TCPH(l4)->ack && !test_bit(IPS_NATCAP_UDPENC_BIT, &master->status)) {
 			if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
 				//TODO send confuse pkt
 				struct natcap_TCPOPT *tcpopt;
-				struct sk_buff *nskb;
 				int offset, header_len;
 				int size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
 
 				offset = iph->ihl * 4 + sizeof(struct tcphdr) + size + strlen(htp_confusion_req) - skb->len;
 				header_len = offset < 0 ? 0 : offset;
-				nskb = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
-				if (!nskb) {
+				skb_htp = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
+				if (!skb_htp) {
 					NATCAP_ERROR("alloc_skb fail\n");
 					if (skb2) {
 						consume_skb(skb2);
 					}
-					return NF_ACCEPT;
+					return NF_DROP;
 				}
 				if (offset <= 0) {
-					if (pskb_trim(nskb, nskb->len + offset)) {
-						NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
-						consume_skb(nskb);
+					if (pskb_trim(skb_htp, skb_htp->len + offset)) {
+						NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", skb_htp->len, offset);
 						if (skb2) {
 							consume_skb(skb2);
 						}
+						consume_skb(skb_htp);
 						return NF_DROP;
 					}
 				} else {
-					nskb->len += offset;
-					nskb->tail += offset;
+					skb_htp->len += offset;
+					skb_htp->tail += offset;
 				}
 
-				iph = ip_hdr(nskb);
+				iph = ip_hdr(skb_htp);
 				l4 = (void *)iph + iph->ihl * 4;
 				tcpopt = (struct natcap_TCPOPT *)(l4 + sizeof(struct tcphdr));
 
-				iph->tot_len = htons(nskb->len);
+				iph->tot_len = htons(skb_htp->len);
 				TCPH(l4)->doff = (sizeof(struct tcphdr) + size) / 4;
 				TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - strlen(htp_confusion_req));
 				tcpopt->header.type = NATCAP_TCPOPT_TYPE_CONFUSION;
@@ -1532,9 +1555,10 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				tcpopt->header.encryption = 0;
 				strcpy((void *)tcpopt + size, htp_confusion_req);
 
-				skb_rcsum_tcpudp(nskb);
+				skb_rcsum_tcpudp(skb_htp);
 
-				NF_OKFN(nskb);
+				iph = ip_hdr(skb);
+				l4 = (void *)iph + iph->ihl * 4;
 			}
 		}
 
@@ -1553,6 +1577,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				consume_skb(skb2);
 			}
 			consume_skb(skb);
+			if (skb_htp) {
+				consume_skb(skb_htp);
+			}
 			return NF_ACCEPT;
 		}
 
@@ -1564,8 +1591,13 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				NF_OKFN(skb2);
 			}
 			NF_OKFN(skb);
+			if (skb_htp) {
+				NF_OKFN(skb_htp);
+			}
 			goto out;
 		}
+
+		BUG_ON(skb_htp != NULL);
 
 		if (skb_is_gso(skb)) {
 			struct sk_buff *segs;
