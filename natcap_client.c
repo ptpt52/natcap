@@ -333,7 +333,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	void *l4;
-	struct tuple *tup;
+	struct natcap_session *ns;
 	struct tuple server;
 
 	if (disabled)
@@ -453,12 +453,12 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 					NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				}
-				tup = natcap_session_get(ct);
-				if (!tup) {
+				ns = natcap_session_get(ct);
+				if (!ns) {
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
-				memcpy(tup, &server, sizeof(struct tuple));
+				memcpy(&ns->tup, &server, sizeof(struct tuple));
 
 				set_bit(IPS_NATCAP_SYN_BIT, &ct->status);
 			}
@@ -497,12 +497,12 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 					NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				}
-				tup = natcap_session_get(ct);
-				if (!tup) {
+				ns = natcap_session_get(ct);
+				if (!ns) {
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
-				memcpy(tup, &server, sizeof(struct tuple));
+				memcpy(&ns->tup, &server, sizeof(struct tuple));
 
 				set_bit(IPS_NATCAP_SYN_BIT, &ct->status);
 
@@ -1307,7 +1307,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	struct iphdr *iph;
 	void *l4;
 	struct net *net = &init_net;
-	struct tuple *tup = NULL;
+	struct natcap_session *ns = NULL;
 	struct natcap_TCPOPT tcpopt;
 
 	if (disabled)
@@ -1339,8 +1339,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	tup = natcap_session_get(ct);
-	if (!tup) {
+	ns = natcap_session_get(ct);
+	if (!ns) {
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
@@ -1357,27 +1357,27 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	if (iph->protocol == IPPROTO_TCP) {
 		__be16 new_source = iph->saddr ^ (iph->saddr >> 16) ^ iph->daddr ^ (iph->daddr >> 16) ^ TCPH(l4)->source ^ TCPH(l4)->dest;
 		NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": before natcap post out\n", DEBUG_TCP_ARG(iph,l4));
-		csum_replace4(&iph->check, iph->daddr, tup->ip);
-		inet_proto_csum_replace4(&TCPH(l4)->check, skb, iph->daddr, tup->ip, true);
+		csum_replace4(&iph->check, iph->daddr, ns->tup.ip);
+		inet_proto_csum_replace4(&TCPH(l4)->check, skb, iph->daddr, ns->tup.ip, true);
 		inet_proto_csum_replace2(&TCPH(l4)->check, skb, TCPH(l4)->source, new_source, false);
-		inet_proto_csum_replace2(&TCPH(l4)->check, skb, TCPH(l4)->dest, tup->port, false);
+		inet_proto_csum_replace2(&TCPH(l4)->check, skb, TCPH(l4)->dest, ns->tup.port, false);
 		TCPH(l4)->source = new_source;
-		TCPH(l4)->dest = tup->port;
-		iph->daddr = tup->ip;
+		TCPH(l4)->dest = ns->tup.port;
+		iph->daddr = ns->tup.ip;
 	} else {
 		__be16 new_source = iph->saddr ^ (iph->saddr >> 16) ^ iph->daddr ^ (iph->daddr >> 16) ^ UDPH(l4)->source ^ UDPH(l4)->dest;
 		NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": before natcap post out\n", DEBUG_UDP_ARG(iph,l4));
-		csum_replace4(&iph->check, iph->daddr, tup->ip);
+		csum_replace4(&iph->check, iph->daddr, ns->tup.ip);
 		if (UDPH(l4)->check) {
-			inet_proto_csum_replace4(&UDPH(l4)->check, skb, iph->daddr, tup->ip, true);
+			inet_proto_csum_replace4(&UDPH(l4)->check, skb, iph->daddr, ns->tup.ip, true);
 			inet_proto_csum_replace2(&UDPH(l4)->check, skb, UDPH(l4)->source, new_source, false);
-			inet_proto_csum_replace2(&UDPH(l4)->check, skb, UDPH(l4)->dest, tup->port, false);
+			inet_proto_csum_replace2(&UDPH(l4)->check, skb, UDPH(l4)->dest, ns->tup.port, false);
 			if (UDPH(l4)->check == 0)
 				UDPH(l4)->check = CSUM_MANGLED_0;
 		}
 		UDPH(l4)->source = new_source;
-		UDPH(l4)->dest = tup->port;
-		iph->daddr = tup->ip;
+		UDPH(l4)->dest = ns->tup.port;
+		iph->daddr = ns->tup.ip;
 	}
 
 	if (in)
@@ -1412,7 +1412,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
-		if (tup->encryption) {
+		if (ns->tup.encryption) {
 			set_bit(IPS_NATCAP_ENC_BIT, &master->status);
 		}
 		if (encode_mode == UDP_ENCODE) {

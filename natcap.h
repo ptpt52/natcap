@@ -83,6 +83,11 @@ struct tuple {
 	__be32 ip;
 };
 
+struct natcap_session {
+	struct tuple tup;
+	int tcp_seq_offset;
+};
+
 // test t1 < t2 return 1
 static inline int tuple_lt(const struct tuple *t1, const struct tuple *t2)
 {

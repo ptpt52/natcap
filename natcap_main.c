@@ -83,6 +83,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    flow_total_tx_bytes=%llu\n"
 				"#    flow_total_rx_bytes=%llu\n"
 				"#    auth_http_redirect_url=%s\n"
+				"#    htp_confusion_host=%s\n"
 				"#\n"
 				"# Reload cmd:\n"
 				"\n"
@@ -106,6 +107,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				natcap_random_int,
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
+				htp_confusion_host,
 				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout, shadowsocks, http_confusion, sproxy, ntohs(knock_port), &dns_server, ntohs(dns_port));
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
@@ -349,6 +351,24 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 					kfree(auth_http_redirect_url);
 				}
 				auth_http_redirect_url = tmp;
+				goto done;
+			}
+			kfree(tmp);
+		}
+	} else if (strncmp(data, "htp_confusion_host=", 19) == 0) {
+		if (mode != SERVER_MODE) {
+			char *tmp = NULL;
+			tmp = kmalloc(1024, GFP_KERNEL);
+			if (!tmp)
+				return -ENOMEM;
+			n = sscanf(data, "htp_confusion_host=%s\n", tmp);
+			tmp[1023] = 0;
+			if (n == 1 && strlen(tmp) <= 63) {
+				strcpy(htp_confusion_host, tmp);
+				kfree(tmp);
+				sprintf(htp_confusion_req, htp_confusion_req_format, natcap_random_int, htp_confusion_host);
+				printk("%s\n", htp_confusion_req);
+				printk("len=%d\n", (int)strlen(htp_confusion_req));
 				goto done;
 			}
 			kfree(tmp);

@@ -58,6 +58,20 @@ extern const char *const hooknames[];
 extern char htp_confusion_req[1024];
 extern char htp_confusion_rep[1024];
 
+extern char htp_confusion_host[64];
+
+#define htp_confusion_req_format "" \
+		"GET /%08X HTTP/1.1\r\n" \
+		"Host: %s\r\n" \
+		"Connection: keep-alive\r\n" \
+		"Pragma: no-cache\r\n" \
+		"Cache-Control: no-cache\r\n" \
+		"User-Agent: Mozilla/5.0 (X11; Linux x86_64)\r\n" \
+		"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8\r\n" \
+		"Accept-Encoding: gzip, deflate, sdch\r\n" \
+		"Accept-Language: zh-CN,en-US;q=0.8,en;q=0.6,zh;q=0.4\r\n" \
+		"\r\n"
+
 #define IS_NATCAP_FIXME() (debug & 0x10)
 #define IS_NATCAP_DEBUG() (debug & 0x8)
 #define IS_NATCAP_INFO() (debug & 0x4)
@@ -334,7 +348,7 @@ extern int ip_set_test_src_mac(const struct net_device *in, const struct net_dev
 extern unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto);
 
 extern int natcap_session_init(struct nf_conn *ct, gfp_t gfp);
-extern struct tuple *natcap_session_get(struct nf_conn *ct);
+extern struct natcap_session *natcap_session_get(struct nf_conn *ct);
 
 extern int natcap_common_init(void);
 

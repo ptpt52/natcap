@@ -46,9 +46,11 @@ unsigned int server_seed = 0;
 module_param(server_seed, int, 0);
 MODULE_PARM_DESC(server_seed, "Server side seed number for encode");
 
+char htp_confusion_host[64] = "bing.com";
+
 char htp_confusion_req[1024] = ""
-		"GET / HTTP/1.1\r\n"
-		"Host: www.189.cn\r\n"
+		"GET /00000000 HTTP/1.1\r\n"
+		"Host: bing.com\r\n"
 		"Connection: keep-alive\r\n"
 		"Pragma: no-cache\r\n"
 		"Cache-Control: no-cache\r\n"
@@ -420,13 +422,15 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		if (test_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
 			int add_len = 0;
 			if (tcph->syn && tcph->ack) {
+				struct natcap_session *ns = natcap_session_get(ct);
+
 				add_len += sizeof(unsigned int);
 				size = ALIGN(sizeof(struct natcap_TCPOPT_header) + add_len, sizeof(unsigned int));
 				tcpopt->header.type = NATCAP_TCPOPT_TYPE_ADD;
 				tcpopt->header.opcode = TCPOPT_NATCAP;
 				tcpopt->header.opsize = size;
 				if (add_len == sizeof(unsigned int)) {
-					set_byte4((unsigned char *)tcpopt + size - add_len, htonl(strlen(htp_confusion_req)));
+					set_byte4((unsigned char *)tcpopt + size - add_len, htonl(ns->tcp_seq_offset));
 					tcpopt->header.type |= NATCAP_TCPOPT_CONFUSION;
 				}
 				return 0;
@@ -1078,7 +1082,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 	struct nf_conn_nat *nat = NULL;
 	unsigned int newoff, newlen = 0;
 	size_t alloc_size;
-	size_t var_alloc_len = ALIGN(sizeof(struct tuple), sizeof(unsigned long));
+	size_t var_alloc_len = ALIGN(sizeof(struct natcap_session), sizeof(unsigned long));
 
 	if (nf_ct_is_confirmed(ct)) {
 		return -1;
@@ -1134,7 +1138,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 	return 0;
 }
 
-struct tuple *natcap_session_get(struct nf_conn *ct)
+struct natcap_session *natcap_session_get(struct nf_conn *ct)
 {
 	struct nf_conn_nat *nat;
 
@@ -1143,7 +1147,7 @@ struct tuple *natcap_session_get(struct nf_conn *ct)
 		return NULL;
 	}
 
-	return (struct tuple *)((void *)nat - ALIGN(sizeof(struct tuple), sizeof(unsigned long)));
+	return (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), sizeof(unsigned long)));
 }
 
 int natcap_common_init(void)

@@ -39,6 +39,8 @@ debug=7
 disabled=0
 encode_mode=TCP
 server_persist_timeout=6
-server 47.88.231.224:65535-e
+htp_confusion_host=www.baidu.com
+http_confusion=1
+server 47.88.231.224:6553-e
 EOF
 }

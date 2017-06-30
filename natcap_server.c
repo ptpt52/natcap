@@ -1007,9 +1007,6 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
-			if (tcpopt.header.type & NATCAP_TCPOPT_CONFUSION) {
-				test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status);
-			}
 
 			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, &server);
 			if (ret != E_NATCAP_OK) {
@@ -1028,12 +1025,23 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 
 			if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
+				struct natcap_session *ns;
+
 				NATCAP_INFO("(SPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+
+				if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
+					NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
+					goto do_dnat_setup;
+				}
+				ns = natcap_session_get(ct);
+				if (!ns) {
+					goto do_dnat_setup;
+				}
+
 				if (mode == SERVER_MODE && natcap_redirect_port != 0 && (tcpopt.header.type & NATCAP_TCPOPT_SPROXY)) {
 					__be32 newdst = 0;
 					struct in_device *indev;
 					struct in_ifaddr *ifa;
-					struct tuple *tup;
 
 					rcu_read_lock();
 					indev = __in_dev_get_rcu(in);
@@ -1046,20 +1054,18 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					if (!newdst || newdst == server.ip) {
 						goto do_dnat_setup;
 					}
-					if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
-						NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
-						goto do_dnat_setup;
-					}
-					tup = natcap_session_get(ct);
-					if (!tup) {
-						goto do_dnat_setup;
-					}
-					memcpy(tup, &server, sizeof(struct tuple));
+					memcpy(&ns->tup, &server, sizeof(struct tuple));
 					set_bit(IPS_NATCAP_DST_BIT, &ct->status);
 
 					server.ip = newdst;
 					server.port = natcap_redirect_port;
 				}
+
+				if (tcpopt.header.type & NATCAP_TCPOPT_CONFUSION) {
+					test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status);
+					ns->tcp_seq_offset = ntohl(get_byte4((unsigned char *)&tcpopt + tcpopt.header.opsize - sizeof(unsigned int)));
+				}
+
 do_dnat_setup:
 				if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 					NATCAP_ERROR("(SPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
@@ -1559,14 +1565,14 @@ static int get_natcap_dst(struct sock *sk, int optval, void __user *user, int *l
 	if (h) {
 		struct sockaddr_in sin;
 		struct nf_conn *ct = nf_ct_tuplehash_to_ctrack(h);
-		struct tuple *tup;
+		struct natcap_session *ns;
 
 		if (test_bit(IPS_NATCAP_BIT, &ct->status) && test_bit(IPS_NATCAP_DST_BIT, &ct->status)) {
-			tup = natcap_session_get(ct);
-			if (tup) {
+			ns = natcap_session_get(ct);
+			if (ns) {
 				sin.sin_family = AF_INET;
-				sin.sin_port = tup->port;
-				sin.sin_addr.s_addr = tup->ip;
+				sin.sin_port = ns->tup.port;
+				sin.sin_addr.s_addr = ns->tup.ip;
 				memset(sin.sin_zero, 0, sizeof(sin.sin_zero));
 
 				NATCAP_DEBUG("SO_NATCAP_DST: %pI4 %u\n", &sin.sin_addr.s_addr, ntohs(sin.sin_port));
