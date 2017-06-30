@@ -149,8 +149,8 @@ extern int skb_rcsum_verify(struct sk_buff *skb);
 extern int skb_rcsum_tcpudp(struct sk_buff *skb);
 
 extern int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_conn *ct, struct natcap_TCPOPT *tcpopt);
-extern int natcap_tcp_encode(struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt);
-extern int natcap_tcp_decode(struct sk_buff *skb, struct natcap_TCPOPT *tcpopt);
+extern int natcap_tcp_encode(struct nf_conn *ct, struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt);
+extern int natcap_tcp_decode(struct nf_conn *ct, struct sk_buff *skb, struct natcap_TCPOPT *tcpopt);
 extern int natcap_tcp_encode_fwdupdate(struct sk_buff *skb, struct tcphdr *tcph, const struct tuple *server);
 static inline struct natcap_TCPOPT *natcap_tcp_decode_header(struct tcphdr *tcph)
 {
@@ -162,19 +162,24 @@ static inline struct natcap_TCPOPT *natcap_tcp_decode_header(struct tcphdr *tcph
 				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data), sizeof(unsigned int)) &&
 				 opt->header.opcode == TCPOPT_NATCAP &&
 				 NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_ALL &&
-				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data), sizeof(unsigned int))) ||
+				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data), sizeof(unsigned int))) ||
 				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int)) &&
 				 opt->header.opcode == TCPOPT_NATCAP &&
 				 NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_DST &&
-				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int))) ||
+				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int))) ||
 				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int)) &&
 				 opt->header.opcode == TCPOPT_NATCAP &&
 				 NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_USER &&
-				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int))) ||
+				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_user), sizeof(unsigned int))) ||
 				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)) &&
 				 opt->header.opcode == TCPOPT_NATCAP &&
 				 NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_CONFUSION &&
-				 opt->header.opsize == ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)))
+				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int))) ||
+				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)) &&
+				 opt->header.opcode == TCPOPT_NATCAP &&
+				 NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_ADD &&
+				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)))
+
 			 )
 	   )
 	{

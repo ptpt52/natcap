@@ -886,7 +886,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			NATCAP_DEBUG("(SPCI)" DEBUG_TCP_FMT ": before decode\n", DEBUG_TCP_ARG(iph,l4));
 
 			tcpopt.header.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-			ret = natcap_tcp_decode(skb, &tcpopt);
+			ret = natcap_tcp_decode(ct, skb, &tcpopt);
 			if (ret != 0) {
 				NATCAP_ERROR("(SPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				return NF_DROP;
@@ -911,7 +911,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 
 			tcpopt.header.encryption = 0;
-			ret = natcap_tcp_decode(skb, &tcpopt);
+			ret = natcap_tcp_decode(ct, skb, &tcpopt);
 			if (ret != 0) {
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -919,6 +919,9 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			if (tcpopt.header.opcode != TCPOPT_NATCAP) {
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
+			}
+			if (tcpopt.header.type & NATCAP_TCPOPT_CONFUSION) {
+				test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status);
 			}
 
 			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, &server);
@@ -1180,7 +1183,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 		ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
 		if (ret == 0) {
-			ret = natcap_tcp_encode(skb, &tcpopt);
+			ret = natcap_tcp_encode(ct, skb, &tcpopt);
 			iph = ip_hdr(skb);
 			l4 = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 		}

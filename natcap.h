@@ -48,6 +48,7 @@ struct natcap_TCPOPT_user {
 #define NATCAP_TCPOPT_SYN (1<<7)
 #define NATCAP_TCPOPT_TARGET (1<<6)
 #define NATCAP_TCPOPT_SPROXY (1<<5)
+#define NATCAP_TCPOPT_CONFUSION (1<<4)
 
 #define NATCAP_TCPOPT_TYPE_MASK (0x0F)
 #define NTCAP_TCPOPT_TYPE(t) ((t) & NATCAP_TCPOPT_TYPE_MASK)
@@ -70,6 +71,8 @@ struct natcap_TCPOPT {
 		} user;
 	};
 #define NATCAP_TCPOPT_TYPE_CONFUSION 4
+	char pad[4];
+#define NATCAP_TCPOPT_TYPE_ADD 5
 };
 
 #pragma pack(pop)

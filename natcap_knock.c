@@ -201,7 +201,7 @@ static unsigned int natcap_knock_post_out_hook(void *priv,
 
 	ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt);
 	if (ret == 0) {
-		ret = natcap_tcp_encode(skb, &tcpopt);
+		ret = natcap_tcp_encode(ct, skb, &tcpopt);
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 	}

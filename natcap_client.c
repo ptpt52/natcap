@@ -717,7 +717,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": before decode\n", DEBUG_TCP_ARG(iph,l4));
 
 		tcpopt.header.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-		ret = natcap_tcp_decode(skb, &tcpopt);
+		ret = natcap_tcp_decode(ct, skb, &tcpopt);
 		if (ret != 0) {
 			NATCAP_ERROR("(CPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 			return NF_DROP;
@@ -1046,7 +1046,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			if (sproxy) {
 				tcpopt.header.type |= NATCAP_TCPOPT_SPROXY;
 			}
-			ret = natcap_tcp_encode(skb2, &tcpopt);
+			ret = natcap_tcp_encode(ct, skb2, &tcpopt);
 			if (ret != 0) {
 				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				consume_skb(skb2);
@@ -1062,7 +1062,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			if (sproxy) {
 				tcpopt.header.type |= NATCAP_TCPOPT_SPROXY;
 			}
-			ret = natcap_tcp_encode(skb, &tcpopt);
+			ret = natcap_tcp_encode(ct, skb, &tcpopt);
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 		}
@@ -1508,7 +1508,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
 				tcpopt.header.type |= NATCAP_TCPOPT_TARGET;
 			}
-			ret = natcap_tcp_encode(skb2, &tcpopt);
+			ret = natcap_tcp_encode(master, skb2, &tcpopt);
 			if (ret != 0) {
 				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -1523,7 +1523,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
 				tcpopt.header.type |= NATCAP_TCPOPT_TARGET;
 			}
-			ret = natcap_tcp_encode(skb, &tcpopt);
+			ret = natcap_tcp_encode(master, skb, &tcpopt);
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 		}
