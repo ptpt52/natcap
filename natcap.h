@@ -87,6 +87,7 @@ struct natcap_session {
 	void *check_ptr;
 	struct tuple tup;
 	int tcp_seq_offset;
+	int tcp_ack_offset;
 };
 
 // test t1 < t2 return 1
