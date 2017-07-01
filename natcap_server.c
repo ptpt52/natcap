@@ -996,6 +996,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
 				} else {
 					set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
+					return NF_DROP;
 				}
 			}
 		} else {
@@ -1016,6 +1017,9 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
+			if (tcpopt.header.type & NATCAP_TCPOPT_CONFUSION) {
+				set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status);
+			}
 
 			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, &server);
 			if (ret != E_NATCAP_OK) {
@@ -1034,20 +1038,10 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 
 			if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
-				struct natcap_session *ns;
-
 				NATCAP_INFO("(SPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 
-				if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
-					NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
-					goto do_dnat_setup;
-				}
-				ns = natcap_session_get(ct);
-				if (!ns) {
-					goto do_dnat_setup;
-				}
-
 				if (mode == SERVER_MODE && natcap_redirect_port != 0 && (tcpopt.header.type & NATCAP_TCPOPT_SPROXY)) {
+					struct natcap_session *ns;
 					__be32 newdst = 0;
 					struct in_device *indev;
 					struct in_ifaddr *ifa;
@@ -1063,15 +1057,16 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					if (!newdst || newdst == server.ip) {
 						goto do_dnat_setup;
 					}
+					ns = natcap_session_get(ct);
+					if (!ns) {
+						goto do_dnat_setup;
+					}
+
 					memcpy(&ns->tup, &server, sizeof(struct tuple));
 					set_bit(IPS_NATCAP_DST_BIT, &ct->status);
 
 					server.ip = newdst;
 					server.port = natcap_redirect_port;
-				}
-
-				if (tcpopt.header.type & NATCAP_TCPOPT_CONFUSION) {
-					set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status);
 				}
 
 do_dnat_setup:
