@@ -29,6 +29,14 @@ unsigned int server_persist_timeout = 0;
 module_param(server_persist_timeout, int, 0);
 MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
 
+unsigned int macfilter = 0;
+
+const char *macfilter_acl_str[NATCAP_ACL_MAX] = {
+	[NATCAP_ACL_NONE] = "none",
+	[NATCAP_ACL_ALLOW] = "allow",
+	[NATCAP_ACL_DENY] = "deny"
+};
+
 unsigned int http_confusion = 0;
 unsigned int shadowsocks = 0;
 unsigned int sproxy = 0;
@@ -360,6 +368,14 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 	}
 	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
 		goto natcaped_out;
+	}
+
+	if (macfilter == NATCAP_ACL_ALLOW && IP_SET_test_src_mac(state, in, out, skb, "natcap_maclist") <= 0) {
+		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+		return NF_ACCEPT;
+	} else if (macfilter == NATCAP_ACL_DENY && IP_SET_test_src_mac(state, in, out, skb, "natcap_maclist") > 0) {
+		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+		return NF_ACCEPT;
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {

@@ -9,6 +9,16 @@
 #include <linux/if_ether.h>
 #include "natcap.h"
 
+extern unsigned int macfilter;
+enum {
+	NATCAP_ACL_NONE,
+	NATCAP_ACL_ALLOW,
+	NATCAP_ACL_DENY,
+	NATCAP_ACL_MAX
+};
+
+extern const char *macfilter_acl_str[NATCAP_ACL_MAX];
+
 extern unsigned int server_persist_timeout;
 extern unsigned int http_confusion;
 extern unsigned int shadowsocks;
