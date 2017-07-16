@@ -37,6 +37,7 @@ const char *macfilter_acl_str[NATCAP_ACL_MAX] = {
 	[NATCAP_ACL_DENY] = "deny"
 };
 
+unsigned int encode_http_only = 0;
 unsigned int http_confusion = 0;
 unsigned int shadowsocks = 0;
 unsigned int sproxy = 0;
@@ -191,12 +192,13 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 		dst->port = atomic_add_return(1, &server_port) ^ (ip & 0xFFFF) ^ ((ip >> 16) & 0xFFFF);
 	}
 
-#if 0
+	if (encode_http_only == 0)
+		return;
+
 	//XXX: encode for port 80 and 53 only
 	if (port != __constant_htons(80) && port != __constant_htons(53)) {
 		dst->encryption = 0;
 	}
-#endif
 }
 
 static inline int is_natcap_server(__be32 ip)
@@ -1046,7 +1048,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 		}
 
-		if (ns && ns->tcp_seq_offset && TCPH(l4)->ack && !test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
+		if (ns && ns->tcp_seq_offset && TCPH(l4)->ack && !test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status) && test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
 			if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
 				//TODO send confuse pkt
 				struct natcap_TCPOPT *tcpopt;
@@ -1543,7 +1545,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 
 		ns = natcap_session_get(master);
-		if (ns && ns->tcp_seq_offset && TCPH(l4)->ack && !test_bit(IPS_NATCAP_UDPENC_BIT, &master->status)) {
+		if (ns && ns->tcp_seq_offset && TCPH(l4)->ack && !test_bit(IPS_NATCAP_UDPENC_BIT, &master->status) && test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
 			if (test_bit(IPS_SEEN_REPLY_BIT, &master->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &master->status)) {
 				//TODO send confuse pkt
 				struct natcap_TCPOPT *tcpopt;

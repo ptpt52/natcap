@@ -75,6 +75,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    server_persist_timeout=%u\n"
 				"#    shadowsocks=%u\n"
 				"#    http_confusion=%u\n"
+				"#    encode_http_only=%u\n"
 				"#    sproxy=%u\n"
 				"#    enable_hosts=%u\n"
 				"#    knock_port=%u\n"
@@ -103,7 +104,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				mode_str[mode], mode,
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
-				server_seed, disabled, auth_enabled, debug, encode_mode_str[encode_mode], server_persist_timeout, shadowsocks, http_confusion, sproxy, enable_hosts, ntohs(knock_port),
+				server_seed, disabled, auth_enabled, debug, encode_mode_str[encode_mode], server_persist_timeout, shadowsocks, http_confusion, encode_http_only, sproxy, enable_hosts, ntohs(knock_port),
 				ntohs(natcap_redirect_port),
 				natcap_random_int,
 				flow_total_tx_bytes, flow_total_rx_bytes,
@@ -301,6 +302,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		n = sscanf(data, "http_confusion=%u", &d);
 		if (n == 1) {
 			http_confusion = d;
+			goto done;
+		}
+	} else if (strncmp(data, "encode_http_only=", 17) == 0) {
+		int d;
+		n = sscanf(data, "encode_http_only=%u", &d);
+		if (n == 1) {
+			encode_http_only = d;
 			goto done;
 		}
 	} else if (strncmp(data, "sproxy=", 7) == 0) {

@@ -20,6 +20,7 @@ enum {
 extern const char *macfilter_acl_str[NATCAP_ACL_MAX];
 
 extern unsigned int server_persist_timeout;
+extern unsigned int encode_http_only;
 extern unsigned int http_confusion;
 extern unsigned int shadowsocks;
 extern unsigned int sproxy;
