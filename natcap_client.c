@@ -534,7 +534,10 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 || IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
-		} else if (IP_SET_test_dst_ip(state, in, out, skb, "udproxylist") > 0 || IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0) {
+		} else if (IP_SET_test_dst_ip(state, in, out, skb, "udproxylist") > 0 ||
+				IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0 ||
+				UDPH(l4)->dest == __constant_htons(443) ||
+				UDPH(l4)->dest == __constant_htons(80)) {
 			natcap_server_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
