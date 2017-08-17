@@ -68,10 +68,10 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+	if ((IPS_NATCAP_BYPASS & ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+	if ((IPS_NATCAP & ct->status)) {
 		flow_total_rx_bytes += skb->len;
 		skb->mark = XT_MARK_NATCAP;
 		return NF_ACCEPT;
@@ -128,7 +128,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
-		if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in */
+		if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in */
 			natcap_server_info_select(iph->daddr, TCPH(l4)->dest, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(FPCI)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
@@ -173,7 +173,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
 			}
 
-			if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in */
+			if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in */
 				natcap_server_info_select(iph->daddr, UDPH(l4)->dest, &server);
 				if (server.ip == 0) {
 					NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
@@ -210,7 +210,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 				return NF_ACCEPT;
 			}
 
-			if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in */
+			if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in */
 				natcap_server_info_select(iph->daddr, UDPH(l4)->dest, &server);
 				if (server.ip == 0) {
 					NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
@@ -236,7 +236,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+		if ((IPS_NATCAP & ct->status)) {
 			flow_total_rx_bytes += skb->len;
 			skb->mark = XT_MARK_NATCAP;
 		} else {
@@ -299,16 +299,16 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+	if ((IPS_NATCAP_BYPASS & ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
+	if (!(IPS_NATCAP & ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_REPLY) {
 		flow_total_tx_bytes += skb->len;
 	}
-	if (!test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
+	if (!(IPS_NATCAP_UDPENC & ct->status)) {
 		return NF_ACCEPT;
 	}
 
@@ -517,7 +517,7 @@ static unsigned int natcap_forward_pre_in_hook(void *priv,
 			return NF_DROP;
 		}
 
-		if (!test_and_set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) { /* first time in */
+		if (!(IPS_NATCAP_UDPENC & ct->status) && !test_and_set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) { /* first time in */
 			return NF_ACCEPT;
 		}
 	}

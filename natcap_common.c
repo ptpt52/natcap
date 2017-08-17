@@ -349,7 +349,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		int add_len = 0;
 		//not syn
 		if (!(tcph->syn && !tcph->ack)) {
-			if (test_bit(IPS_NATCAP_AUTH_BIT, &ct->status)) {
+			if ((IPS_NATCAP_AUTH & ct->status)) {
 				tcpopt->header.type = NATCAP_TCPOPT_TYPE_NONE;
 				tcpopt->header.opsize = 0;
 				return 0;
@@ -369,7 +369,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			return 0;
 		}
 		//syn
-		if (http_confusion && !test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status) && test_bit(IPS_NATCAP_ENC_BIT, &ct->status) && ns) {
+		if (http_confusion && !(IPS_NATCAP_UDPENC & ct->status) && (IPS_NATCAP_ENC & ct->status) && ns) {
 			add_len += sizeof(unsigned int);
 			if (ns->tcp_seq_offset == 0) {
 				ns->tcp_seq_offset = sizeof(htp_confusion_req) / 2 + jiffies % (sizeof(htp_confusion_req) / 4);
@@ -407,7 +407,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		}
 		return -1;
 	} else {
-		if (test_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status) && ns) {
+		if ((IPS_NATCAP_CONFUSION & ct->status) && ns) {
 			int add_len = 0;
 			if (tcph->syn && tcph->ack) {
 				add_len += sizeof(unsigned int);

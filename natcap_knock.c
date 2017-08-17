@@ -94,10 +94,10 @@ static unsigned int natcap_knock_dnat_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+	if ((IPS_NATCAP_BYPASS & ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+	if ((IPS_NATCAP & ct->status)) {
 		return NF_ACCEPT;
 	}
 
@@ -118,7 +118,7 @@ static unsigned int natcap_knock_dnat_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
+	if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
 		if (!TCPH(l4)->syn || TCPH(l4)->ack) {
 			NATCAP_INFO("(KD)" DEBUG_TCP_FMT ": first packet in but not syn, bypass\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -189,10 +189,10 @@ static unsigned int natcap_knock_post_out_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+	if ((IPS_NATCAP_BYPASS & ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
+	if (!(IPS_NATCAP & ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {

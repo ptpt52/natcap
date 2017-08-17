@@ -229,7 +229,7 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	oiph = ip_hdr(oskb);
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
-	if (test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
+	if ((IPS_NATCAP_UDPENC & ct->status)) {
 		add_len = 8;
 		protocol = IPPROTO_UDP;
 	}
@@ -359,16 +359,16 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_SERVER_BIT, &ct->status)) {
+	if ((IPS_NATCAP_SERVER & ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+	if ((IPS_NATCAP_BYPASS & ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+	if ((IPS_NATCAP & ct->status)) {
 		goto natcaped_out;
 	}
 
@@ -446,7 +446,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			}
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		} else {
-			if (test_and_set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+			if ((IPS_NATCAP_BYPASS & ct->status) && test_and_set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
 				return NF_ACCEPT;
 			}
 			if (!nf_ct_is_confirmed(ct)) {
@@ -554,7 +554,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		}
 	}
 
-	if (!test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
+	if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
 		if (ipv4_is_lbcast(iph->saddr) || ipv4_is_lbcast(iph->daddr) ||
 				ipv4_is_loopback(iph->saddr) || ipv4_is_loopback(iph->daddr) ||
 				ipv4_is_multicast(iph->saddr) || ipv4_is_multicast(iph->daddr) ||
@@ -602,15 +602,15 @@ natcaped_out:
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 		if (TCPH(l4)->syn && !TCPH(l4)->ack) {
-			if (!test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
+			if (!(IPS_NATCAP_SYN1 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": natcaped syn1\n", DEBUG_TCP_ARG(iph,l4));
 				return NF_ACCEPT;
 			}
-			if (!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
+			if (!(IPS_NATCAP_SYN2 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": natcaped syn2\n", DEBUG_TCP_ARG(iph,l4));
 				return NF_ACCEPT;
 			}
-			if (test_bit(IPS_NATCAP_SYN1_BIT, &ct->status) && test_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
+			if ((IPS_NATCAP_SYN1 & ct->status) && (IPS_NATCAP_SYN2 & ct->status)) {
 				if (!is_natcap_server(iph->daddr)) {
 					NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": natcaped syn3 del target from gfwlist\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_del_dst_ip(state, in, out, skb, "gfwlist");
@@ -672,10 +672,10 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_SERVER_BIT, &ct->status)) {
+	if ((IPS_NATCAP_SERVER & ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+	if ((IPS_NATCAP_BYPASS & ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
@@ -723,7 +723,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		}
 		return NF_ACCEPT;
 	}
-	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
+	if (!(IPS_NATCAP & ct->status)) {
 		return NF_ACCEPT;
 	}
 
@@ -743,7 +743,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 
 		NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": before decode\n", DEBUG_TCP_ARG(iph,l4));
 
-		tcpopt.header.encryption = !!test_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+		tcpopt.header.encryption = !!(IPS_NATCAP_ENC & ct->status);
 		ret = natcap_tcp_decode(ct, skb, &tcpopt, IP_CT_DIR_REPLY);
 		if (ret != 0) {
 			NATCAP_ERROR("(CPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
@@ -767,13 +767,13 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 
 		if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE009A) &&
 				UDPH(l4)->len == __constant_htons(sizeof(struct udphdr) + 4)) {
-			if (!test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
+			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 				NATCAP_INFO("(CPCI)" DEBUG_UDP_FMT ": got CFM pkt\n", DEBUG_UDP_ARG(iph,l4));
 			}
 			return NF_DROP;
 		}
 
-		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+		if ((IPS_NATCAP_ENC & ct->status)) {
 			if (!skb_make_writable(skb, skb->len)) {
 				NATCAP_ERROR("(CPCI)" DEBUG_UDP_FMT ": natcap_udp_decode() failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
@@ -895,7 +895,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			return NF_DROP;
 		}
 
-		if (!test_and_set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) { /* first time in */
+		if (!(IPS_NATCAP_UDPENC & ct->status) && !test_and_set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) { /* first time in */
 			return NF_ACCEPT;
 		}
 	}
@@ -958,21 +958,21 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_SERVER_BIT, &ct->status)) {
+	if ((IPS_NATCAP_SERVER & ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_BYPASS_BIT, &ct->status)) {
+	if ((IPS_NATCAP_BYPASS & ct->status)) {
 		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL && iph->protocol == IPPROTO_TCP) {
 			if (TCPH(l4)->syn && !TCPH(l4)->ack) {
-				if (!test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
+				if (!(IPS_NATCAP_SYN1 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
 					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn1\n", DEBUG_TCP_ARG(iph,l4));
 					return NF_ACCEPT;
 				}
-				if (!test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
+				if (!(IPS_NATCAP_SYN2 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
 					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn2\n", DEBUG_TCP_ARG(iph,l4));
 					return NF_ACCEPT;
 				}
-				if (test_bit(IPS_NATCAP_SYN1_BIT, &ct->status) && test_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
+				if ((IPS_NATCAP_SYN1 & ct->status) && (IPS_NATCAP_SYN2 & ct->status)) {
 					NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": bypass syn3 del target from bypasslist\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_del_dst_ip(state, in, out, skb, "bypasslist");
 				}
@@ -980,14 +980,14 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		}
 		return NF_ACCEPT;
 	}
-	if (!test_bit(IPS_NATCAP_BIT, &ct->status)) {
+	if (!(IPS_NATCAP & ct->status)) {
 		return NF_ACCEPT;
 	}
 
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		/* for REPLY post out */
 		if (iph->protocol == IPPROTO_TCP) {
-			if (test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status) && TCPH(l4)->syn) {
+			if ((IPS_NATCAP_UDPENC & ct->status) && TCPH(l4)->syn) {
 				natcap_tcpmss_adjust(skb, TCPH(l4), -8);
 			}
 		}
@@ -1001,7 +1001,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		struct sk_buff *skb_htp = NULL;
 		struct natcap_session *ns = natcap_session_get(ct);
 
-		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+		if ((IPS_NATCAP_ENC & ct->status)) {
 			status |= NATCAP_NEED_ENC;
 		}
 
@@ -1051,8 +1051,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 		}
 
-		if (ns && ns->tcp_seq_offset && TCPH(l4)->ack && !test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status) && test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
-			if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
+		if (ns && ns->tcp_seq_offset && TCPH(l4)->ack && !(IPS_NATCAP_UDPENC & ct->status) && (IPS_NATCAP_ENC & ct->status)) {
+			if ((IPS_SEEN_REPLY & ct->status) && !(IPS_NATCAP_CONFUSION & ct->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
 				//TODO send confuse pkt
 				struct natcap_TCPOPT *tcpopt;
 				int offset, header_len;
@@ -1127,7 +1127,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 		NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": after encode\n", DEBUG_TCP_ARG(iph,l4));
 
-		if (!test_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) {
+		if (!(IPS_NATCAP_UDPENC & ct->status)) {
 			if (skb2) {
 				NF_OKFN(skb2);
 			}
@@ -1211,7 +1211,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 		return NF_STOLEN;
 	} else if (iph->protocol == IPPROTO_UDP) {
-		if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+		if ((IPS_NATCAP_ENC & ct->status)) {
 			if (!skb_make_writable(skb, skb->len)) {
 				NATCAP_ERROR("(CPO)" DEBUG_UDP_FMT ": natcap_udp_encode() failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
@@ -1220,7 +1220,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			skb_rcsum_tcpudp(skb);
 		}
 
-		if (!test_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
+		if (!(IPS_NATCAP_CFM & ct->status)) {
 			if (skb->len > 1280) {
 				struct sk_buff *nskb;
 				int offset, header_len;
@@ -1252,7 +1252,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
 				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x01));
 
-				if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+				if ((IPS_NATCAP_ENC & ct->status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x0100 | 0x01));
 				}
 
@@ -1283,7 +1283,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
 				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x02));
 
-				if (test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
+				if ((IPS_NATCAP_ENC & ct->status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x0100 | 0x02));
 				}
 
@@ -1357,19 +1357,19 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_SERVER_BIT, &ct->status)) {
+	if ((IPS_NATCAP_SERVER & ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+	if ((IPS_NATCAP & ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (!test_bit(IPS_NATCAP_SYN_BIT, &ct->status)) {
+	if (!(IPS_NATCAP_SYN & ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_ACK_BIT, &ct->status)) {
+	if ((IPS_NATCAP_ACK & ct->status)) {
 		return NF_ACCEPT;
 	}
 
@@ -1440,7 +1440,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
-	if (!test_and_set_bit(IPS_NATCAP_SYN_BIT, &master->status)) {
+	if (!(IPS_NATCAP_SYN & master->status) && !test_and_set_bit(IPS_NATCAP_SYN_BIT, &master->status)) {
 		if (master->master) {
 			consume_skb(skb);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -1454,7 +1454,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 		nf_conntrack_get(&ct->ct_general);
 		master->master = ct;
-		if (!test_and_set_bit(IPS_NATCAP_BIT, &master->status)) {
+		if (!(IPS_NATCAP & master->status) && !test_and_set_bit(IPS_NATCAP_BIT, &master->status)) {
 			natcap_session_init(master, GFP_ATOMIC);
 		}
 	}
@@ -1493,7 +1493,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	if (iph->protocol == IPPROTO_TCP) {
 		struct sk_buff *skb_htp = NULL;
 
-		if (test_bit(IPS_NATCAP_ENC_BIT, &master->status)) {
+		if ((IPS_NATCAP_ENC & master->status)) {
 			status |= NATCAP_NEED_ENC;
 		}
 		ret = natcap_tcpopt_setup(status, skb, master, &tcpopt, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
@@ -1548,8 +1548,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 
 		ns = natcap_session_get(master);
-		if (ns && ns->tcp_seq_offset && TCPH(l4)->ack && !test_bit(IPS_NATCAP_UDPENC_BIT, &master->status) && test_bit(IPS_NATCAP_ENC_BIT, &ct->status)) {
-			if (test_bit(IPS_SEEN_REPLY_BIT, &master->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &master->status)) {
+		if (ns && ns->tcp_seq_offset && TCPH(l4)->ack && !(IPS_NATCAP_UDPENC & master->status) && (IPS_NATCAP_ENC & ct->status)) {
+			if ((IPS_SEEN_REPLY & master->status) && !(IPS_NATCAP_CONFUSION & master->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &master->status)) {
 				//TODO send confuse pkt
 				struct natcap_TCPOPT *tcpopt;
 				int offset, header_len;
@@ -1623,7 +1623,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 		NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": after encode\n", DEBUG_TCP_ARG(iph,l4));
 
-		if (!test_bit(IPS_NATCAP_UDPENC_BIT, &master->status)) {
+		if (!(IPS_NATCAP_UDPENC & master->status)) {
 			flow_total_tx_bytes += skb->len;
 			if (skb2) {
 				NF_OKFN(skb2);
@@ -1692,7 +1692,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		} while (skb);
 
 	} else {
-		if (test_bit(IPS_NATCAP_ENC_BIT, &master->status)) {
+		if ((IPS_NATCAP_ENC & master->status)) {
 			if (!skb_make_writable(skb, skb->len)) {
 				NATCAP_ERROR("(CPMO)" DEBUG_UDP_FMT ": natcap_udp_encode() failed\n", DEBUG_UDP_ARG(iph,l4));
 				consume_skb(skb);
@@ -1702,7 +1702,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			skb_rcsum_tcpudp(skb);
 		}
 
-		if (!test_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
+		if (!(IPS_NATCAP_CFM & master->status)) {
 			if (skb->len > 1280) {
 				struct sk_buff *nskb;
 				int offset, header_len;
@@ -1736,7 +1736,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
 				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x01));
 
-				if (test_bit(IPS_NATCAP_ENC_BIT, &master->status)) {
+				if ((IPS_NATCAP_ENC & master->status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x0100 | 0x01));
 				}
 
@@ -1768,7 +1768,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
 				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x02));
 
-				if (test_bit(IPS_NATCAP_ENC_BIT, &master->status)) {
+				if ((IPS_NATCAP_ENC & master->status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x0100 | 0x02));
 				}
 
@@ -1782,7 +1782,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	}
 
 out:
-	if (test_bit(IPS_NATCAP_ACK_BIT, &master->status)) {
+	if ((IPS_NATCAP_ACK & master->status)) {
 		/* XXX I eat it, make the caller happy  */
 		ret = nf_conntrack_confirm(skb_orig);
 		if (ret != NF_ACCEPT) {
@@ -1886,10 +1886,10 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-	if (test_bit(IPS_NATCAP_SERVER_BIT, &ct->status)) {
+	if ((IPS_NATCAP_SERVER & ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (!test_bit(IPS_NATCAP_SYN_BIT, &ct->status)) {
+	if (!(IPS_NATCAP_SYN & ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
@@ -1910,20 +1910,20 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 		NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": got reply\n", DEBUG_TCP_ARG(iph,l4));
 
-		if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+		if ((IPS_NATCAP & ct->status)) {
 			master = ct->master;
-			if (!master || !test_bit(IPS_NATCAP_SYN_BIT, &master->status)) {
+			if (!master || !(IPS_NATCAP_SYN & master->status)) {
 				return NF_DROP;
 			}
 			if (iph->daddr != master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip) {
 				return NF_DROP;
 			}
 
-			if (!test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
+			if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": got cfm\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			}
-			if (!test_bit(IPS_NATCAP_ACK_BIT, &ct->status)) {
+			if (!(IPS_NATCAP_ACK & ct->status)) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": drop without lock cfm\n", DEBUG_TCP_ARG(iph,l4));
 				if (TCPH(l4)->syn && TCPH(l4)->ack) {
 					natcap_reset_synack(skb, in, ct);
@@ -1973,7 +1973,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 			NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": after natcap reply\n", DEBUG_TCP_ARG(iph,l4));
 
-			if (!test_and_set_bit(IPS_NATCAP_MASTER_BIT, &ct->status) && !TCPH(l4)->rst) {
+			if (!(IPS_NATCAP_MASTER & ct->status) && !test_and_set_bit(IPS_NATCAP_MASTER_BIT, &ct->status) && !TCPH(l4)->rst) {
 				if (!is_natcap_server(iph->saddr) && IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
 					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn natcap got response add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_add_src_ip(state, in, out, skb, "gfwlist");
@@ -1987,18 +1987,18 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					IP_SET_add_src_ip(state, in, out, skb, "gfwlist");
 				}
 			}
-			if (!test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
+			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": got cfm\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			}
-			if (!test_bit(IPS_NATCAP_ACK_BIT, &ct->status)) {
+			if (!(IPS_NATCAP_ACK & ct->status)) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": drop without lock cfm\n", DEBUG_TCP_ARG(iph,l4));
 				if (TCPH(l4)->syn && TCPH(l4)->ack) {
 					natcap_reset_synack(skb, in, ct);
 				}
 				return NF_DROP;
 			}
-			if (!test_and_set_bit(IPS_NATCAP_MASTER_BIT, &ct->status) && !TCPH(l4)->rst) {
+			if (!(IPS_NATCAP_MASTER & ct->status) && !test_and_set_bit(IPS_NATCAP_MASTER_BIT, &ct->status) && !TCPH(l4)->rst) {
 				if (IP_SET_test_src_ip(state, in, out, skb, "cniplist") > 0) {
 					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn bypass got response add target to bypasslist\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_add_src_ip(state, in, out, skb, "bypasslist");
@@ -2017,16 +2017,16 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 		NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": got reply\n", DEBUG_UDP_ARG(iph,l4));
 
-		if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+		if ((IPS_NATCAP & ct->status)) {
 			master = ct->master;
-			if (!master || !test_bit(IPS_NATCAP_SYN_BIT, &master->status)) {
+			if (!master || !(IPS_NATCAP_SYN & master->status)) {
 				return NF_DROP;
 			}
 			if (iph->daddr != master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip) {
 				return NF_DROP;
 			}
 
-			if (!test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
+			if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
 				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": got cfm\n", DEBUG_UDP_ARG(iph,l4));
 			}
 
@@ -2076,7 +2076,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 			NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": after natcap reply\n", DEBUG_UDP_ARG(iph,l4));
 		} else {
-			if (!test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
+			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": got cfm\n", DEBUG_UDP_ARG(iph,l4));
 			}
 		}
@@ -2261,7 +2261,7 @@ dns_done:
 		if (ip != 0) {
 			unsigned int old_ip;
 
-			if (test_bit(IPS_NATCAP_BIT, &ct->status)) {
+			if ((IPS_NATCAP & ct->status)) {
 				old_ip = iph->daddr;
 				iph->daddr = ip;
 				if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) {
