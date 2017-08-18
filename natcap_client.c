@@ -1389,27 +1389,85 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	l4 = (void *)iph + iph->ihl * 4;
 
 	if (iph->protocol == IPPROTO_TCP) {
-		__be16 new_source = iph->saddr ^ (iph->saddr >> 16) ^ iph->daddr ^ (iph->daddr >> 16) ^ TCPH(l4)->source ^ TCPH(l4)->dest;
+		if (ns->new_source == 0) {
+			unsigned int range_size, min, i;
+			__be16 *portptr;
+			u_int16_t off;
+			struct nf_conntrack_tuple tuple;
+
+			memset(&tuple, 0, sizeof(tuple));
+			tuple.src.u3.ip = iph->saddr;
+			tuple.src.u.all = TCPH(l4)->source;
+			tuple.src.l3num = AF_INET;
+			tuple.dst.u3.ip = ns->tup.ip;
+			tuple.dst.u.all = ns->tup.port;
+			tuple.dst.protonum = IPPROTO_TCP;
+
+			portptr = &tuple.src.u.all;
+
+			min = 1024;
+			range_size = 65535 - 1024 + 1;
+			off = prandom_u32();
+
+			for (i = 0; i != range_size; ++off, ++i) {
+				if (htons(min + off % range_size) == TCPH(l4)->source)
+					continue;
+				*portptr = htons(min + off % range_size);
+				if (nf_nat_used_tuple(&tuple, ct))
+					continue;
+			}
+			ns->new_source = *portptr;
+		}
+
 		NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": before natcap post out\n", DEBUG_TCP_ARG(iph,l4));
 		csum_replace4(&iph->check, iph->daddr, ns->tup.ip);
 		inet_proto_csum_replace4(&TCPH(l4)->check, skb, iph->daddr, ns->tup.ip, true);
-		inet_proto_csum_replace2(&TCPH(l4)->check, skb, TCPH(l4)->source, new_source, false);
+		inet_proto_csum_replace2(&TCPH(l4)->check, skb, TCPH(l4)->source, ns->new_source, false);
 		inet_proto_csum_replace2(&TCPH(l4)->check, skb, TCPH(l4)->dest, ns->tup.port, false);
-		TCPH(l4)->source = new_source;
+		TCPH(l4)->source = ns->new_source;
 		TCPH(l4)->dest = ns->tup.port;
 		iph->daddr = ns->tup.ip;
 	} else {
-		__be16 new_source = iph->saddr ^ (iph->saddr >> 16) ^ iph->daddr ^ (iph->daddr >> 16) ^ UDPH(l4)->source ^ UDPH(l4)->dest;
+		if (ns->new_source == 0) {
+			unsigned int range_size, min, i;
+			__be16 *portptr;
+			u_int16_t off;
+			struct nf_conntrack_tuple tuple;
+
+			memset(&tuple, 0, sizeof(tuple));
+			tuple.src.u3.ip = iph->saddr;
+			tuple.src.u.all = UDPH(l4)->source;
+			tuple.src.l3num = AF_INET;
+			tuple.dst.u3.ip = ns->tup.ip;
+			tuple.dst.u.all = ns->tup.port;
+			tuple.dst.protonum = IPPROTO_UDP;
+
+			portptr = &tuple.src.u.all;
+
+			min = 1024;
+			range_size = 65535 - 1024 + 1;
+			off = prandom_u32();
+
+			for (i = 0; i != range_size; ++off, ++i) {
+				if (htons(min + off % range_size) == UDPH(l4)->source)
+					continue;
+				*portptr = htons(min + off % range_size);
+				if (nf_nat_used_tuple(&tuple, ct))
+					continue;
+			}
+			ns->new_source = *portptr;
+		}
+
 		NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": before natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 		csum_replace4(&iph->check, iph->daddr, ns->tup.ip);
 		if (UDPH(l4)->check) {
 			inet_proto_csum_replace4(&UDPH(l4)->check, skb, iph->daddr, ns->tup.ip, true);
-			inet_proto_csum_replace2(&UDPH(l4)->check, skb, UDPH(l4)->source, new_source, false);
+			inet_proto_csum_replace2(&UDPH(l4)->check, skb, UDPH(l4)->source, ns->new_source, false);
 			inet_proto_csum_replace2(&UDPH(l4)->check, skb, UDPH(l4)->dest, ns->tup.port, false);
 			if (UDPH(l4)->check == 0)
 				UDPH(l4)->check = CSUM_MANGLED_0;
 		}
-		UDPH(l4)->source = new_source;
+		UDPH(l4)->source = ns->new_source;
 		UDPH(l4)->dest = ns->tup.port;
 		iph->daddr = ns->tup.ip;
 	}

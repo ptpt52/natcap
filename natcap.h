@@ -86,6 +86,7 @@ struct tuple {
 struct natcap_session {
 	void *check_ptr;
 	struct tuple tup;
+	__be16 new_source;
 	int tcp_seq_offset;
 	int tcp_ack_offset;
 };
