@@ -286,7 +286,7 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	ntcph->syn = 0;
 	ntcph->rst = 1;
 	ntcph->psh = 0;
-	ntcph->ack = 0;
+	ntcph->ack = 1;
 	ntcph->fin = 0;
 	ntcph->urg = 0;
 	ntcph->ece = 0;
@@ -386,6 +386,13 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
+
+		//not syn
+		if (!TCPH(l4)->syn || TCPH(l4)->ack) {
+			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": first packet in but not syn, bypass\n", DEBUG_TCP_ARG(iph,l4));
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			return NF_ACCEPT;
+		}
 
 		if (IP_SET_test_dst_ip(state, in, out, skb, "knocklist") > 0) {
 			natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
@@ -563,12 +570,6 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			return NF_ACCEPT;
 		}
 		if (iph->protocol == IPPROTO_TCP) {
-			//not syn
-			if (!TCPH(l4)->syn || TCPH(l4)->ack) {
-				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": first packet in but not syn, bypass\n", DEBUG_TCP_ARG(iph,l4));
-				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-				return NF_ACCEPT;
-			}
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 
 			if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
@@ -835,6 +836,39 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
+	if (iph->protocol == IPPROTO_TCP) {
+		l4 = (void *)iph + iph->ihl * 4;
+		if (TCPH(l4)->rst) {
+			struct nf_conntrack_tuple_hash *h;
+			struct nf_conntrack_tuple tuple;
+
+			memset(&tuple, 0, sizeof(tuple));
+			tuple.src.u3.ip = iph->saddr;
+			tuple.src.u.all = TCPH(l4)->source;
+			tuple.src.l3num = AF_INET;
+			tuple.dst.u3.ip = iph->daddr;
+			tuple.dst.u.all = TCPH(l4)->dest;
+			tuple.dst.protonum = IPPROTO_TCP;
+
+			if (in)
+				net = dev_net(in);
+			else if (out)
+				net = dev_net(out);
+
+			h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+			if (h) {
+				ct = nf_ct_tuplehash_to_ctrack(h);
+				if (NF_CT_DIRECTION(h) == IP_CT_DIR_REPLY && !(IPS_NATCAP_SERVER & ct->status) && (IPS_NATCAP_SYN & ct->status) && !(IPS_NATCAP & ct->status)) {
+					if (!(IPS_NATCAP_CFM & ct->status) || !(IPS_NATCAP_ACK & ct->status)) {
+						NATCAP_INFO("(CPI)" DEBUG_TCP_FMT ": drop tcp rst\n", DEBUG_TCP_ARG(iph,l4));
+						nf_ct_put(ct);
+						return NF_DROP;
+					}
+				}
+				nf_ct_put(ct);
+			}
+		}
+	}
 	if (iph->protocol != IPPROTO_UDP)
 		return NF_ACCEPT;
 
@@ -1379,6 +1413,12 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
+	/* XXX I am going to eat it, make the caller happy  */
+	ret = nf_conntrack_confirm(skb_orig);
+	if (ret != NF_ACCEPT) {
+		return ret;
+	}
+
 	skb = skb_copy(skb, GFP_ATOMIC);
 	if (skb == NULL) {
 		NATCAP_ERROR("alloc_skb fail\n");
@@ -1500,8 +1540,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	}
 	if (!(IPS_NATCAP_SYN & master->status) && !test_and_set_bit(IPS_NATCAP_SYN_BIT, &master->status)) {
 		if (master->master) {
-			consume_skb(skb);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+			consume_skb(skb);
 			return NF_ACCEPT;
 		}
 		if (ns->tup.encryption) {
@@ -1557,7 +1597,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		ret = natcap_tcpopt_setup(status, skb, master, &tcpopt, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 		if (ret != 0) {
 			if (skb_is_gso(skb) || (!TCPH(l4)->syn || TCPH(l4)->ack)) {
-				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				consume_skb(skb);
 				return NF_ACCEPT;
@@ -1580,7 +1620,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 			ret = natcap_tcpopt_setup(status, skb2, master, &tcpopt, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 			if (ret != 0) {
-				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				consume_skb(skb2);
 				consume_skb(skb);
@@ -1592,7 +1632,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			}
 			ret = natcap_tcp_encode(master, skb2, &tcpopt, IP_CT_DIR_ORIGINAL);
 			if (ret != 0) {
-				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				consume_skb(skb2);
 				consume_skb(skb);
@@ -1840,17 +1880,23 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	}
 
 out:
-	if ((IPS_NATCAP_ACK & master->status)) {
-		/* XXX I eat it, make the caller happy  */
-		ret = nf_conntrack_confirm(skb_orig);
-		if (ret != NF_ACCEPT) {
-			return ret;
+	iph = ip_hdr(skb_orig);
+	if (iph->protocol == IPPROTO_TCP) {
+		l4 = (void *)iph + iph->ihl * 4;
+		if (!TCPH(l4)->syn) {
+			goto eat;
 		}
-		consume_skb(skb_orig);
-		return NF_STOLEN;
+	}
+
+	if ((IPS_NATCAP_ACK & master->status)) {
+		goto eat;
 	}
 
 	return NF_ACCEPT;
+
+eat:
+	consume_skb(skb_orig);
+	return NF_STOLEN;
 }
 
 static inline int get_rdata(const unsigned char *src_ptr, int src_len, int src_pos, unsigned char *dst_ptr, int dst_size)
