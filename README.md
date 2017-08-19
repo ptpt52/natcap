@@ -18,12 +18,12 @@ https://github.com/ptpt52/natcap/blob/master/docs/natcap_tcp_type1.pdf
 https://github.com/ptpt52/natcap/blob/master/docs/natcap_tcp_type2.pdf
 https://github.com/ptpt52/natcap/blob/master/docs/natcap_tcp_type3.pdf
 
-Install on Ubuntu(Client side)
+Install on Ubuntu
 ------------------------------
 
 Install essential packages
 ```sh
-sudo apt-get install build-essential ipset dnsmasq
+sudo apt-get install build-essential ipset libev-dev
 sudo apt-get build-dep linux-image-`uname -r`
 ```
 
@@ -32,9 +32,17 @@ Get the source code
 git clone https://github.com/ptpt52/natcap.git
 ```
 
-Build and run
+Build and run as client
 ```sh
 cd natcap
 make
+#edit client.sh change server line
 sudo ./client.sh
+```
+
+Build and run as server
+```sh
+cd natcap
+make
+sudo ./server.sh
 ```

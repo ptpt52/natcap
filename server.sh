@@ -13,7 +13,7 @@ iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
 iptables -A FORWARD -m mark --mark 0x99 -j ACCEPT
 iptables -t nat -A POSTROUTING -m mark --mark 0x99 -j MASQUERADE
 
-
+# load && run
 rmmod natcap >/dev/null 2>&1
 ( modprobe natcap mode=1 || insmod ./natcap.ko mode=1 ) && {
 cat <<EOF >>/dev/natcap_ctl
