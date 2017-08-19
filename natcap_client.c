@@ -855,7 +855,11 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			else if (out)
 				net = dev_net(out);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+			h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
 			h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
 			if (h) {
 				ct = nf_ct_tuplehash_to_ctrack(h);
 				if (NF_CT_DIRECTION(h) == IP_CT_DIR_REPLY && !(IPS_NATCAP_SERVER & ct->status) && (IPS_NATCAP_SYN & ct->status) && !(IPS_NATCAP & ct->status)) {
