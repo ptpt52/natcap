@@ -1453,12 +1453,12 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			range_size = 65535 - 1024 + 1;
 			off = prandom_u32();
 
-			for (i = 0; i != range_size; ++off, ++i) {
-				if (htons(min + off % range_size) == TCPH(l4)->source)
-					continue;
-				*portptr = htons(min + off % range_size);
-				if (nf_nat_used_tuple(&tuple, ct))
-					continue;
+			if (nf_nat_used_tuple(&tuple, ct)) {
+				for (i = 0; i != range_size; ++off, ++i) {
+					*portptr = htons(min + off % range_size);
+					if (nf_nat_used_tuple(&tuple, ct))
+						continue;
+				}
 			}
 			ns->new_source = *portptr;
 		}
@@ -1492,12 +1492,12 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			range_size = 65535 - 1024 + 1;
 			off = prandom_u32();
 
-			for (i = 0; i != range_size; ++off, ++i) {
-				if (htons(min + off % range_size) == UDPH(l4)->source)
-					continue;
-				*portptr = htons(min + off % range_size);
-				if (nf_nat_used_tuple(&tuple, ct))
-					continue;
+			if (nf_nat_used_tuple(&tuple, ct)) {
+				for (i = 0; i != range_size; ++off, ++i) {
+					*portptr = htons(min + off % range_size);
+					if (nf_nat_used_tuple(&tuple, ct))
+						continue;
+				}
 			}
 			ns->new_source = *portptr;
 		}
