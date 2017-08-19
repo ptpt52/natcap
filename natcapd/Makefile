@@ -4,8 +4,8 @@ LIBS += -L. -lev -lm
 SERVER_BIN = natcapd-server
 CLIENT_BIN = natcapd-client
 
-SERVER_CFLAGS = 
-CLIENT_CFLAGS = -DNATCAP_CLIENT_MODE
+SERVER_CFLAGS = -std=gnu99
+CLIENT_CFLAGS = -std=gnu99 -DNATCAP_CLIENT_MODE
 
 SRCS = natcapd.c
 
