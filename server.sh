@@ -21,4 +21,44 @@ clean
 debug=3
 disabled=0
 EOF
+
+# reload natcapd-server
+killall natcapd-server
+sh ./natcapd/natcapd.server.load.sh &
+
 }
+
+sysctl_setup()
+{
+	cat | while read line; do
+		sysctl -w $line
+	done
+}
+
+# basic system config setup, enable bbr
+sysctl_setup << EOF
+kernel.panic=3
+net.ipv4.conf.default.arp_ignore=1
+net.ipv4.conf.all.arp_ignore=1
+net.ipv4.ip_forward=1
+net.ipv4.icmp_echo_ignore_broadcasts=1
+net.ipv4.icmp_ignore_bogus_error_responses=1
+net.ipv4.igmp_max_memberships=100
+net.ipv4.tcp_max_syn_backlog=512
+net.ipv4.tcp_fin_timeout=15
+net.ipv4.tcp_keepalive_time=120
+net.ipv4.tcp_syncookies=1
+net.ipv4.tcp_timestamps=1
+net.ipv4.tcp_sack=1
+net.ipv4.tcp_dsack=1
+net.ipv4.tcp_tw_reuse=1
+net.ipv4.tcp_congestion_control=bbr
+net.netfilter.nf_conntrack_acct=1
+net.netfilter.nf_conntrack_checksum=0
+net.netfilter.nf_conntrack_max=655360
+net.netfilter.nf_conntrack_tcp_timeout_established=7440
+net.netfilter.nf_conntrack_udp_timeout=60
+net.netfilter.nf_conntrack_udp_timeout_stream=180
+net.core.somaxconn=2048
+net.core.default_qdisc=fq
+EOF

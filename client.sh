@@ -35,6 +35,7 @@ ipset add udproxylist 8.8.8.8
 # .example line: server 47.88.231.224:65535-e
 # .example line: server 47.88.231.224:22-e
 # .example line: server 47.88.231.224:0-e
+# sproxy=1 MUST make sure server running natcapd-server app
 rmmod natcap >/dev/null 2>&1
 ( modprobe natcap mode=0 || insmod ./natcap.ko mode=0 ) && {
 cat <<EOF >>/dev/natcap_ctl
@@ -43,6 +44,7 @@ debug=3
 disabled=0
 encode_mode=TCP
 server_persist_timeout=86400
+sproxy=1
 server 47.88.231.224:65535-e
 EOF
 }
