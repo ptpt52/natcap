@@ -80,7 +80,6 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    enable_hosts=%u\n"
 				"#    knock_port=%u\n"
 				"#    natcap_redirect_port=%u\n"
-				"#    natcap_random_int=%u\n"
 				"#    flow_total_tx_bytes=%llu\n"
 				"#    flow_total_rx_bytes=%llu\n"
 				"#    auth_http_redirect_url=%s\n"
@@ -106,7 +105,6 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				ntohl(default_u_hash),
 				server_seed, disabled, auth_enabled, debug, encode_mode_str[encode_mode], server_persist_timeout, shadowsocks, http_confusion, encode_http_only, sproxy, enable_hosts, ntohs(knock_port),
 				ntohs(natcap_redirect_port),
-				natcap_random_int,
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
 				htp_confusion_host,
@@ -385,7 +383,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			if (n == 1 && strlen(tmp) <= 63) {
 				strcpy(htp_confusion_host, tmp);
 				kfree(tmp);
-				sprintf(htp_confusion_req, htp_confusion_req_format, natcap_random_int, htp_confusion_host);
+				sprintf(htp_confusion_req, htp_confusion_req_format, prandom_u32(), htp_confusion_host);
 				printk("%s\n", htp_confusion_req);
 				printk("len=%d\n", (int)strlen(htp_confusion_req));
 				goto done;

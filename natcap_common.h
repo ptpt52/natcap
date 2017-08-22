@@ -40,8 +40,6 @@ extern unsigned short natcap_redirect_port;
 extern unsigned long long flow_total_tx_bytes;
 extern unsigned long long flow_total_rx_bytes;
 
-extern unsigned int natcap_random_int;
-
 extern unsigned int auth_enabled;
 extern unsigned int mode;
 extern const char *const mode_str[];
