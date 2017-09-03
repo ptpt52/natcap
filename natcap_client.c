@@ -2370,14 +2370,14 @@ dns_done:
 				old_ip = iph->daddr;
 				iph->daddr = ip;
 				if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) {
-					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS is in cniplist ip = %pI4, drop\n", DEBUG_UDP_ARG(iph,l4), id, &ip);
-					return NF_DROP;
+					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS is in cniplist ip = %pI4, ignore\n", DEBUG_UDP_ARG(iph,l4), id, &ip);
 				}
 				iph->daddr = old_ip;
 			} else {
 				old_ip = iph->daddr;
 				iph->daddr = ip;
 				if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") <= 0) {
+					iph->daddr = old_ip;
 					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is not cniplist ip = %pI4, drop\n", DEBUG_UDP_ARG(iph,l4), id, &ip);
 					return NF_DROP;
 				}
