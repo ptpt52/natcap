@@ -96,6 +96,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"server_persist_timeout=%u\n"
 				"shadowsocks=%u\n"
 				"http_confusion=%u\n"
+				"cnipwhitelist_mode=%u\n"
 				"sproxy=%u\n"
 				"knock_port=%u\n"
 				"dns_server=%pI4:%u\n"
@@ -109,7 +110,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				auth_http_redirect_url,
 				htp_confusion_host,
 				macfilter_acl_str[macfilter], macfilter,
-				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout, shadowsocks, http_confusion, sproxy, ntohs(knock_port), &dns_server, ntohs(dns_port));
+				disabled, debug, encode_mode_str[encode_mode], ntohl(default_u_hash), server_persist_timeout, shadowsocks, http_confusion, cnipwhitelist_mode, sproxy, ntohs(knock_port), &dns_server, ntohs(dns_port));
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -300,6 +301,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		n = sscanf(data, "http_confusion=%u", &d);
 		if (n == 1) {
 			http_confusion = d;
+			goto done;
+		}
+	} else if (strncmp(data, "cnipwhitelist_mode=", 19) == 0) {
+		int d;
+		n = sscanf(data, "cnipwhitelist_mode=%u", &d);
+		if (n == 1) {
+			cnipwhitelist_mode = d;
 			goto done;
 		}
 	} else if (strncmp(data, "encode_http_only=", 17) == 0) {

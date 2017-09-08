@@ -31,6 +31,8 @@ MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
 
 unsigned int macfilter = 0;
 
+unsigned int cnipwhitelist_mode = 0;
+
 const char *macfilter_acl_str[NATCAP_ACL_MAX] = {
 	[NATCAP_ACL_NONE] = "none",
 	[NATCAP_ACL_ALLOW] = "allow",
@@ -397,7 +399,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		} else if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 || IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
-		} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0) {
+		} else if (cnipwhitelist_mode || IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0) {
 			if (shadowsocks && hooknum == NF_INET_PRE_ROUTING &&
 					(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(80) ||
 					 ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(443))) {
@@ -538,7 +540,8 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 || IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
-		} else if (IP_SET_test_dst_ip(state, in, out, skb, "udproxylist") > 0 ||
+		} else if (cnipwhitelist_mode ||
+				IP_SET_test_dst_ip(state, in, out, skb, "udproxylist") > 0 ||
 				IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0 ||
 				UDPH(l4)->dest == __constant_htons(443) ||
 				UDPH(l4)->dest == __constant_htons(80)) {

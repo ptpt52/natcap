@@ -10,6 +10,8 @@
 #include "natcap.h"
 
 extern unsigned int macfilter;
+extern unsigned int cnipwhitelist_mode;
+
 enum {
 	NATCAP_ACL_NONE,
 	NATCAP_ACL_ALLOW,
