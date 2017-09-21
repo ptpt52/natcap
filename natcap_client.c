@@ -1284,7 +1284,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				iph = ip_hdr(nskb);
 				l4 = (void *)iph + iph->ihl * 4;
 				iph->tot_len = htons(nskb->len);
-				UDPH(l4)->len = ntohs(ntohs(iph->tot_len) - iph->ihl * 4);
+				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
 				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFE0099));
 				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
@@ -1832,7 +1832,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				iph = ip_hdr(nskb);
 				l4 = (void *)iph + iph->ihl * 4;
 				iph->tot_len = htons(nskb->len);
-				UDPH(l4)->len = ntohs(ntohs(iph->tot_len) - iph->ihl * 4);
+				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
 				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFE0099));
 				set_byte4(l4 + sizeof(struct udphdr) + 4, dns_server);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
@@ -2202,14 +2202,16 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			int len = skb->len - iph->ihl * 4 - sizeof(struct udphdr);
 
 			id = ntohs(get_byte2(p + 0));
-			flags = get_byte2(p + 2);
-			qd_count = htons(get_byte2(p + 4));
-			an_count = htons(get_byte2(p + 6));
-			ns_count = htons(get_byte2(p + 8));
-			ar_count = htons(get_byte2(p + 10));
+			flags = ntohs(get_byte2(p + 2));
+			qd_count = ntohs(get_byte2(p + 4));
+			an_count = ntohs(get_byte2(p + 6));
+			ns_count = ntohs(get_byte2(p + 8));
+			ar_count = ntohs(get_byte2(p + 10));
 			NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, flags=0x%04x, qd=%u, an=%u, ns=%u, ar=%u\n",
 					DEBUG_UDP_ARG(iph,l4),
 					id, flags, qd_count, an_count, ns_count, ar_count);
+			if ((flags & 0xf) != 0)
+				return NF_DROP;
 
 			pos = 12;
 			for(i = 0; i < qd_count; i++) {
@@ -2245,13 +2247,13 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				if (pos + 1 >= len) {
 					break;
 				}
-				qtype = htons(get_byte2(p + pos));
+				qtype = ntohs(get_byte2(p + pos));
 				pos += 2;
 
 				if (pos + 1 >= len) {
 					break;
 				}
-				qclass = htons(get_byte2(p + pos));
+				qclass = ntohs(get_byte2(p + pos));
 				pos += 2;
 
 				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, qtype=%d, qclass=%d\n", DEBUG_UDP_ARG(iph,l4), id, qtype, qclass);
@@ -2291,25 +2293,25 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				if (pos + 1 >= len) {
 					break;
 				}
-				type = htons(get_byte2(p + pos));
+				type = ntohs(get_byte2(p + pos));
 				pos += 2;
 
 				if (pos + 1 >= len) {
 					break;
 				}
-				class = htons(get_byte2(p + pos));
+				class = ntohs(get_byte2(p + pos));
 				pos += 2;
 
 				if (pos + 3 >= len) {
 					break;
 				}
-				ttl = htonl(get_byte4(p + pos));
+				ttl = ntohl(get_byte4(p + pos));
 				pos += 4;
 
 				if (pos + 1 >= len) {
 					break;
 				}
-				rdlength = htons(get_byte2(p + pos));
+				rdlength = ntohs(get_byte2(p + pos));
 				pos += 2;
 
 				if (rdlength == 0 || pos + rdlength - 1 >= len) {
