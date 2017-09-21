@@ -2210,8 +2210,11 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, flags=0x%04x, qd=%u, an=%u, ns=%u, ar=%u\n",
 					DEBUG_UDP_ARG(iph,l4),
 					id, flags, qd_count, an_count, ns_count, ar_count);
-			if ((flags & 0xf) != 0)
+
+			if (!(IPS_NATCAP & ct->status) && (flags & 0xf) != 0) {
+				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS flags=%04x, drop\n", DEBUG_UDP_ARG(iph,l4), id, flags);
 				return NF_DROP;
+			}
 
 			pos = 12;
 			for(i = 0; i < qd_count; i++) {
