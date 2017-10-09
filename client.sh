@@ -20,7 +20,11 @@ iptables -t nat -A POSTROUTING -s 192.168.0.0/16 -j MASQUERADE
 ipset destroy cniplist
 ipset destroy gfwlist
 ipset destroy udproxylist
-ipset restore -f cniplist.set
+ipset create cniplist hash:net && {
+	cat cniplist.set | while read ip; do
+		ipset add cniplist $ip
+	done
+}
 ipset create gfwlist iphash
 ipset create udproxylist iphash
 ipset add udproxylist 8.8.8.8
