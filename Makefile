@@ -15,10 +15,7 @@ endif
 KERNELDIR ?= /lib/modules/$(KERNELRELEASE)/build
 KMAKE := $(MAKE) -C $(KERNELDIR) M=$(PWD)
 
-all: modules apps
-
-apps:
-	$(MAKE) -C natcapd
+all: modules
 
 modules:
 	$(KMAKE) modules
@@ -32,7 +29,4 @@ install: modules_install
 modules_clean:
 	$(KMAKE) clean
 
-apps_clean:
-	$(MAKE) -C natcapd clean
-
-clean: modules_clean apps_clean
+clean: modules_clean
