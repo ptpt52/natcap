@@ -35,7 +35,7 @@ git clone https://github.com/ptpt52/natcap.git
 Build and run as client
 ```sh
 cd natcap
-make
+make && make -C natcapd
 #edit client.sh change server line
 sudo ./client.sh
 ```
@@ -43,6 +43,6 @@ sudo ./client.sh
 Build and run as server
 ```sh
 cd natcap
-make
+make && make -C natcapd
 sudo ./server.sh
 ```
