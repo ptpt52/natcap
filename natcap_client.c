@@ -177,7 +177,7 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 
 	if (time_after(jiffies, server_jiffies + server_persist_timeout * HZ)) {
 		server_jiffies = jiffies;
-		server_index = prandom_u32();
+		server_index += 1 + prandom_u32();
 	}
 
 	//hash = server_index ^ ntohl(ip);
