@@ -74,6 +74,7 @@ const char *const mode_str[] = {
 };
 
 unsigned int encode_mode = TCP_ENCODE;
+unsigned int udp_encode_mode = UDP_ENCODE;
 const char *const encode_mode_str[] = {
 	[TCP_ENCODE] = "TCP",
 	[UDP_ENCODE] = "UDP",
@@ -1186,6 +1187,51 @@ struct natcap_session *natcap_session_get(struct nf_conn *ct)
 	}
 
 	return ns;
+}
+
+int natcap_udp_to_tcp_pack(struct sk_buff *skb, int m)
+{
+	struct iphdr *iph;
+	void *l4;
+
+	iph = ip_hdr(skb);
+
+	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+		return -ENOMEM;
+	}
+
+	if (skb_tailroom(skb) < sizeof(struct tcphdr) - sizeof(struct udphdr) && pskb_expand_head(skb, 0, sizeof(struct tcphdr) - sizeof(struct udphdr), GFP_ATOMIC)) {
+		NATCAP_ERROR("pskb_expand_head failed\n");
+		return -ENOMEM;
+	}
+	iph = ip_hdr(skb);
+	l4 = (void *)iph + iph->ihl * 4;
+
+	memmove((void *)UDPH(l4) + sizeof(struct tcphdr), (void *)UDPH(l4) + sizeof(struct udphdr), skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct udphdr));
+	iph->tot_len = htons(ntohs(iph->tot_len) + sizeof(struct tcphdr) - sizeof(struct udphdr));
+	skb->len += sizeof(struct tcphdr) - sizeof(struct udphdr);
+	skb->tail += sizeof(struct tcphdr) - sizeof(struct udphdr);
+	iph->protocol = IPPROTO_TCP;
+	skb->ip_summed = CHECKSUM_UNNECESSARY;
+
+	TCPH(l4)->seq = htonl(NATCAP_SEQ_ENCODE(jiffies, 0x0099));
+	TCPH(l4)->ack_seq = htonl(NATCAP_ACK_ENCODE(jiffies, 0x0099));
+	TCPH(l4)->res1 = 0;
+	TCPH(l4)->doff = 5;
+	TCPH(l4)->syn = 1;
+	TCPH(l4)->rst = 0;
+	TCPH(l4)->psh = 0;
+	TCPH(l4)->ack = !!m;
+	TCPH(l4)->fin = 0;
+	TCPH(l4)->urg = 0;
+	TCPH(l4)->ece = 0;
+	TCPH(l4)->cwr = 0;
+	TCPH(l4)->window = 65535;
+	TCPH(l4)->check = 0;
+	TCPH(l4)->urg_ptr = 0;
+
+	skb_rcsum_tcpudp(skb);
+	return 0;
 }
 
 int natcap_common_init(void)

@@ -45,6 +45,7 @@ extern unsigned int mode;
 extern const char *const mode_str[];
 
 extern unsigned int encode_mode;
+extern unsigned int udp_encode_mode;
 extern const char *const encode_mode_str[];
 
 extern unsigned int disabled;
@@ -348,6 +349,8 @@ extern unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 ma
 extern int natcap_session_init(struct nf_conn *ct, gfp_t gfp);
 extern struct natcap_session *natcap_session_get(struct nf_conn *ct);
 
+extern int natcap_udp_to_tcp_pack(struct sk_buff *skb, int m);
+
 extern int natcap_common_init(void);
 
 extern void natcap_common_exit(void);
@@ -474,5 +477,10 @@ static inline void nf_unregister_hooks(struct nf_hook_ops *reg, unsigned int n)
 	nf_unregister_net_hooks(&init_net, reg, n);
 }
 #endif
+
+#define NATCAP_SEQ_ENCODE(old, v) (((old) & 0x0000FFFF) | ((v) << 16))
+#define NATCAP_ACK_ENCODE(old, v) (((old) & 0xFFFF0000) | (v))
+#define NATCAP_SEQ_DECODE(seq) (((seq) >> 16) & 0x0000FFFF)
+#define NATCAP_ACK_DECODE(ack) ((ack) & 0x0000FFFF)
 
 #endif /* _NATCAP_COMMON_H_ */

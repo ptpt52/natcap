@@ -1356,6 +1356,10 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode);
 			skb_rcsum_tcpudp(skb);
 		}
+
+		if ((IPS_NATCAP_TCPENC & ct->status)) {
+			natcap_udp_to_tcp_pack(skb, 1);
+		}
 		return NF_ACCEPT;
 	}
 
@@ -1409,6 +1413,51 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
+	if (iph->protocol == IPPROTO_TCP) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+			return NF_ACCEPT;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+
+		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099 && NATCAP_ACK_DECODE(ntohl(TCPH(l4)->ack_seq)) == 0x0099) {
+			if (skb->ip_summed == CHECKSUM_NONE) {
+				if (skb_rcsum_verify(skb) != 0) {
+					NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": skb_rcsum_verify fail\n", DEBUG_UDP_ARG(iph,l4));
+					return NF_DROP;
+				}
+				skb->csum = 0;
+				skb->ip_summed = CHECKSUM_UNNECESSARY;
+			}
+
+			memmove((void *)UDPH(l4) + sizeof(struct udphdr), (void *)UDPH(l4) + sizeof(struct tcphdr), skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct tcphdr));
+			iph->tot_len = htons(ntohs(iph->tot_len) - (sizeof(struct tcphdr) - sizeof(struct udphdr)));
+			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
+			UDPH(l4)->check = CSUM_MANGLED_0;
+			skb->len -= sizeof(struct tcphdr) - sizeof(struct udphdr);
+			skb->tail -= sizeof(struct tcphdr) - sizeof(struct udphdr);
+			iph->protocol = IPPROTO_UDP;
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+			skb_rcsum_tcpudp(skb);
+
+			if (in)
+				net = dev_net(in);
+			else if (out)
+				net = dev_net(out);
+			ret = nf_conntrack_in(net, pf, hooknum, skb);
+			if (ret != NF_ACCEPT) {
+				return ret;
+			}
+			ct = nf_ct_get(skb, &ctinfo);
+			if (!ct) {
+				return NF_DROP;
+			}
+
+			if (!(IPS_NATCAP_TCPENC & ct->status) && !test_and_set_bit(IPS_NATCAP_TCPENC_BIT, &ct->status)) { /* first time in */
+				return NF_ACCEPT;
+			}
+		}
+	}
 	if (iph->protocol != IPPROTO_UDP) {
 		return NF_ACCEPT;
 	}
