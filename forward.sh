@@ -21,6 +21,6 @@ clean
 debug=3
 disabled=0
 server_persist_timeout=6
-server 45.76.97.203:65535-e
+server 1.2.3.4:65535-e
 EOF
 }
