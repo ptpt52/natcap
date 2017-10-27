@@ -456,10 +456,11 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				return NF_ACCEPT;
 			}
 			if (!nf_ct_is_confirmed(ct)) {
-				if (ipv4_is_lbcast(iph->saddr) || ipv4_is_lbcast(iph->daddr) ||
+				if (hooknum == NF_INET_PRE_ROUTING &&
+						(ipv4_is_lbcast(iph->saddr) || ipv4_is_lbcast(iph->daddr) ||
 						ipv4_is_loopback(iph->saddr) || ipv4_is_loopback(iph->daddr) ||
 						ipv4_is_multicast(iph->saddr) || ipv4_is_multicast(iph->daddr) ||
-						ipv4_is_zeronet(iph->saddr) || ipv4_is_zeronet(iph->daddr)) {
+						ipv4_is_zeronet(iph->saddr) || ipv4_is_zeronet(iph->daddr))) {
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
@@ -500,10 +501,11 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		if (UDPH(l4)->dest == __constant_htons(53)) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			if (!nf_ct_is_confirmed(ct)) {
-				if (ipv4_is_lbcast(iph->saddr) || ipv4_is_lbcast(iph->daddr) ||
+				if (hooknum == NF_INET_PRE_ROUTING &&
+						(ipv4_is_lbcast(iph->saddr) || ipv4_is_lbcast(iph->daddr) ||
 						ipv4_is_loopback(iph->saddr) || ipv4_is_loopback(iph->daddr) ||
 						ipv4_is_multicast(iph->saddr) || ipv4_is_multicast(iph->daddr) ||
-						ipv4_is_zeronet(iph->saddr) || ipv4_is_zeronet(iph->daddr)) {
+						ipv4_is_zeronet(iph->saddr) || ipv4_is_zeronet(iph->daddr))) {
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
@@ -565,10 +567,11 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 	}
 
 	if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
-		if (ipv4_is_lbcast(iph->saddr) || ipv4_is_lbcast(iph->daddr) ||
+		if (hooknum == NF_INET_PRE_ROUTING &&
+				(ipv4_is_lbcast(iph->saddr) || ipv4_is_lbcast(iph->daddr) ||
 				ipv4_is_loopback(iph->saddr) || ipv4_is_loopback(iph->daddr) ||
 				ipv4_is_multicast(iph->saddr) || ipv4_is_multicast(iph->daddr) ||
-				ipv4_is_zeronet(iph->saddr) || ipv4_is_zeronet(iph->daddr)) {
+				ipv4_is_zeronet(iph->saddr) || ipv4_is_zeronet(iph->daddr))) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
@@ -1591,14 +1594,6 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 		return NF_ACCEPT;
 	}
-	/* XXX I just confirm it first  */
-	ret = nf_conntrack_confirm(skb);
-	if (ret != NF_ACCEPT) {
-		if (ret != NF_STOLEN) {
-			consume_skb(skb);
-		}
-		return NF_ACCEPT;
-	}
 
 	master = nf_ct_get(skb, &ctinfo);
 	if (!master || master == ct) {
@@ -1629,6 +1624,15 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		if (!(IPS_NATCAP & master->status) && !test_and_set_bit(IPS_NATCAP_BIT, &master->status)) {
 			natcap_session_init(master, GFP_ATOMIC);
 		}
+	}
+
+	/* XXX I just confirm it first  */
+	ret = nf_conntrack_confirm(skb);
+	if (ret != NF_ACCEPT) {
+		if (ret != NF_STOLEN) {
+			consume_skb(skb);
+		}
+		return NF_ACCEPT;
 	}
 
 	if (master->master != ct) {

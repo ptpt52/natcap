@@ -1197,6 +1197,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	iph = ip_hdr(skb);
 
 	if (!ns) {
+		NATCAP_ERROR("ns is NULL\n");
 		return -EINVAL;
 	}
 
