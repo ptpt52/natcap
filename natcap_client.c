@@ -574,12 +574,14 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		}
 		if (iph->protocol == IPPROTO_TCP) {
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
-
 			if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
 				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
 			}
 		} else {
 			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+			if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
+			}
 		}
 		if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 			if (iph->protocol == IPPROTO_TCP) {
@@ -880,7 +882,10 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				nf_ct_put(ct);
 			}
 		}
-		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099 && NATCAP_ACK_DECODE(ntohl(TCPH(l4)->ack_seq)) == 0x0099) {
+		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099) {
+			struct natcap_session *ns;
+			unsigned int foreign_seq = ntohl(TCPH(l4)->seq);
+
 			if (skb->ip_summed == CHECKSUM_NONE) {
 				if (skb_rcsum_verify(skb) != 0) {
 					NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": skb_rcsum_verify fail\n", DEBUG_UDP_ARG(iph,l4));
@@ -914,8 +919,14 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			}
 
 			if (!(IPS_NATCAP_TCPENC & ct->status) && !test_and_set_bit(IPS_NATCAP_TCPENC_BIT, &ct->status)) { /* first time in */
-				return NF_ACCEPT;
+				natcap_session_init(ct, GFP_ATOMIC);
 			}
+			ns = natcap_session_get(ct);
+			if ((int)(ns->foreign_seq - foreign_seq) < 0) {
+				ns->foreign_seq = foreign_seq;
+			}
+
+			return NF_ACCEPT;
 		}
 	}
 	if (iph->protocol != IPPROTO_UDP)
@@ -1344,7 +1355,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 
 				if ((IPS_NATCAP_TCPENC & ct->status)) {
-					natcap_udp_to_tcp_pack(nskb, 0);
+					natcap_udp_to_tcp_pack(nskb, natcap_session_get(ct), 0);
 				}
 
 				NF_OKFN(nskb);
@@ -1381,7 +1392,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		}
 
 		if ((IPS_NATCAP_TCPENC & ct->status)) {
-			natcap_udp_to_tcp_pack(skb, 0);
+			natcap_udp_to_tcp_pack(skb, natcap_session_get(ct), 0);
 		}
 	}
 
@@ -1906,7 +1917,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 
 				if ((IPS_NATCAP_TCPENC & master->status)) {
-					natcap_udp_to_tcp_pack(nskb, 0);
+					natcap_udp_to_tcp_pack(nskb, natcap_session_get(master), 0);
 				}
 
 				NF_OKFN(nskb);
@@ -1944,7 +1955,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 
 		if ((IPS_NATCAP_TCPENC & master->status)) {
-			natcap_udp_to_tcp_pack(skb, 0);
+			natcap_udp_to_tcp_pack(skb, natcap_session_get(master), 0);
 		}
 
 		NF_OKFN(skb);

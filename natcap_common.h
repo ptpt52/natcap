@@ -349,7 +349,7 @@ extern unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 ma
 extern int natcap_session_init(struct nf_conn *ct, gfp_t gfp);
 extern struct natcap_session *natcap_session_get(struct nf_conn *ct);
 
-extern int natcap_udp_to_tcp_pack(struct sk_buff *skb, int m);
+extern int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m);
 
 extern int natcap_common_init(void);
 

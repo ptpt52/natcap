@@ -89,6 +89,8 @@ struct natcap_session {
 	__be16 new_source;
 	int tcp_seq_offset;
 	int tcp_ack_offset;
+	unsigned int foreign_seq;
+	unsigned int current_seq;
 };
 
 // test t1 < t2 return 1

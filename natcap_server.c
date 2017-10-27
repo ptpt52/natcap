@@ -1358,7 +1358,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 		}
 
 		if ((IPS_NATCAP_TCPENC & ct->status)) {
-			natcap_udp_to_tcp_pack(skb, 1);
+			natcap_udp_to_tcp_pack(skb, natcap_session_get(ct), 1);
 		}
 		return NF_ACCEPT;
 	}
@@ -1420,7 +1420,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099 && NATCAP_ACK_DECODE(ntohl(TCPH(l4)->ack_seq)) == 0x0099) {
+		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099) {
+			struct natcap_session *ns;
+			unsigned int foreign_seq = ntohl(TCPH(l4)->seq);
+
 			if (skb->ip_summed == CHECKSUM_NONE) {
 				if (skb_rcsum_verify(skb) != 0) {
 					NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": skb_rcsum_verify fail\n", DEBUG_UDP_ARG(iph,l4));
@@ -1454,8 +1457,14 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			}
 
 			if (!(IPS_NATCAP_TCPENC & ct->status) && !test_and_set_bit(IPS_NATCAP_TCPENC_BIT, &ct->status)) { /* first time in */
-				return NF_ACCEPT;
+				natcap_session_init(ct, GFP_ATOMIC);
 			}
+			ns = natcap_session_get(ct);
+			if ((int)(ns->foreign_seq - foreign_seq) < 0) {
+				ns->foreign_seq = foreign_seq;
+			}
+
+			return NF_ACCEPT;
 		}
 	}
 	if (iph->protocol != IPPROTO_UDP) {
