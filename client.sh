@@ -30,15 +30,15 @@ ipset create udproxylist iphash
 ipset add udproxylist 8.8.8.8
 
 # load && run
-# server is 47.88.231.224 for example
+# server is 1.2.3.4 for example
 # server line format: server ip.ip.ip.ip:port-X
 # X    ==> e,o
 #          e=encryption o=non-encryption
 # port ==> 65535,1-65535,0
 #          65535=Random port, 1-65534=Specific port, 0=Original port
-# .example line: server 47.88.231.224:65535-e
-# .example line: server 47.88.231.224:22-e
-# .example line: server 47.88.231.224:0-e
+# .example line: server 1.2.3.4:65535-e
+# .example line: server 1.2.3.4:22-e
+# .example line: server 1.2.3.4:0-e
 # sproxy=1 MUST make sure server running natcapd-server app
 rmmod natcap >/dev/null 2>&1
 ( modprobe natcap mode=0 || insmod ./natcap.ko mode=0 ) && {
@@ -49,6 +49,6 @@ disabled=0
 encode_mode=TCP
 server_persist_timeout=86400
 sproxy=1
-server 47.88.231.224:65535-e
+server 1.2.3.4:65535-e
 EOF
 }

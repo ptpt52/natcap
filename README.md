@@ -46,3 +46,8 @@ cd natcap
 make && make -C natcapd
 sudo ./server.sh
 ```
+
+## Donate
+Buy me a beer!
+
+[<img src="https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif">](https://paypal.me/ptpt52)
