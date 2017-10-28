@@ -94,6 +94,10 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
+		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099 && get_byte4(l4 + sizeof(struct tcphdr)) == __constant_htonl(0xFFFE0099)) {
+			goto __do_dnat;
+		}
+
 		if (!TCPH(l4)->syn || TCPH(l4)->ack) {
 			NATCAP_INFO("(FPCI)" DEBUG_TCP_FMT ": first packet in but not syn\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -128,6 +132,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
+__do_dnat:
 		if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in */
 			natcap_server_info_select(iph->daddr, TCPH(l4)->dest, &server);
 			if (server.ip == 0) {
@@ -135,11 +140,8 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
-			if (natcap_tcp_encode_fwdupdate(skb, TCPH(l4), &server) < 0) {
-				NATCAP_ERROR("(FPCI)" DEBUG_TCP_FMT ": natcap_tcp_encode_fwdupdate failed, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
-				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-				return NF_DROP;
-			}
+
+			natcap_tcp_encode_fwdupdate(skb, TCPH(l4), &server);
 
 			NATCAP_INFO("(FPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 			if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
@@ -200,7 +202,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 
 			if (!TCPH(l4 + 8)->syn || TCPH(l4 + 8)->ack) {
-				NATCAP_INFO("(FPCI)" DEBUG_UDP_FMT ": UDP first packet in but not syn\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_INFO("(FPCI)" DEBUG_UDP_FMT ": UDPENC TCP first packet in but not syn\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
 			}

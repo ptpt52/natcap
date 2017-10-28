@@ -1411,13 +1411,13 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 	iph = ip_hdr(skb);
 	if (iph->protocol == IPPROTO_TCP) {
-		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 4)) {
 			return NF_ACCEPT;
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099) {
+		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099 && get_byte4(l4 + sizeof(struct tcphdr)) == __constant_htonl(0xFFFE0099)) {
 			struct natcap_session *ns;
 			unsigned int foreign_seq = ntohl(TCPH(l4)->seq);
 
