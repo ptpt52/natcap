@@ -72,11 +72,9 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    auth_enabled=%u\n"
 				"#    debug=%u\n"
 				"#    server_persist_timeout=%u\n"
-				"#    shadowsocks=%u\n"
 				"#    http_confusion=%u\n"
 				"#    encode_http_only=%u\n"
 				"#    sproxy=%u\n"
-				"#    enable_hosts=%u\n"
 				"#    knock_port=%u\n"
 				"#    natcap_redirect_port=%u\n"
 				"#    flow_total_tx_bytes=%llu\n"
@@ -94,7 +92,6 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"udp_encode_mode=%s\n"
 				"u_hash=%u\n"
 				"server_persist_timeout=%u\n"
-				"shadowsocks=%u\n"
 				"http_confusion=%u\n"
 				"cnipwhitelist_mode=%u\n"
 				"sproxy=%u\n"
@@ -104,13 +101,13 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				mode_str[mode], mode,
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
-				server_seed, disabled, auth_enabled, debug, server_persist_timeout, shadowsocks, http_confusion, encode_http_only, sproxy, enable_hosts, ntohs(knock_port),
+				server_seed, disabled, auth_enabled, debug, server_persist_timeout, http_confusion, encode_http_only, sproxy, ntohs(knock_port),
 				ntohs(natcap_redirect_port),
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
 				htp_confusion_host,
 				macfilter_acl_str[macfilter], macfilter,
-				disabled, debug, encode_mode_str[encode_mode], encode_mode_str[udp_encode_mode], ntohl(default_u_hash), server_persist_timeout, shadowsocks, http_confusion, cnipwhitelist_mode, sproxy, ntohs(knock_port), &dns_server, ntohs(dns_port));
+				disabled, debug, encode_mode_str[encode_mode], encode_mode_str[udp_encode_mode], ntohl(default_u_hash), server_persist_timeout, http_confusion, cnipwhitelist_mode, sproxy, ntohs(knock_port), &dns_server, ntohs(dns_port));
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -289,13 +286,6 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			server_persist_timeout = d;
 			goto done;
 		}
-	} else if (strncmp(data, "shadowsocks=", 12) == 0) {
-		int d;
-		n = sscanf(data, "shadowsocks=%u", &d);
-		if (n == 1) {
-			shadowsocks = d;
-			goto done;
-		}
 	} else if (strncmp(data, "http_confusion=", 15) == 0) {
 		int d;
 		n = sscanf(data, "http_confusion=%u", &d);
@@ -332,13 +322,6 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				macfilter = d;
 				goto done;
 			}
-		}
-	} else if (strncmp(data, "enable_hosts=", 13) == 0) {
-		int d;
-		n = sscanf(data, "enable_hosts=%u", &d);
-		if (n == 1) {
-			enable_hosts = d;
-			goto done;
 		}
 	} else if (strncmp(data, "encode_mode=", 12) == 0) {
 		if (strncmp(data + 12, encode_mode_str[TCP_ENCODE], strlen(encode_mode_str[TCP_ENCODE])) == 0) {

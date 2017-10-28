@@ -1234,9 +1234,6 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
 		if (iph->protocol == IPPROTO_TCP) {
 			if ((IPS_NATCAP_AUTH & ct->status)) {
-				if (TCPH(l4)->dest == __constant_htons(8388)) {
-					return NF_DROP;
-				}
 				if (TCPH(l4)->dest == natcap_redirect_port) {
 					return natcap_try_http_redirect(iph, skb, ct, in);
 				}

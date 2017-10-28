@@ -41,9 +41,7 @@ const char *macfilter_acl_str[NATCAP_ACL_MAX] = {
 
 unsigned int encode_http_only = 0;
 unsigned int http_confusion = 0;
-unsigned int shadowsocks = 0;
 unsigned int sproxy = 0;
-unsigned int enable_hosts = 0;
 unsigned int dns_server = __constant_htonl((8<<24)|(8<<16)|(8<<8)|(8<<0));
 unsigned short dns_port = __constant_htons(53);
 
@@ -400,22 +398,6 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		} else if (cnipwhitelist_mode || IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0) {
-			if (shadowsocks && hooknum == NF_INET_PRE_ROUTING &&
-					(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(80) ||
-					 ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(443))) {
-				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection match gfwlist, use shadowsocks\n", DEBUG_TCP_ARG(iph,l4));
-				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-				return NF_ACCEPT;
-			}
-			if (enable_hosts &&
-					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(443) &&
-					IP_SET_test_dst_ip(state, in, out, skb, "gfwhosts") > 0) {
-				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection match gfwlist, use natcapd hosts\n", DEBUG_TCP_ARG(iph,l4));
-				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-				return NF_ACCEPT;
-			}
 			if (natcap_redirect_port != 0 && hooknum == NF_INET_PRE_ROUTING) {
 				__be32 newdst = 0;
 				struct in_device *indev;
