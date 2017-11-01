@@ -274,6 +274,7 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	if (protocol == IPPROTO_UDP) {
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
 		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(0xFFFF0099));
+		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		ntcph = (struct tcphdr *)((char *)ntcph + 8);
 	}
 	ntcph->seq = otcph->ack_seq;
@@ -1270,6 +1271,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			memmove((void *)UDPH(l4) + 4 + 8, (void *)UDPH(l4) + 4, offlen);
 			iph->tot_len = htons(ntohs(iph->tot_len) + 8);
 			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
+			UDPH(l4)->check = CSUM_MANGLED_0;
 			skb->len += 8;
 			skb->tail += 8;
 			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(0xFFFF0099));
@@ -1830,6 +1832,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			memmove((void *)UDPH(l4) + 4 + 8, (void *)UDPH(l4) + 4, offlen);
 			iph->tot_len = htons(ntohs(iph->tot_len) + 8);
 			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
+			UDPH(l4)->check = CSUM_MANGLED_0;
 			skb->len += 8;
 			skb->tail += 8;
 			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(0xFFFF0099));

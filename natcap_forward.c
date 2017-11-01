@@ -388,6 +388,7 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 			memmove((void *)UDPH(l4) + 4 + 8, (void *)UDPH(l4) + 4, offlen);
 			iph->tot_len = htons(ntohs(iph->tot_len) + 8);
 			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
+			UDPH(l4)->check = CSUM_MANGLED_0;
 			skb->len += 8;
 			skb->tail += 8;
 			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(0xFFFF0099));
