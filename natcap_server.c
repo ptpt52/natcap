@@ -116,7 +116,7 @@ static inline int natcap_auth(const struct net_device *in,
 	return E_NATCAP_OK;
 }
 
-static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_buff *oskb) {
+static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_buff *oskb, struct nf_conn *ct) {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
 	struct iphdr *niph, *oiph;
@@ -173,6 +173,10 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
+
+	if ((IPS_NATCAP_TCPENC & ct->status)) {
+		natcap_udp_to_tcp_pack(nskb, natcap_session_get(ct), 1);
+	}
 
 	nf_reset(nskb);
 	dev_queue_xmit(nskb);
@@ -1108,7 +1112,7 @@ do_dnat_setup:
 
 			NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
 			//reply ACK pkt
-			natcap_udp_reply_cfm(in, skb);
+			natcap_udp_reply_cfm(in, skb, ct);
 
 			server.ip = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4);
 			server.port = get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 8);
