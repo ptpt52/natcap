@@ -240,7 +240,10 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			dst.port = htons(e);
 			dst.encryption = !!(f == 'e');
 			if ((err = natcap_server_info_add(&dst)) == 0)
+			{
+				natcap_server_info_change(1);
 				goto done;
+			}
 			NATCAP_println("natcap_server_add() failed ret=%d", err);
 		}
 	} else if (strncmp(data, "delete", 6) == 0) {
