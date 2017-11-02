@@ -81,6 +81,7 @@ struct natcap_server_info {
 };
 
 static struct natcap_server_info natcap_server_info;
+static unsigned int server_index = 0;
 
 void natcap_server_info_cleanup(void)
 {
@@ -149,6 +150,14 @@ int natcap_server_info_delete(const struct tuple *dst)
 	return 0;
 }
 
+const struct tuple *natcap_server_info_current(void)
+{
+	static struct tuple _tuple = {0};
+	if (natcap_server_info.server_count[natcap_server_info.active_index] > 0)
+		return &natcap_server_info.server[natcap_server_info.active_index][server_index % natcap_server_info.server_count[natcap_server_info.active_index]];
+	return &_tuple;
+}
+
 void *natcap_server_info_get(loff_t idx)
 {
 	if (idx < natcap_server_info.server_count[natcap_server_info.active_index])
@@ -159,7 +168,6 @@ void *natcap_server_info_get(loff_t idx)
 void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 {
 	static atomic_t server_port = ATOMIC_INIT(0);
-	static unsigned int server_index = 0;
 	static unsigned long server_jiffies = 0;
 	struct natcap_server_info *nsi = &natcap_server_info;
 	unsigned int m = nsi->active_index;
@@ -173,14 +181,13 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 	if (count == 0)
 		return;
 
-	if (time_after(jiffies, server_jiffies + server_persist_timeout * HZ)) {
+	if (time_after(jiffies, server_jiffies + (server_persist_timeout / 2 + jiffies % (server_persist_timeout | 1)) * HZ)) {
 		server_jiffies = jiffies;
 		server_index += 1 + prandom_u32();
 	}
 
 	//hash = server_index ^ ntohl(ip);
-	hash = server_index;
-	hash = hash % count;
+	hash = server_index % count;
 
 	tuple_copy(dst, &nsi->server[m][hash]);
 	if (dst->port == __constant_htons(0)) {

@@ -65,6 +65,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#\n"
 				"# Info:\n"
 				"#    mode=%s(%u)\n"
+				"#    current_server=" TUPLE_FMT "\n"
 				"#    default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n"
 				"#    default_u_hash=%u\n"
 				"#    server_seed=%u\n"
@@ -99,6 +100,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"dns_server=%pI4:%u\n"
 				"\n",
 				mode_str[mode], mode,
+				TUPLE_ARG(natcap_server_info_current()),
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
 				server_seed, disabled, auth_enabled, debug, server_persist_timeout, http_confusion, encode_http_only, sproxy, ntohs(knock_port),
