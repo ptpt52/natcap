@@ -181,7 +181,7 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 	if (count == 0)
 		return;
 
-	if (time_after(jiffies, server_jiffies + (server_persist_timeout / 2 + jiffies % (server_persist_timeout | 1)) * HZ)) {
+	if (server_jiffies == 0 || time_after(jiffies, server_jiffies + (server_persist_timeout / 2 + jiffies % (server_persist_timeout | 1)) * HZ)) {
 		server_jiffies = jiffies;
 		server_index += 1 + prandom_u32();
 	}
