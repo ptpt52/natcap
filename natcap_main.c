@@ -249,6 +249,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		}
 	} else if (strncmp(data, "change_server", 13) == 0) {
 		natcap_server_info_change(1);
+		goto done;
 	} else if (strncmp(data, "delete", 6) == 0) {
 		unsigned int a, b, c, d, e;
 		char f;
