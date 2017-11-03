@@ -62,6 +62,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    server [ip]:[port]-[e/o] -- add one server\n"
 				"#    delete [ip]:[port]-[e/o] -- delete one server\n"
 				"#    clean -- remove all existing server(s)\n"
+				"#    change_server -- change current server\n"
 				"#\n"
 				"# Info:\n"
 				"#    mode=%s(%u)\n"
@@ -246,6 +247,8 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			}
 			NATCAP_println("natcap_server_add() failed ret=%d", err);
 		}
+	} else if (strncmp(data, "change_server", 13) == 0) {
+		natcap_server_info_change(1);
 	} else if (strncmp(data, "delete", 6) == 0) {
 		unsigned int a, b, c, d, e;
 		char f;
