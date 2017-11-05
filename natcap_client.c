@@ -876,13 +876,15 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				nf_ct_put(ct);
 			}
 		}
-		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099) {
+		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099 &&
+				TCPH(l4)->doff == 5 &&
+				TCPH(l4)->window == 65535) {
 			struct natcap_session *ns;
 			unsigned int foreign_seq = ntohl(TCPH(l4)->seq);
 
 			if (skb->ip_summed == CHECKSUM_NONE) {
 				if (skb_rcsum_verify(skb) != 0) {
-					NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": skb_rcsum_verify fail\n", DEBUG_UDP_ARG(iph,l4));
+					NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": skb_rcsum_verify fail\n", DEBUG_TCP_ARG(iph,l4));
 					return NF_DROP;
 				}
 				skb->csum = 0;
