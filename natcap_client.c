@@ -50,6 +50,8 @@ unsigned char default_mac_addr[ETH_ALEN];
 static void default_mac_addr_init(void)
 {
 	struct net_device *dev;
+
+	memset(default_mac_addr, 0, ETH_ALEN);
 	dev = first_net_device(&init_net);
 	while (dev) {
 		if (dev->type == ARPHRD_ETHER) {
