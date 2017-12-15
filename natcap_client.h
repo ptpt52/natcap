@@ -9,7 +9,6 @@
 #include <linux/if_ether.h>
 #include "natcap.h"
 
-extern unsigned int macfilter;
 extern unsigned int cnipwhitelist_mode;
 
 enum {
@@ -19,7 +18,11 @@ enum {
 	NATCAP_ACL_MAX
 };
 
+extern unsigned int macfilter;
 extern const char *macfilter_acl_str[NATCAP_ACL_MAX];
+
+extern unsigned int ipfilter;
+extern const char *ipfilter_acl_str[NATCAP_ACL_MAX];
 
 extern unsigned int server_persist_timeout;
 extern unsigned int encode_http_only;

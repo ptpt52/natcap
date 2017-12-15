@@ -84,6 +84,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    auth_http_redirect_url=%s\n"
 				"#    htp_confusion_host=%s\n"
 				"#    macfilter=%s(%u)\n"
+				"#    ipfilter=%s(%u)\n"
 				"#\n"
 				"# Reload cmd:\n"
 				"\n"
@@ -110,6 +111,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				auth_http_redirect_url,
 				htp_confusion_host,
 				macfilter_acl_str[macfilter], macfilter,
+				ipfilter_acl_str[ipfilter], ipfilter,
 				disabled, debug, encode_mode_str[encode_mode], encode_mode_str[udp_encode_mode], ntohl(default_u_hash), server_persist_timeout, http_confusion, cnipwhitelist_mode, sproxy, ntohs(knock_port), &dns_server, ntohs(dns_port));
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
@@ -329,6 +331,15 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		if (n == 1) {
 			if (d == NATCAP_ACL_NONE || d == NATCAP_ACL_ALLOW || d == NATCAP_ACL_DENY) {
 				macfilter = d;
+				goto done;
+			}
+		}
+	} else if (strncmp(data, "ipfilter=", 9) == 0) {
+		int d;
+		n = sscanf(data, "ipfilter=%u", &d);
+		if (n == 1) {
+			if (d == NATCAP_ACL_NONE || d == NATCAP_ACL_ALLOW || d == NATCAP_ACL_DENY) {
+				ipfilter = d;
 				goto done;
 			}
 		}
