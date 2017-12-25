@@ -1100,8 +1100,6 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	flow_total_tx_bytes += skb->len;
-
 	if (iph->protocol == IPPROTO_TCP) {
 		struct sk_buff *skb2 = NULL;
 		struct sk_buff *skb_htp = NULL;
@@ -1235,6 +1233,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 		if (!(IPS_NATCAP_UDPENC & ct->status)) {
 			if (skb2) {
+				flow_total_tx_bytes += skb2->len;
 				NF_OKFN(skb2);
 			}
 			if (skb_htp) {
@@ -1244,10 +1243,12 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 					consume_skb(skb_htp);
 					return ret;
 				}
+				flow_total_tx_bytes += skb->len + skb_htp->len;
 				NF_OKFN(skb);
 				NF_OKFN(skb_htp);
 				return NF_STOLEN;
 			}
+			flow_total_tx_bytes += skb->len;
 			return NF_ACCEPT;
 		}
 
@@ -1311,6 +1312,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 			NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 
+			flow_total_tx_bytes += skb->len;
 			NF_OKFN(skb);
 
 			skb = nskb;
@@ -1371,6 +1373,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 					natcap_udp_to_tcp_pack(nskb, natcap_session_get(ct), 0);
 				}
 
+				flow_total_tx_bytes += nskb->len;
 				NF_OKFN(nskb);
 			} else {
 				int offlen;
@@ -1409,6 +1412,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		}
 	}
 
+	flow_total_tx_bytes += skb->len;
 	return NF_ACCEPT;
 }
 
@@ -1810,13 +1814,15 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": after encode\n", DEBUG_TCP_ARG(iph,l4));
 
 		if (!(IPS_NATCAP_UDPENC & master->status)) {
-			flow_total_tx_bytes += skb->len;
 			if (skb2) {
+				flow_total_tx_bytes += skb2->len;
 				NF_OKFN(skb2);
 			}
+			flow_total_tx_bytes += skb->len;
 			NF_OKFN(skb);
 			if (skb_htp) {
 				ns->tcp_seq_offset = 0;
+				flow_total_tx_bytes += skb_htp->len;
 				NF_OKFN(skb_htp);
 			}
 			goto out;
@@ -1869,10 +1875,10 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
 			skb->next = NULL;
-			flow_total_tx_bytes += skb->len;
 
 			NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 
+			flow_total_tx_bytes += skb->len;
 			NF_OKFN(skb);
 
 			skb = nskb;
@@ -1935,6 +1941,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 					natcap_udp_to_tcp_pack(nskb, natcap_session_get(master), 0);
 				}
 
+				flow_total_tx_bytes += nskb->len;
 				NF_OKFN(nskb);
 			} else {
 				int offlen;
@@ -1973,6 +1980,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			natcap_udp_to_tcp_pack(skb, natcap_session_get(master), 0);
 		}
 
+		flow_total_tx_bytes += skb->len;
 		NF_OKFN(skb);
 	}
 
