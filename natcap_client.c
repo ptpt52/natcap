@@ -54,7 +54,7 @@ int natcap_tx_speed_get(void)
 	return natcap_tx_speed;
 }
 
-static int natcap_tx_flow_ctrl(struct sk_buff *skb)
+static int natcap_tx_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct)
 {
 	int feed_tokens;
 	int tokens_after_feed;
@@ -64,13 +64,13 @@ static int natcap_tx_flow_ctrl(struct sk_buff *skb)
 	int len = skb->len;
 	struct iphdr *iph = ip_hdr(skb);
 	void *l4 = (void *)iph + iph->ihl * 4;
+	//speed up for UDP/TCP 53
+	if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53)) {
+		return 0;
+	}
 	if (iph->protocol == IPPROTO_TCP) {
 		len -= iph->ihl * 4 + TCPH(l4)->doff * 4;
 	} else if (iph->protocol == IPPROTO_UDP) {
-		//speed up for UDP 53
-		if (UDPH(l4)->dest == __constant_htons(53)) {
-			return 0;
-		}
 		len -= iph->ihl * 4 + sizeof(struct udphdr);
 	}
 	if (len <= 0) {
@@ -1185,7 +1185,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (natcap_tx_flow_ctrl(skb) < 0) {
+	if (natcap_tx_flow_ctrl(skb, ct) < 0) {
 		return NF_DROP;
 	}
 
@@ -1593,7 +1593,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		return ret;
 	}
 
-	if (natcap_tx_flow_ctrl(skb) < 0) {
+	if (natcap_tx_flow_ctrl(skb, ct) < 0) {
 		return NF_DROP;
 	}
 
