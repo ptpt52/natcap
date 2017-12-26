@@ -29,6 +29,89 @@ unsigned int server_persist_timeout = 0;
 module_param(server_persist_timeout, int, 0);
 MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
 
+static int natcap_tx_speed = 0;
+static struct natcap_token_ctrl tx_ntc;
+static void natcap_tx_ntc_init(void)
+{
+	spin_lock_init(&tx_ntc.lock);
+	tx_ntc.tokens = 0;
+	tx_ntc.tokens_per_jiffy = 0;
+	tx_ntc.jiffies = 0;
+}
+
+void natcap_tx_speed_set(int speed)
+{
+	natcap_tx_speed = speed;
+	spin_lock_bh(&tx_ntc.lock);
+	tx_ntc.tokens = 0;
+	tx_ntc.tokens_per_jiffy = natcap_tx_speed / HZ;
+	tx_ntc.jiffies = jiffies;
+	spin_unlock_bh(&tx_ntc.lock);
+}
+
+int natcap_tx_speed_get(void)
+{
+	return natcap_tx_speed;
+}
+
+static int natcap_tx_flow_ctrl(struct sk_buff *skb)
+{
+	int feed_tokens;
+	int tokens_after_feed;
+	unsigned long feed_jiffies = 0;
+	unsigned long current_jiffies;
+	int ret = 0;
+	int len = skb->len;
+	struct iphdr *iph = ip_hdr(skb);
+	void *l4 = (void *)iph + iph->ihl * 4;
+	if (iph->protocol == IPPROTO_TCP) {
+		len -= iph->ihl * 4 + TCPH(l4)->doff * 4;
+	} else if (iph->protocol == IPPROTO_UDP) {
+		len -= iph->ihl * 4 + sizeof(struct udphdr);
+	}
+	if (len <= 0) {
+		return 0;
+	}
+
+	spin_lock_bh(&tx_ntc.lock);
+	if (tx_ntc.tokens_per_jiffy == 0) {
+		ret = 0;
+		goto out;
+	}
+
+	tx_ntc.tokens -= len;
+	if (tx_ntc.tokens >= 0) {
+		ret = tx_ntc.tokens;
+		goto out;
+	}
+
+	current_jiffies = jiffies;
+	if (current_jiffies > tx_ntc.jiffies) {
+		feed_jiffies = current_jiffies - tx_ntc.jiffies;
+	} else {
+		feed_jiffies = tx_ntc.jiffies - current_jiffies;
+	}
+
+	if (feed_jiffies > HZ) {
+		feed_jiffies = HZ;
+	}
+	feed_tokens = tx_ntc.tokens_per_jiffy * feed_jiffies;
+	tokens_after_feed = tx_ntc.tokens + feed_tokens;
+	if (tokens_after_feed < 0) {
+		ret = tokens_after_feed;
+		goto out;
+	}
+
+	tx_ntc.tokens = tokens_after_feed;
+	tx_ntc.jiffies = current_jiffies;
+
+	ret = tx_ntc.tokens;
+
+out:
+	spin_unlock_bh(&tx_ntc.lock);
+	return ret;
+}
+
 unsigned int cnipwhitelist_mode = 0;
 
 unsigned int macfilter = 0;
@@ -1100,6 +1183,10 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
+	if (natcap_tx_flow_ctrl(skb) < 0) {
+		return NF_DROP;
+	}
+
 	if (iph->protocol == IPPROTO_TCP) {
 		struct sk_buff *skb2 = NULL;
 		struct sk_buff *skb_htp = NULL;
@@ -1504,7 +1591,11 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		return ret;
 	}
 
-	skb = skb_copy(skb, GFP_ATOMIC);
+	if (natcap_tx_flow_ctrl(skb) < 0) {
+		return NF_DROP;
+	}
+
+	skb = skb_copy(skb_orig, GFP_ATOMIC);
 	if (skb == NULL) {
 		NATCAP_ERROR("alloc_skb fail\n");
 		return NF_ACCEPT;
@@ -2578,6 +2669,8 @@ int natcap_client_init(void)
 	int ret = 0;
 
 	need_conntrack();
+
+	natcap_tx_ntc_init();
 
 	natcap_server_info_cleanup();
 	default_mac_addr_init();

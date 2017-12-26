@@ -49,4 +49,15 @@ const struct tuple *natcap_server_info_current(void);
 int natcap_client_init(void);
 void natcap_client_exit(void);
 
+struct natcap_token_ctrl {
+	int tokens;
+	int tokens_per_jiffy;
+	unsigned long jiffies;
+	spinlock_t lock;
+};
+
+extern void natcap_tx_speed_set(int speed);
+
+extern int natcap_tx_speed_get(void);
+
 #endif /* _NATCAP_CLIENT_H_ */

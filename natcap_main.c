@@ -74,6 +74,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    auth_enabled=%u\n"
 				"#    debug=%u\n"
 				"#    server_persist_timeout=%u\n"
+				"#    tx_speed_limit=%d\n"
 				"#    http_confusion=%u\n"
 				"#    encode_http_only=%u\n"
 				"#    sproxy=%u\n"
@@ -105,14 +106,17 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				TUPLE_ARG(natcap_server_info_current()),
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
-				server_seed, disabled, auth_enabled, debug, server_persist_timeout, http_confusion, encode_http_only, sproxy, ntohs(knock_port),
+				server_seed, disabled, auth_enabled, debug, server_persist_timeout,
+				natcap_tx_speed_get(),
+				http_confusion, encode_http_only, sproxy, ntohs(knock_port),
 				ntohs(natcap_redirect_port),
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
 				htp_confusion_host,
 				macfilter_acl_str[macfilter], macfilter,
 				ipfilter_acl_str[ipfilter], ipfilter,
-				disabled, debug, encode_mode_str[encode_mode], encode_mode_str[udp_encode_mode], ntohl(default_u_hash), server_persist_timeout, http_confusion, cnipwhitelist_mode, sproxy, ntohs(knock_port), &dns_server, ntohs(dns_port));
+				disabled, debug, encode_mode_str[encode_mode], encode_mode_str[udp_encode_mode], ntohl(default_u_hash), server_persist_timeout,
+				http_confusion, cnipwhitelist_mode, sproxy, ntohs(knock_port), &dns_server, ntohs(dns_port));
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -295,6 +299,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		n = sscanf(data, "server_persist_timeout=%u", &d);
 		if (n == 1) {
 			server_persist_timeout = d;
+			goto done;
+		}
+	} else if (strncmp(data, "tx_speed_limit=", 15) == 0) {
+		int d;
+		n = sscanf(data, "tx_speed_limit=%d", &d);
+		if (n == 1) {
+			natcap_tx_speed_set(d);
 			goto done;
 		}
 	} else if (strncmp(data, "http_confusion=", 15) == 0) {
