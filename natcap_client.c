@@ -67,6 +67,10 @@ static int natcap_tx_flow_ctrl(struct sk_buff *skb)
 	if (iph->protocol == IPPROTO_TCP) {
 		len -= iph->ihl * 4 + TCPH(l4)->doff * 4;
 	} else if (iph->protocol == IPPROTO_UDP) {
+		//speed up for UDP 53
+		if (UDPH(l4)->dest == __constant_htons(53)) {
+			return 0;
+		}
 		len -= iph->ihl * 4 + sizeof(struct udphdr);
 	}
 	if (len <= 0) {
