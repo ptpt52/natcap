@@ -76,13 +76,11 @@ static int natcap_tx_flow_ctrl(struct sk_buff *skb)
 	if (len <= 0) {
 		return 0;
 	}
-
-	spin_lock_bh(&tx_ntc.lock);
 	if (tx_ntc.tokens_per_jiffy == 0) {
-		ret = 0;
-		goto out;
+		return 0;
 	}
 
+	spin_lock_bh(&tx_ntc.lock);
 	tx_ntc.tokens -= len;
 	if (tx_ntc.tokens >= 0) {
 		ret = tx_ntc.tokens;
