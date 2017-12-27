@@ -1424,9 +1424,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099 &&
-				TCPH(l4)->doff == 5 &&
-				TCPH(l4)->window == 65535 &&
+		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099 && TCPH(l4)->doff == 5 &&
 				get_byte4(l4 + sizeof(struct tcphdr)) == __constant_htonl(0xFFFE0099)) {
 			struct natcap_session *ns;
 			unsigned int foreign_seq = ntohl(TCPH(l4)->seq);

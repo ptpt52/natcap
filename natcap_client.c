@@ -977,9 +977,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				nf_ct_put(ct);
 			}
 		}
-		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099 &&
-				TCPH(l4)->doff == 5 &&
-				TCPH(l4)->window == 65535) {
+		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099 && TCPH(l4)->doff == 5) {
 			struct natcap_session *ns;
 			unsigned int foreign_seq = ntohl(TCPH(l4)->seq);
 
