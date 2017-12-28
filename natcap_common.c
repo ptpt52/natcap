@@ -205,7 +205,7 @@ int skb_rcsum_verify(struct sk_buff *skb)
 	int len = ntohs(iph->tot_len);
 	int ret = 0;
 	__sum16 l3_sum, l4_sum;
-	__sum16 skbcsum;
+	__wsum skbcsum;
 
 	if (skb->len < len) {
 		return -1;
@@ -266,6 +266,7 @@ int skb_rcsum_tcpudp(struct sk_buff *skb)
 {
 	struct iphdr *iph = ip_hdr(skb);
 	int len = ntohs(iph->tot_len);
+	__wsum skbcsum;
 
 	if (skb->len < len) {
 		return -1;
@@ -287,8 +288,8 @@ int skb_rcsum_tcpudp(struct sk_buff *skb)
 			iph->check = 0;
 			iph->check = ip_fast_csum(iph, iph->ihl);
 			tcph->check = 0;
-			skb->csum = skb_checksum(skb, iph->ihl * 4, len - iph->ihl * 4, 0);
-			tcph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, len - iph->ihl * 4, iph->protocol, skb->csum);
+			skbcsum = skb_checksum(skb, iph->ihl * 4, len - iph->ihl * 4, 0);
+			tcph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, len - iph->ihl * 4, iph->protocol, skbcsum);
 			if (skb->ip_summed == CHECKSUM_COMPLETE) {
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
 			}
@@ -308,8 +309,8 @@ int skb_rcsum_tcpudp(struct sk_buff *skb)
 			iph->check = ip_fast_csum(iph, iph->ihl);
 			if (udph->check) {
 				udph->check = 0;
-				skb->csum = skb_checksum(skb, iph->ihl * 4, len - iph->ihl * 4, 0);
-				udph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, len - iph->ihl * 4, iph->protocol, skb->csum);
+				skbcsum = skb_checksum(skb, iph->ihl * 4, len - iph->ihl * 4, 0);
+				udph->check = csum_tcpudp_magic(iph->saddr, iph->daddr, len - iph->ihl * 4, iph->protocol, skbcsum);
 				if (udph->check == 0)
 					udph->check = CSUM_MANGLED_0;
 			}
