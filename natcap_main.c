@@ -59,6 +59,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    disabled=Number -- set disable/enable\n"
 				"#    debug=Number -- set debug value\n"
 				"#    encode_mode=[TCP/UDP] -- set encode mode\n"
+				"#    udp_encode_mode=[TCP/UDP] -- set UDP encode mode\n"
 				"#    server [ip]:[port]-[e/o] -- add one server\n"
 				"#    delete [ip]:[port]-[e/o] -- delete one server\n"
 				"#    clean -- remove all existing server(s)\n"
@@ -68,13 +69,11 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    mode=%s(%u)\n"
 				"#    current_server=" TUPLE_FMT "\n"
 				"#    default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n"
-				"#    default_u_hash=%u\n"
+				"#    u_hash=%u\n"
 				"#    server_seed=%u\n"
 				"#    disabled=%u\n"
 				"#    auth_enabled=%u\n"
-				"#    debug=%u\n"
-				"#    server_persist_timeout=%u\n"
-				"#    tx_speed_limit=%d\n"
+				"#    tx_speed_limit=%d B/s\n"
 				"#    http_confusion=%u\n"
 				"#    encode_http_only=%u\n"
 				"#    sproxy=%u\n"
@@ -94,19 +93,15 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"debug=%u\n"
 				"encode_mode=%s\n"
 				"udp_encode_mode=%s\n"
-				"u_hash=%u\n"
 				"server_persist_timeout=%u\n"
-				"http_confusion=%u\n"
 				"cnipwhitelist_mode=%u\n"
-				"sproxy=%u\n"
-				"knock_port=%u\n"
 				"dns_server=%pI4:%u\n"
 				"\n",
 				mode_str[mode], mode,
 				TUPLE_ARG(natcap_server_info_current()),
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
-				server_seed, disabled, auth_enabled, debug, server_persist_timeout,
+				server_seed, disabled, auth_enabled,
 				natcap_tx_speed_get(),
 				http_confusion, encode_http_only, sproxy, ntohs(knock_port),
 				ntohs(natcap_redirect_port),
@@ -115,8 +110,8 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				htp_confusion_host,
 				macfilter_acl_str[macfilter], macfilter,
 				ipfilter_acl_str[ipfilter], ipfilter,
-				disabled, debug, encode_mode_str[encode_mode], encode_mode_str[udp_encode_mode], ntohl(default_u_hash), server_persist_timeout,
-				http_confusion, cnipwhitelist_mode, sproxy, ntohs(knock_port), &dns_server, ntohs(dns_port));
+				disabled, debug, encode_mode_str[encode_mode], encode_mode_str[udp_encode_mode], server_persist_timeout,
+				cnipwhitelist_mode, &dns_server, ntohs(dns_port));
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -219,59 +214,69 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	}
 
 	if (strncmp(data, "clean", 5) == 0) {
-		natcap_server_info_cleanup();
-		goto done;
-	} else if (strncmp(data, "dns_server=", 11) == 0) {
-		unsigned int a, b, c, d, e;
-		n = sscanf(data, "dns_server=%u.%u.%u.%u:%u", &a, &b, &c, &d, &e);
-		if ( (n == 5 && e <= 0xffff) &&
-				(((a & 0xff) == a) &&
-				 ((b & 0xff) == b) &&
-				 ((c & 0xff) == c) &&
-				 ((d & 0xff) == d)) ) {
-			dns_server = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
-			dns_port = htons(e);
+		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == FORWARD_MODE) {
+			natcap_server_info_cleanup();
 			goto done;
 		}
-	} else if (strncmp(data, "server ", 7) == 0) {
-		unsigned int a, b, c, d, e;
-		char f;
-		n = sscanf(data, "server %u.%u.%u.%u:%u-%c", &a, &b, &c, &d, &e, &f);
-		if ( (n == 6 && e <= 0xffff) &&
-				(f == 'e' || f == 'o') &&
-				(((a & 0xff) == a) &&
-				 ((b & 0xff) == b) &&
-				 ((c & 0xff) == c) &&
-				 ((d & 0xff) == d)) ) {
-			dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
-			dst.port = htons(e);
-			dst.encryption = !!(f == 'e');
-			if ((err = natcap_server_info_add(&dst)) == 0)
-			{
-				natcap_server_info_change(1);
+	} else if (strncmp(data, "dns_server=", 11) == 0) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			unsigned int a, b, c, d, e;
+			n = sscanf(data, "dns_server=%u.%u.%u.%u:%u", &a, &b, &c, &d, &e);
+			if ( (n == 5 && e <= 0xffff) &&
+					(((a & 0xff) == a) &&
+					 ((b & 0xff) == b) &&
+					 ((c & 0xff) == c) &&
+					 ((d & 0xff) == d)) ) {
+				dns_server = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+				dns_port = htons(e);
 				goto done;
 			}
-			NATCAP_println("natcap_server_add() failed ret=%d", err);
+		}
+	} else if (strncmp(data, "server ", 7) == 0) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == FORWARD_MODE) {
+			unsigned int a, b, c, d, e;
+			char f;
+			n = sscanf(data, "server %u.%u.%u.%u:%u-%c", &a, &b, &c, &d, &e, &f);
+			if ( (n == 6 && e <= 0xffff) &&
+					(f == 'e' || f == 'o') &&
+					(((a & 0xff) == a) &&
+					 ((b & 0xff) == b) &&
+					 ((c & 0xff) == c) &&
+					 ((d & 0xff) == d)) ) {
+				dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+				dst.port = htons(e);
+				dst.encryption = !!(f == 'e');
+				if ((err = natcap_server_info_add(&dst)) == 0)
+				{
+					natcap_server_info_change(1);
+					goto done;
+				}
+				NATCAP_println("natcap_server_add() failed ret=%d", err);
+			}
 		}
 	} else if (strncmp(data, "change_server", 13) == 0) {
-		natcap_server_info_change(1);
-		goto done;
+		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == FORWARD_MODE) {
+			natcap_server_info_change(1);
+			goto done;
+		}
 	} else if (strncmp(data, "delete", 6) == 0) {
-		unsigned int a, b, c, d, e;
-		char f;
-		n = sscanf(data, "delete %u.%u.%u.%u:%u-%c", &a, &b, &c, &d, &e, &f);
-		if ( (n == 6 && e <= 0xffff) &&
-				(f == 'e' || f == 'o') &&
-				(((a & 0xff) == a) &&
-				 ((b & 0xff) == b) &&
-				 ((c & 0xff) == c) &&
-				 ((d & 0xff) == d)) ) {
-			dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
-			dst.port = htons(e);
-			dst.encryption = !!(f == 'e');
-			if ((err = natcap_server_info_delete(&dst)) == 0)
-				goto done;
-			NATCAP_println("natcap_server_delete() failed ret=%d", err);
+		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == FORWARD_MODE) {
+			unsigned int a, b, c, d, e;
+			char f;
+			n = sscanf(data, "delete %u.%u.%u.%u:%u-%c", &a, &b, &c, &d, &e, &f);
+			if ( (n == 6 && e <= 0xffff) &&
+					(f == 'e' || f == 'o') &&
+					(((a & 0xff) == a) &&
+					 ((b & 0xff) == b) &&
+					 ((c & 0xff) == c) &&
+					 ((d & 0xff) == d)) ) {
+				dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+				dst.port = htons(e);
+				dst.encryption = !!(f == 'e');
+				if ((err = natcap_server_info_delete(&dst)) == 0)
+					goto done;
+				NATCAP_println("natcap_server_delete() failed ret=%d", err);
+			}
 		}
 	} else if (strncmp(data, "debug=", 6) == 0) {
 		int d;
@@ -288,94 +293,118 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			goto done;
 		}
 	} else if (strncmp(data, "u_hash=", 7) == 0) {
-		unsigned int d;
-		n = sscanf(data, "u_hash=%u", &d);
-		if (n == 1) {
-			default_u_hash = htonl(d);
-			goto done;
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			unsigned int d;
+			n = sscanf(data, "u_hash=%u", &d);
+			if (n == 1) {
+				default_u_hash = htonl(d);
+				goto done;
+			}
 		}
 	} else if (strncmp(data, "server_persist_timeout=", 23) == 0) {
-		int d;
-		n = sscanf(data, "server_persist_timeout=%u", &d);
-		if (n == 1) {
-			server_persist_timeout = d;
-			goto done;
+		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == FORWARD_MODE) {
+			int d;
+			n = sscanf(data, "server_persist_timeout=%u", &d);
+			if (n == 1) {
+				server_persist_timeout = d;
+				goto done;
+			}
 		}
 	} else if (strncmp(data, "tx_speed_limit=", 15) == 0) {
-		int d;
-		n = sscanf(data, "tx_speed_limit=%d", &d);
-		if (n == 1) {
-			natcap_tx_speed_set(d);
-			goto done;
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			int d;
+			n = sscanf(data, "tx_speed_limit=%d", &d);
+			if (n == 1) {
+				natcap_tx_speed_set(d);
+				goto done;
+			}
 		}
 	} else if (strncmp(data, "http_confusion=", 15) == 0) {
-		int d;
-		n = sscanf(data, "http_confusion=%u", &d);
-		if (n == 1) {
-			http_confusion = d;
-			goto done;
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			int d;
+			n = sscanf(data, "http_confusion=%u", &d);
+			if (n == 1) {
+				http_confusion = d;
+				goto done;
+			}
 		}
 	} else if (strncmp(data, "cnipwhitelist_mode=", 19) == 0) {
-		int d;
-		n = sscanf(data, "cnipwhitelist_mode=%u", &d);
-		if (n == 1) {
-			cnipwhitelist_mode = d;
-			goto done;
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			int d;
+			n = sscanf(data, "cnipwhitelist_mode=%u", &d);
+			if (n == 1) {
+				cnipwhitelist_mode = d;
+				goto done;
+			}
 		}
 	} else if (strncmp(data, "encode_http_only=", 17) == 0) {
-		int d;
-		n = sscanf(data, "encode_http_only=%u", &d);
-		if (n == 1) {
-			encode_http_only = d;
-			goto done;
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			int d;
+			n = sscanf(data, "encode_http_only=%u", &d);
+			if (n == 1) {
+				encode_http_only = d;
+				goto done;
+			}
 		}
 	} else if (strncmp(data, "sproxy=", 7) == 0) {
-		int d;
-		n = sscanf(data, "sproxy=%u", &d);
-		if (n == 1) {
-			sproxy = d;
-			goto done;
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			int d;
+			n = sscanf(data, "sproxy=%u", &d);
+			if (n == 1) {
+				sproxy = d;
+				goto done;
+			}
 		}
 	} else if (strncmp(data, "macfilter=", 10) == 0) {
-		int d;
-		n = sscanf(data, "macfilter=%u", &d);
-		if (n == 1) {
-			if (d == NATCAP_ACL_NONE || d == NATCAP_ACL_ALLOW || d == NATCAP_ACL_DENY) {
-				macfilter = d;
-				goto done;
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			int d;
+			n = sscanf(data, "macfilter=%u", &d);
+			if (n == 1) {
+				if (d == NATCAP_ACL_NONE || d == NATCAP_ACL_ALLOW || d == NATCAP_ACL_DENY) {
+					macfilter = d;
+					goto done;
+				}
 			}
 		}
 	} else if (strncmp(data, "ipfilter=", 9) == 0) {
-		int d;
-		n = sscanf(data, "ipfilter=%u", &d);
-		if (n == 1) {
-			if (d == NATCAP_ACL_NONE || d == NATCAP_ACL_ALLOW || d == NATCAP_ACL_DENY) {
-				ipfilter = d;
-				goto done;
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			int d;
+			n = sscanf(data, "ipfilter=%u", &d);
+			if (n == 1) {
+				if (d == NATCAP_ACL_NONE || d == NATCAP_ACL_ALLOW || d == NATCAP_ACL_DENY) {
+					ipfilter = d;
+					goto done;
+				}
 			}
 		}
 	} else if (strncmp(data, "encode_mode=", 12) == 0) {
-		if (strncmp(data + 12, encode_mode_str[TCP_ENCODE], strlen(encode_mode_str[TCP_ENCODE])) == 0) {
-			encode_mode = TCP_ENCODE;
-			goto done;
-		} else if (strncmp(data + 12, encode_mode_str[UDP_ENCODE], strlen(encode_mode_str[UDP_ENCODE])) == 0) {
-			encode_mode = UDP_ENCODE;
-			goto done;
+		if (mode == FORWARD_MODE || mode == CLIENT_MODE || mode == MIXING_MODE) {
+			if (strncmp(data + 12, encode_mode_str[TCP_ENCODE], strlen(encode_mode_str[TCP_ENCODE])) == 0) {
+				encode_mode = TCP_ENCODE;
+				goto done;
+			} else if (strncmp(data + 12, encode_mode_str[UDP_ENCODE], strlen(encode_mode_str[UDP_ENCODE])) == 0) {
+				encode_mode = UDP_ENCODE;
+				goto done;
+			}
 		}
 	} else if (strncmp(data, "udp_encode_mode=", 16) == 0) {
-		if (strncmp(data + 16, encode_mode_str[TCP_ENCODE], strlen(encode_mode_str[TCP_ENCODE])) == 0) {
-			udp_encode_mode = TCP_ENCODE;
-			goto done;
-		} else if (strncmp(data + 16, encode_mode_str[UDP_ENCODE], strlen(encode_mode_str[UDP_ENCODE])) == 0) {
-			udp_encode_mode = UDP_ENCODE;
-			goto done;
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			if (strncmp(data + 16, encode_mode_str[TCP_ENCODE], strlen(encode_mode_str[TCP_ENCODE])) == 0) {
+				udp_encode_mode = TCP_ENCODE;
+				goto done;
+			} else if (strncmp(data + 16, encode_mode_str[UDP_ENCODE], strlen(encode_mode_str[UDP_ENCODE])) == 0) {
+				udp_encode_mode = UDP_ENCODE;
+				goto done;
+			}
 		}
 	} else if (strncmp(data, "knock_port=", 11) == 0) {
-		unsigned int d;
-		n = sscanf(data, "knock_port=%u", &d);
-		if (n == 1 && d <= 65535) {
-			knock_port = htons((unsigned short)(d & 0xffff));
-			goto done;
+		if (mode == KNOCK_MODE || mode == CLIENT_MODE || mode == MIXING_MODE) {
+			unsigned int d;
+			n = sscanf(data, "knock_port=%u", &d);
+			if (n == 1 && d <= 65535) {
+				knock_port = htons((unsigned short)(d & 0xffff));
+				goto done;
+			}
 		}
 	} else if (strncmp(data, "natcap_redirect_port=", 21) == 0) {
 		if (mode == SERVER_MODE || mode == CLIENT_MODE || mode == MIXING_MODE) {
@@ -403,7 +432,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			kfree(tmp);
 		}
 	} else if (strncmp(data, "htp_confusion_host=", 19) == 0) {
-		if (mode != SERVER_MODE) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
 			char *tmp = NULL;
 			tmp = kmalloc(1024, GFP_KERNEL);
 			if (!tmp)
@@ -421,22 +450,24 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			kfree(tmp);
 		}
 	} else if (strncmp(data, "default_mac_addr=", 17) == 0) {
-		unsigned int a, b, c, d, e, f;
-		n = sscanf(data, "default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n", &a, &b, &c, &d, &e, &f);
-		if ( n == 6 &&
-				((a & 0xff) == a) &&
-				((b & 0xff) == b) &&
-				((c & 0xff) == c) &&
-				((d & 0xff) == d) &&
-				((e & 0xff) == e) &&
-				((f & 0xff) == f) ) {
-			default_mac_addr[0] = a;
-			default_mac_addr[1] = b;
-			default_mac_addr[2] = c;
-			default_mac_addr[3] = d;
-			default_mac_addr[4] = e;
-			default_mac_addr[5] = f;
-			goto done;
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			unsigned int a, b, c, d, e, f;
+			n = sscanf(data, "default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n", &a, &b, &c, &d, &e, &f);
+			if ( n == 6 &&
+					((a & 0xff) == a) &&
+					((b & 0xff) == b) &&
+					((c & 0xff) == c) &&
+					((d & 0xff) == d) &&
+					((e & 0xff) == e) &&
+					((f & 0xff) == f) ) {
+				default_mac_addr[0] = a;
+				default_mac_addr[1] = b;
+				default_mac_addr[2] = c;
+				default_mac_addr[3] = d;
+				default_mac_addr[4] = e;
+				default_mac_addr[5] = f;
+				goto done;
+			}
 		}
 	}
 
