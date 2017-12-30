@@ -15,7 +15,7 @@ iptables -t nat -A POSTROUTING -m mark --mark 0x99 -j MASQUERADE
 
 
 rmmod natcap >/dev/null 2>&1
-( modprobe natcap mode=2 || insmod ./natcap.ko mode=2 ) && {
+( modprobe natcap mode=2 2>/dev/null || insmod ./natcap.ko mode=2 ) && {
 cat <<EOF >>/dev/natcap_ctl
 clean
 debug=3

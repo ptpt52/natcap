@@ -42,7 +42,7 @@ ipset add udproxylist 8.8.8.8
 # .example line: server 1.2.3.4:0-e
 # sproxy=1 MUST make sure server running natcapd-server app
 rmmod natcap >/dev/null 2>&1
-( modprobe natcap mode=0 || insmod ./natcap.ko mode=0 ) && {
+( modprobe natcap mode=0 2>/dev/null || insmod ./natcap.ko mode=0 ) && {
 cat <<EOF >>/dev/natcap_ctl
 clean
 debug=3
