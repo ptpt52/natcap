@@ -75,6 +75,11 @@ struct natcap_TCPOPT {
 #define NATCAP_TCPOPT_TYPE_ADD 5
 };
 
+struct cone_nat_session {
+	__be32 ip;
+	__be16 port;
+};
+
 #pragma pack(pop)
 
 struct tuple {
