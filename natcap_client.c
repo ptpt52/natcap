@@ -1687,7 +1687,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		UDPH(l4)->dest = ns->tup.port;
 		iph->daddr = ns->tup.ip;
 
-		if (IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+		if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
+				ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
+				IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 			struct cone_nat_session cns;
 
 			memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->source)], sizeof(cns));
