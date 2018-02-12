@@ -1308,7 +1308,7 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	}
 #endif
 
-	if (IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+	if (cone_nat_array && IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 		memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->dest)], sizeof(cns));
 		if (natcap_dnat_setup(ct, cns.ip, cns.port) != NF_ACCEPT) {
 			NATCAP_ERROR("(CCI)" DEBUG_UDP_FMT ": do mapping failed, target=%pI4:%u @port=%u\n", DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
@@ -1377,7 +1377,8 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
+	if (cone_nat_array &&
+			ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 			ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
 			IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 
@@ -1442,6 +1443,9 @@ int natcap_common_init(void)
 void natcap_common_exit(void)
 {
 	if (cone_nat_array) {
-		vfree(cone_nat_array);
+		void *tmp = cone_nat_array;
+		cone_nat_array = NULL;
+		synchronize_rcu();
+		vfree(tmp);
 	}
 }
