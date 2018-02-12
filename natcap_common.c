@@ -1378,8 +1378,8 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 	}
 
 	if (IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
-		memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->source)], sizeof(cns));
 
+		memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->source)], sizeof(cns));
 		if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip != cns.ip ||
 				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port != cns.port) {
 

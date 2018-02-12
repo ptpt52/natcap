@@ -1686,6 +1686,25 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		UDPH(l4)->source = ns->new_source;
 		UDPH(l4)->dest = ns->tup.port;
 		iph->daddr = ns->tup.ip;
+
+		if (IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+			struct cone_nat_session cns;
+
+			memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->source)], sizeof(cns));
+			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip != cns.ip ||
+					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port != cns.port) {
+
+				NATCAP_INFO("(CPMO)" DEBUG_UDP_FMT ": update mapping from %pI4:%u to %pI4:%u @port=%u\n", DEBUG_UDP_ARG(iph,l4),
+						&cns.ip, ntohs(cns.port),
+						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip,
+						ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port),
+						ntohs(UDPH(l4)->source));
+
+				cns.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
+				cns.port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port;
+				memcpy(&cone_nat_array[ntohs(UDPH(l4)->source)], &cns, sizeof(cns));
+			}
+		}
 	}
 
 	if (in)
