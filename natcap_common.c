@@ -1442,6 +1442,8 @@ int natcap_common_init(void)
 
 void natcap_common_exit(void)
 {
+	nf_unregister_hooks(common_hooks, ARRAY_SIZE(common_hooks));
+
 	if (cone_nat_array) {
 		void *tmp = cone_nat_array;
 		cone_nat_array = NULL;
