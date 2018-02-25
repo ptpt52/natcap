@@ -69,7 +69,7 @@ static inline int natcap_auth(const struct net_device *in,
 						ntohl(tcpopt->all.data.u_hash));
 				return E_NATCAP_AUTH_FAIL;
 			}
-			NATCAP_INFO("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
+			NATCAP_DEBUG("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
 					__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
 					tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
 					tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
@@ -93,7 +93,7 @@ static inline int natcap_auth(const struct net_device *in,
 						ntohl(tcpopt->user.data.u_hash));
 				return E_NATCAP_AUTH_FAIL;
 			}
-			NATCAP_INFO("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
+			NATCAP_DEBUG("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
 					__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
 					tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
 					tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
@@ -1007,7 +1007,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 		} else {
 			if (!TCPH(l4)->syn || TCPH(l4)->ack) {
-				NATCAP_INFO("(SPCI)" DEBUG_TCP_FMT ": first packet in but not syn\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_DEBUG("(SPCI)" DEBUG_TCP_FMT ": first packet in but not syn\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
@@ -1112,7 +1112,7 @@ do_dnat_setup:
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
 			}
 
-			NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
+			NATCAP_DEBUG("(SPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
 			//reply ACK pkt
 			natcap_udp_reply_cfm(in, skb, ct);
 

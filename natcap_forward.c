@@ -193,7 +193,7 @@ __do_dnat:
 				}
 			}
 
-			NATCAP_INFO("(FPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
+			NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
 		} else if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 8) &&
 				get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xFFFF0099)) {
 			iph = ip_hdr(skb);
@@ -205,7 +205,7 @@ __do_dnat:
 			l4 = (void *)iph + iph->ihl * 4;
 
 			if (!TCPH(l4 + 8)->syn || TCPH(l4 + 8)->ack) {
-				NATCAP_INFO("(FPCI)" DEBUG_UDP_FMT ": UDPENC TCP first packet in but not syn\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": UDPENC TCP first packet in but not syn\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
@@ -235,7 +235,7 @@ __do_dnat:
 				set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status);
 			}
 
-			NATCAP_INFO("(FPCI)" DEBUG_UDP_FMT ": pass UDP encoded data\n", DEBUG_UDP_ARG(iph,l4));
+			NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": pass UDP encoded data\n", DEBUG_UDP_ARG(iph,l4));
 		}
 
 		iph = ip_hdr(skb);

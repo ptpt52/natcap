@@ -2421,12 +2421,12 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			an_count = ntohs(get_byte2(p + 6));
 			ns_count = ntohs(get_byte2(p + 8));
 			ar_count = ntohs(get_byte2(p + 10));
-			NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, flags=0x%04x, qd=%u, an=%u, ns=%u, ar=%u\n",
+			NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, flags=0x%04x, qd=%u, an=%u, ns=%u, ar=%u\n",
 					DEBUG_UDP_ARG(iph,l4),
 					id, flags, qd_count, an_count, ns_count, ar_count);
 
 			if (!(IPS_NATCAP & ct->status) && (flags & 0xf) != 0) {
-				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS flags=%04x, drop\n", DEBUG_UDP_ARG(iph,l4), id, flags);
+				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS flags=%04x, drop\n", DEBUG_UDP_ARG(iph,l4), id, flags);
 				return NF_DROP;
 			}
 
@@ -2438,14 +2438,14 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					break;
 				}
 
-				if (IS_NATCAP_INFO()) {
+				if (IS_NATCAP_DEBUG()) {
 					int qname_len;
 					char *qname = kmalloc(2048, GFP_ATOMIC);
 
 					if (qname != NULL) {
 						if ((qname_len = get_rdata(p, len, pos, qname, 2047)) >= 0) {
 							qname[qname_len] = 0;
-							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, qname=%s\n", DEBUG_UDP_ARG(iph,l4), id, qname);
+							NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, qname=%s\n", DEBUG_UDP_ARG(iph,l4), id, qname);
 						}
 						kfree(qname);
 					}
@@ -2473,7 +2473,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				qclass = ntohs(get_byte2(p + pos));
 				pos += 2;
 
-				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, qtype=%d, qclass=%d\n", DEBUG_UDP_ARG(iph,l4), id, qtype, qclass);
+				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, qtype=%d, qclass=%d\n", DEBUG_UDP_ARG(iph,l4), id, qtype, qclass);
 			}
 			for(i = 0; i < an_count; i++) {
 				unsigned int ttl;
@@ -2484,14 +2484,14 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					break;
 				}
 
-				if (IS_NATCAP_INFO()) {
+				if (IS_NATCAP_DEBUG()) {
 					int name_len;
 					char *name = kmalloc(2048, GFP_ATOMIC);
 
 					if (name != NULL) {
 						if ((name_len = get_rdata(p, len, pos, name, 2047)) >= 0) {
 							name[name_len] = 0;
-							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
+							NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
 						}
 						kfree(name);
 					}
@@ -2540,8 +2540,8 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					case 1: //A
 						if (rdlength == 4) {
 							ip = get_byte4(p + pos);
-							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
-							if (!IS_NATCAP_INFO()) {
+							NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
+							if (!IS_NATCAP_DEBUG()) {
 								goto dns_done;
 							}
 						}
@@ -2550,7 +2550,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					case 28: //AAAA
 						if (rdlength == 16) {
 							unsigned char *ipv6 = p + pos;
-							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ipv6=%pI6\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, ipv6);
+							NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ipv6=%pI6\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, ipv6);
 						}
 						break;
 
@@ -2560,23 +2560,23 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					case 5: //CNAME
 					case 15: //MX
 					case 16: //TXT
-						if (IS_NATCAP_INFO()) {
+						if (IS_NATCAP_DEBUG()) {
 							int name_len;
 							char *name = kmalloc(2048, GFP_ATOMIC);
 
 							if (name != NULL) {
 								if ((name_len = get_rdata(p, len, pos, name, 2047)) >= 0) {
 									name[name_len] = 0;
-									NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
+									NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
 								}
 								kfree(name);
 							}
 						}
-						NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
+						NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
 						break;
 
 					default:
-						NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
+						NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
 						break;
 				}
 
