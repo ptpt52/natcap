@@ -11,6 +11,7 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <linux/icmp.h>
+#include <linux/netfilter.h>
 #include <net/ip.h>
 #include <net/tcp.h>
 #include <net/udp.h>
@@ -216,7 +217,9 @@ static inline unsigned int optlen(const u_int8_t *opt, unsigned int offset)
 static inline u_int32_t tcpmss_reverse_mtu(struct net *net, const struct sk_buff *skb)
 {
 	struct flowi fl;
+#if ! defined(NF_MOVED_ROUTE_INDIRECTION)
 	const struct nf_afinfo *ai;
+#endif
 	struct rtable *rt = NULL;
 	u_int32_t mtu     = ~0U;
 
@@ -225,9 +228,13 @@ static inline u_int32_t tcpmss_reverse_mtu(struct net *net, const struct sk_buff
 	fl4->daddr = ip_hdr(skb)->saddr;
 
 	rcu_read_lock();
+#if ! defined(NF_MOVED_ROUTE_INDIRECTION)
 	ai = nf_get_afinfo(PF_INET);
 	if (ai != NULL)
 		ai->route(net, (struct dst_entry **)&rt, &fl, false);
+#else
+	nf_route(net, (struct dst_entry **)&rt, &fl, false, PF_INET);
+#endif
 	rcu_read_unlock();
 
 	if (rt != NULL) {
