@@ -1310,10 +1310,12 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 
 	if (cone_nat_array && IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 		memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->dest)], sizeof(cns));
-		if (natcap_dnat_setup(ct, cns.ip, cns.port) != NF_ACCEPT) {
-			NATCAP_ERROR("(CCI)" DEBUG_UDP_FMT ": do mapping failed, target=%pI4:%u @port=%u\n", DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
+		if (cns.ip != 0 && cns.port != 0) {
+			if (natcap_dnat_setup(ct, cns.ip, cns.port) != NF_ACCEPT) {
+				NATCAP_ERROR("(CCI)" DEBUG_UDP_FMT ": do mapping failed, target=%pI4:%u @port=%u\n", DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
+			}
+			NATCAP_INFO("(CCI)" DEBUG_UDP_FMT ": do mapping, target=%pI4:%u @port=%u\n", DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
 		}
-		NATCAP_INFO("(CCI)" DEBUG_UDP_FMT ": do mapping, target=%pI4:%u @port=%u\n", DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
 	}
 
 	return NF_ACCEPT;
@@ -1431,6 +1433,7 @@ int natcap_common_init(void)
 	if (cone_nat_array == NULL) {
 		return -ENOMEM;
 	}
+	memset(cone_nat_array, 0, sizeof(struct cone_nat_session) * 65536);
 
 	need_conntrack();
 	ret = nf_register_hooks(common_hooks, ARRAY_SIZE(common_hooks));
