@@ -2039,8 +2039,13 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				iph->tot_len = htons(nskb->len);
 				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
 				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFE0099));
-				set_byte4(l4 + sizeof(struct udphdr) + 4, dns_server);
-				set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
+				if (dns_server == 0) {
+					set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
+					set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
+				} else {
+					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_server);
+					set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
+				}
 				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x01));
 
 				if ((IPS_NATCAP_ENC & master->status)) {
@@ -2076,8 +2081,13 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				skb->len += 12;
 				skb->tail += 12;
 				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFE0099));
-				set_byte4(l4 + sizeof(struct udphdr) + 4, dns_server);
-				set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
+				if (dns_server == 0) {
+					set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
+					set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
+				} else {
+					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_server);
+					set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
+				}
 				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x02));
 
 				if ((IPS_NATCAP_ENC & master->status)) {

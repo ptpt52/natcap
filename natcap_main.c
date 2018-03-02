@@ -469,6 +469,24 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				goto done;
 			}
 		}
+	} else if (strncmp(data, "dns_server_node_add=", 20) == 0) {
+		if (mode == SERVER_MODE) {
+			unsigned int a, b, c, d;
+			n = sscanf(data, "dns_server_node_add=%u.%u.%u.%u", &a, &b, &c, &d);
+			if ( (n == 4) &&
+					(((a & 0xff) == a) &&
+					 ((b & 0xff) == b) &&
+					 ((c & 0xff) == c) &&
+					 ((d & 0xff) == d)) ) {
+				err = dns_server_node_add( htonl((a<<24)|(b<<16)|(c<<8)|(d<<0)) );
+				if (err == 0) {
+					goto done;
+				}
+			}
+		}
+	} else if (strncmp(data, "dns_server_node_clean", 21) == 0) {
+		dns_server_node_clean();
+		goto done;
 	}
 
 	NATCAP_println("ignoring line[%s]", data);

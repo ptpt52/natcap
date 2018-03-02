@@ -21,6 +21,37 @@
 #include "natcap_common.h"
 #include "natcap_server.h"
 
+#define MAX_DNS_SERVER_NODE 32
+static __be32 dns_server_node[MAX_DNS_SERVER_NODE];
+static int dns_server_number = 0;
+static void dns_server_node_random_select(__be32 *ip)
+{
+	unsigned int idx = dns_server_number;
+	if (idx > 0) {
+		idx = (jiffies % idx) % MAX_DNS_SERVER_NODE;
+		idx = dns_server_node[idx];
+		if (idx != 0) {
+			*ip = idx;
+		}
+	}
+}
+
+/* called from user write */
+int dns_server_node_add(__be32 ip)
+{
+	if (dns_server_number < MAX_DNS_SERVER_NODE) {
+		dns_server_node[dns_server_number] = ip;
+		dns_server_number++;
+		return 0;
+	}
+	return -ENOMEM;
+}
+void dns_server_node_clean(void)
+{
+	dns_server_number = 0;
+	memset(dns_server_node, 0, sizeof(__be32) * MAX_DNS_SERVER_NODE);
+}
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 static inline int natcap_auth(const struct nf_hook_state *state,
 		const struct net_device *in,
@@ -1120,6 +1151,9 @@ do_dnat_setup:
 			server.port = get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 8);
 
 			if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
+				if (server.port == __constant_htons(53)) {
+					dns_server_node_random_select(&server.ip);
+				}
 				NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
 				if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
