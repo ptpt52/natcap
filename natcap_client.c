@@ -56,8 +56,6 @@ int natcap_tx_speed_get(void)
 
 static int natcap_tx_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct)
 {
-	int feed_tokens;
-	int tokens_after_feed;
 	unsigned long feed_jiffies = 0;
 	unsigned long current_jiffies;
 	int ret = 0;
@@ -81,9 +79,9 @@ static int natcap_tx_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct)
 	}
 
 	spin_lock_bh(&tx_ntc.lock);
-	tx_ntc.tokens -= len;
-	if (tx_ntc.tokens >= 0) {
-		ret = tx_ntc.tokens;
+	if (tx_ntc.tokens > 0) {
+		tx_ntc.tokens -= len;
+		ret = 0;
 		goto out;
 	}
 
@@ -94,20 +92,23 @@ static int natcap_tx_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct)
 		feed_jiffies = tx_ntc.jiffies - current_jiffies;
 	}
 
-	if (feed_jiffies > HZ) {
-		feed_jiffies = HZ;
-	}
-	feed_tokens = tx_ntc.tokens_per_jiffy * feed_jiffies;
-	tokens_after_feed = tx_ntc.tokens + feed_tokens;
-	if (tokens_after_feed < 0) {
-		ret = tokens_after_feed;
-		goto out;
+	ret = tx_ntc.tokens + (int)(tx_ntc.tokens_per_jiffy * feed_jiffies);
+
+	if (feed_jiffies <= HZ) {
+		tx_ntc.tokens = ret;
+	} else {
+		if (ret <= 0) {
+			tx_ntc.tokens = ret;
+		} else {
+			tx_ntc.tokens = 0;
+		}
 	}
 
-	tx_ntc.tokens = tokens_after_feed;
+	if (tx_ntc.tokens >= 0) {
+		tx_ntc.tokens -= len;
+		ret = 0;
+	}
 	tx_ntc.jiffies = current_jiffies;
-
-	ret = tx_ntc.tokens;
 
 out:
 	spin_unlock_bh(&tx_ntc.lock);
