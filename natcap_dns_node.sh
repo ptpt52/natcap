@@ -2,7 +2,7 @@
 
 echo dns_server_node_clean
 cat $0 | grep -o '\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)' | while read ip; do
-	ping -w1 -c1 $ip 2>&1 >/dev/null && echo dns_server_node_add=$ip
+	nslookup -timeout=1 www.google.com 2>&1 >/dev/null && echo dns_server_node_add=$ip
 done
 
 exit 0
