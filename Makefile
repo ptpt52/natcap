@@ -42,3 +42,15 @@ C_cniplist.set: cniplist.set local.set
 	@rm -f C_cniplist.orig.set.tmp
 
 ipset: cniplist.set C_cniplist.set
+
+apnic.txt:
+	wget https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest -O apnic.txt.tmp
+	@mv apnic.txt.tmp apnic.txt
+	@touch apnic.txt
+
+cniplist.orig.set: apnic.txt
+	cat apnic.txt | grep CN | grep ipv4 | cut -d\| -f4,5 >cniplist.txt.tmp
+	lua apnic.lua cniplist.txt.tmp | while read line; do $$line | grep -v deaggregate; done >cniplist.orig.set.tmp
+	@rm -f cniplist.txt.tmp
+	@mv cniplist.orig.set.tmp cniplist.orig.set
+
