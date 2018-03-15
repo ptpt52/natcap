@@ -167,11 +167,20 @@ static void default_mac_addr_init(void)
 	}
 }
 
-#define MAX_NATCAP_SERVER 256
+static unsigned long jiffies_diff(unsigned long j1, unsigned long j2)
+{
+	return (j1 > j2) ? (j1 - j2) : (j2 - j1);
+}
+
+#define MAX_NATCAP_SERVER 64
 struct natcap_server_info {
 	unsigned int active_index;
 	unsigned int server_count[2];
 	struct tuple server[2][MAX_NATCAP_SERVER];
+	unsigned long last_active[MAX_NATCAP_SERVER];
+#define NATCAP_SERVER_IN 0
+#define NATCAP_SERVER_OUT 1
+	unsigned char last_dir[MAX_NATCAP_SERVER];
 };
 
 static struct natcap_server_info natcap_server_info;
@@ -268,6 +277,32 @@ void *natcap_server_info_get(loff_t idx)
 	return NULL;
 }
 
+void natcap_server_in_touch(__be32 ip)
+{
+	struct natcap_server_info *nsi = &natcap_server_info;
+	unsigned int m = nsi->active_index;
+	unsigned int count = nsi->server_count[m];
+	unsigned int hash;
+	int i;
+
+	hash = server_index % count;
+
+	for (i = hash; i < count; i++) {
+		if (nsi->server[m][i].ip == ip) {
+			if (nsi->last_dir[i] != NATCAP_SERVER_IN)
+				nsi->last_dir[i] = NATCAP_SERVER_IN;
+			return;
+		}
+	}
+	for (i = 0; i < hash; i++) {
+		if (nsi->server[m][i].ip == ip) {
+			if (nsi->last_dir[i] != NATCAP_SERVER_IN)
+				nsi->last_dir[i] = NATCAP_SERVER_IN;
+			return;
+		}
+	}
+}
+
 void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 {
 	static atomic_t server_port = ATOMIC_INIT(0);
@@ -275,6 +310,7 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 	unsigned int m = nsi->active_index;
 	unsigned int count = nsi->server_count[m];
 	unsigned int hash;
+	int i, found = 0;
 
 	dst->ip = 0;
 	dst->port = 0;
@@ -286,6 +322,40 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 	natcap_server_info_change(0);
 
 	hash = server_index % count;
+
+	if (nsi->last_dir[hash] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[hash]) <= 32 * HZ) {
+		found = 1;
+	} else {
+		for (i = hash; i < count; i++) {
+			if (nsi->last_dir[i] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[i]) > 512 * HZ) {
+				found = 1;
+				hash = i;
+				server_index = i;
+				nsi->last_dir[i] = NATCAP_SERVER_IN;
+				NATCAP_WARN("current server is not available, reuse old state server=" TUPLE_FMT "\n", TUPLE_ARG(&nsi->server[m][hash]));
+				break;
+			}
+		}
+		for (i = 0; !found && i < hash; i++) {
+			if (nsi->last_dir[i] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[i]) > 512 * HZ) {
+				found = 1;
+				hash = i;
+				server_index = i;
+				nsi->last_dir[i] = NATCAP_SERVER_IN;
+				NATCAP_WARN("current server is not available, reuse old state server=" TUPLE_FMT "\n", TUPLE_ARG(&nsi->server[m][hash]));
+				break;
+			}
+		}
+		if (!found) {
+			NATCAP_WARN("no server is availabe, force change next. current=" TUPLE_FMT "\n", TUPLE_ARG(&nsi->server[m][hash]));
+			natcap_server_info_change(1);
+		}
+	}
+
+	if (nsi->last_dir[hash] == NATCAP_SERVER_IN || !found) {
+		nsi->last_dir[hash] = NATCAP_SERVER_OUT;
+		nsi->last_active[hash] = jiffies; /* ticks start */
+	}
 
 	tuple_copy(dst, &nsi->server[m][hash]);
 	if (dst->port == __constant_htons(0)) {
@@ -829,6 +899,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
+	natcap_server_in_touch(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 	flow_total_rx_bytes += skb->len;
 
 	if (iph->protocol == IPPROTO_TCP) {

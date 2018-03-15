@@ -311,6 +311,7 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_REPLY) {
+		natcap_server_in_touch(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 		flow_total_tx_bytes += skb->len;
 	}
 	if (!(IPS_NATCAP_UDPENC & ct->status)) {
