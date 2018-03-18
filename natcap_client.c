@@ -326,6 +326,7 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 	if (nsi->last_dir[hash] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[hash]) <= 32 * HZ) {
 		found = 1;
 	} else {
+		hash = (hash + jiffies) % count;
 		for (i = hash; i < count; i++) {
 			if (nsi->last_dir[i] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[i]) > 512 * HZ) {
 				found = 1;
