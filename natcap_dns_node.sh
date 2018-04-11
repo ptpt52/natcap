@@ -1,7 +1,12 @@
 #!/bin/sh
 
 echo dns_server_node_clean
-cat $0 | grep -o '\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)' | while read ip; do
+cat $0 | grep -o '\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\).*\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)' | \
+while read ip ip2; do
+	nslookup -timeout=1 www.google.com $ip 2>&1 >/dev/null && echo dns_server_node_add=$ip
+done
+cat $0 | grep -o '\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\).*\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)' | \
+while read ip1 ip; do
 	nslookup -timeout=1 www.google.com $ip 2>&1 >/dev/null && echo dns_server_node_add=$ip
 done
 
@@ -25,6 +30,5 @@ FreeDNS 37.235.1.174 37.235.1.177
 Alternate DNS 198.101.242.72 23.253.163.53
 Yandex.DNS 77.88.8.8 77.88.8.1
 UncensoredDNS 91.239.100.100 89.233.43.71
-Hurricane Electric 74.82.42.42
-puntCAT 109.69.8.51
+Hurricane Electric + puntCAT 74.82.42.42 109.69.8.51
 Neustar 156.154.70.1 156.154.71.1
