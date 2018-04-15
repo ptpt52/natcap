@@ -887,7 +887,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 							}
 						}
 					}
-					skb->mark = XT_MARK_NATCAP;
+					xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": set mark 0x%x\n", DEBUG_TCP_ARG(iph,l4), XT_MARK_NATCAP);
 					return NF_ACCEPT;

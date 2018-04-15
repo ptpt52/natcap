@@ -73,7 +73,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 	}
 	if ((IPS_NATCAP & ct->status)) {
 		flow_total_rx_bytes += skb->len;
-		skb->mark = XT_MARK_NATCAP;
+		xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 		return NF_ACCEPT;
 	}
 
@@ -129,7 +129,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 				}
 			}
 
-			skb->mark = XT_MARK_NATCAP;
+			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			NATCAP_DEBUG("(FPCI)" DEBUG_TCP_FMT ": set mark 0x%x\n", DEBUG_TCP_ARG(iph,l4), XT_MARK_NATCAP);
 			return NF_ACCEPT;
@@ -155,7 +155,7 @@ __do_dnat:
 		}
 
 		flow_total_rx_bytes += skb->len;
-		skb->mark = XT_MARK_NATCAP;
+		xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 		NATCAP_DEBUG("(FPCI)" DEBUG_TCP_FMT ": after decode\n", DEBUG_TCP_ARG(iph,l4));
 	} else if (iph->protocol == IPPROTO_UDP) {
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
@@ -243,7 +243,7 @@ __do_dnat:
 
 		if ((IPS_NATCAP & ct->status)) {
 			flow_total_rx_bytes += skb->len;
-			skb->mark = XT_MARK_NATCAP;
+			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": first packet in but not ctrl code\n", DEBUG_UDP_ARG(iph,l4));

@@ -1315,7 +1315,7 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 				NATCAP_ERROR("(CCI)" DEBUG_UDP_FMT ": do mapping failed, target=%pI4:%u @port=%u\n", DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
 			}
 			NATCAP_INFO("(CCI)" DEBUG_UDP_FMT ": do mapping, target=%pI4:%u @port=%u\n", DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
-			skb->mark = XT_MARK_NATCAP;
+			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 		}
 	}
 
