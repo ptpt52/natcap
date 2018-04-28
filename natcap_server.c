@@ -883,6 +883,9 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
+	if (nf_ct_is_confirmed(ct)) {
+		return NF_ACCEPT;
+	}
 	if ((IPS_NATCAP & ct->status)) {
 		return NF_ACCEPT;
 	}
@@ -992,6 +995,9 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 		return NF_DROP;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+		if ((IPS_NATCAP & ct->status)) {
+			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+		}
 		return NF_ACCEPT;
 	}
 
