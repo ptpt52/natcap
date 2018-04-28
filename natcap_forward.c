@@ -66,6 +66,9 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+		if ((IPS_NATCAP & ct->status)) {
+			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+		}
 		return NF_ACCEPT;
 	}
 	if ((IPS_NATCAP_BYPASS & ct->status)) {
