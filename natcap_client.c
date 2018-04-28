@@ -264,9 +264,10 @@ int natcap_server_info_delete(const struct tuple *dst)
 
 const struct tuple *natcap_server_info_current(void)
 {
+	int count = natcap_server_info.server_count[natcap_server_info.active_index];
 	static struct tuple _tuple = {0};
-	if (natcap_server_info.server_count[natcap_server_info.active_index] > 0)
-		return &natcap_server_info.server[natcap_server_info.active_index][server_index % natcap_server_info.server_count[natcap_server_info.active_index]];
+	if (count > 0)
+		return &natcap_server_info.server[natcap_server_info.active_index][server_index % count];
 	return &_tuple;
 }
 
@@ -284,6 +285,9 @@ void natcap_server_in_touch(__be32 ip)
 	unsigned int count = nsi->server_count[m];
 	unsigned int hash;
 	int i;
+
+	if (count == 0)
+		return;
 
 	hash = server_index % count;
 
