@@ -22,6 +22,8 @@
 #include "natcap_common.h"
 #include "natcap_client.h"
 
+unsigned int natcap_touch_timeout = 32;
+
 unsigned short natcap_redirect_port = 0;
 
 unsigned int disabled = 1;

@@ -38,6 +38,8 @@ enum {
 
 extern struct cone_nat_session *cone_nat_array;
 
+extern unsigned int natcap_touch_timeout;
+
 extern unsigned short natcap_redirect_port;
 
 extern unsigned long long flow_total_tx_bytes;

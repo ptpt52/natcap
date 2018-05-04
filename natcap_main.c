@@ -79,6 +79,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    sproxy=%u\n"
 				"#    knock_port=%u\n"
 				"#    natcap_redirect_port=%u\n"
+				"#    natcap_touch_timeout=%u\n"
 				"#    flow_total_tx_bytes=%llu\n"
 				"#    flow_total_rx_bytes=%llu\n"
 				"#    auth_http_redirect_url=%s\n"
@@ -104,7 +105,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				server_seed, disabled, auth_enabled,
 				natcap_tx_speed_get(),
 				http_confusion, encode_http_only, sproxy, ntohs(knock_port),
-				ntohs(natcap_redirect_port),
+				ntohs(natcap_redirect_port),natcap_touch_timeout,
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
 				htp_confusion_host,
@@ -414,6 +415,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				natcap_redirect_port = htons((unsigned short)(d & 0xffff));
 				goto done;
 			}
+		}
+	} else if (strncmp(data, "natcap_touch_timeout=", 21) == 0) {
+		unsigned int d;
+		n = sscanf(data, "natcap_touch_timeout=%u", &d);
+		if (n == 1) {
+			natcap_touch_timeout = d;
+			goto done;
 		}
 	} else if (strncmp(data, "auth_http_redirect_url=", 23) == 0) {
 		if (mode == SERVER_MODE) {

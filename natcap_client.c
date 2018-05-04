@@ -327,7 +327,7 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 
 	hash = server_index % count;
 
-	if (nsi->last_dir[hash] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[hash]) <= 16 * HZ) {
+	if (nsi->last_dir[hash] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[hash]) <= natcap_touch_timeout * HZ) {
 		found = 1;
 	} else {
 		hash = (hash + jiffies) % count;
