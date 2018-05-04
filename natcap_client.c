@@ -924,7 +924,6 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 	}
 	xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 
-	natcap_server_in_touch(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 	flow_total_rx_bytes += skb->len;
 
 	if (iph->protocol == IPPROTO_TCP) {
@@ -938,6 +937,9 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
+
+		if (TCPH(l4)->syn)
+			natcap_server_in_touch(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 
 		NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": before decode\n", DEBUG_TCP_ARG(iph,l4));
 
@@ -968,6 +970,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 				NATCAP_INFO("(CPCI)" DEBUG_UDP_FMT ": got CFM pkt\n", DEBUG_UDP_ARG(iph,l4));
 			}
+			natcap_server_in_touch(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 			return NF_DROP;
 		}
 
