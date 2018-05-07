@@ -97,10 +97,8 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099 &&
-				TCPH(l4)->doff == 5 &&
-				TCPH(l4)->window == 65535 &&
-				get_byte4(l4 + sizeof(struct tcphdr)) == __constant_htonl(0xFFFE0099)) {
+		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xFFFF) ^ (ntohl(TCPH(l4)->ack_seq) & 0xFFFF)) &&
+			get_byte4(l4 + sizeof(struct tcphdr)) == __constant_htonl(0xFFFE0099) ) {
 			goto __do_dnat;
 		}
 

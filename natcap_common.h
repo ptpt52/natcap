@@ -489,7 +489,4 @@ static inline void nf_unregister_hooks(struct nf_hook_ops *reg, unsigned int n)
 }
 #endif
 
-#define NATCAP_SEQ_ENCODE(old, v) ((((old) << 16) & 0xFFFF0000) | (v))
-#define NATCAP_SEQ_DECODE(seq) ((seq) & 0x0000FFFF)
-
 #endif /* _NATCAP_COMMON_H_ */

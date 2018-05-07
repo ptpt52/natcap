@@ -1214,8 +1214,8 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	iph->protocol = IPPROTO_TCP;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 
-	TCPH(l4)->seq = htonl(NATCAP_SEQ_ENCODE(jiffies, 0x0099));
-	TCPH(l4)->ack_seq = htonl(ns->foreign_seq + 1);
+	TCPH(l4)->seq = ns->current_seq == 0 ? htonl(jiffies) : ns->current_seq;
+	TCPH(l4)->ack_seq = (m == 0 && ns->current_seq == 0) ? 0 : htonl(ns->foreign_seq);
 	TCPH(l4)->res1 = 0;
 	TCPH(l4)->doff = 5;
 	TCPH(l4)->syn = ns->current_seq == 0 ? 1 : 0;
@@ -1226,13 +1226,13 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	TCPH(l4)->urg = 0;
 	TCPH(l4)->ece = 0;
 	TCPH(l4)->cwr = 0;
-	TCPH(l4)->window = 65535;
+	TCPH(l4)->window = htons(ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xffff) ^ (ntohl(TCPH(l4)->ack_seq) & 0xffff));
 	TCPH(l4)->check = 0;
 	TCPH(l4)->urg_ptr = 0;
 
 	skb_rcsum_tcpudp(skb);
 
-	ns->current_seq = ntohl(TCPH(l4)->seq);
+	ns->current_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - sizeof(struct tcphdr);
 	return 0;
 }
 

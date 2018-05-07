@@ -1077,9 +1077,9 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				nf_ct_put(ct);
 			}
 		}
-		if (NATCAP_SEQ_DECODE(ntohl(TCPH(l4)->seq)) == 0x0099 && TCPH(l4)->doff == 5) {
+		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xFFFF) ^ (ntohl(TCPH(l4)->ack_seq) & 0xFFFF)) ) {
 			struct natcap_session *ns;
-			unsigned int foreign_seq = ntohl(TCPH(l4)->seq);
+			unsigned int foreign_seq = ntohl(TCPH(l4)->seq) + (TCPH(l4)->syn ? 1 + ntohs(iph->tot_len) - iph->ihl * 4 - sizeof(struct tcphdr) : ntohs(iph->tot_len) - iph->ihl * 4 - sizeof(struct tcphdr));
 
 			if (skb->ip_summed == CHECKSUM_NONE) {
 				if (skb_rcsum_verify(skb) != 0) {
@@ -1117,9 +1117,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				natcap_session_init(ct, GFP_ATOMIC);
 			}
 			ns = natcap_session_get(ct);
-			if ((int)(ns->foreign_seq - foreign_seq) < 0) {
-				ns->foreign_seq = foreign_seq;
-			}
+			ns->foreign_seq = foreign_seq;
 
 			return NF_ACCEPT;
 		}
