@@ -1232,7 +1232,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 
 	skb_rcsum_tcpudp(skb);
 
-	ns->current_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - sizeof(struct tcphdr);
+	ns->current_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - sizeof(struct tcphdr);
 	return 0;
 }
 
