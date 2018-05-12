@@ -1295,6 +1295,9 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
+	if ((IPS_NATCAP & ct->status)) {
+		return NF_ACCEPT;
+	}
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)
 	if (nf_nat_initialized(ct, IP_NAT_MANIP_DST)) {
