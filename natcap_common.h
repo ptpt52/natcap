@@ -137,8 +137,8 @@ extern char htp_confusion_host[64];
 #define UDP_ST_FMT "UL:%u,UC:%04X"
 #define UDP_ST_ARG(u) ntohs(((struct udphdr *)(u))->len), ntohs(((struct udphdr *)(u))->check)
 
-#define DEBUG_FMT_PREFIX "[%s](%s:%u)"
-#define DEBUG_ARG_PREFIX hooknames[hooknum], __FUNCTION__, __LINE__
+#define DEBUG_FMT_PREFIX "(%s:%u)"
+#define DEBUG_ARG_PREFIX __FUNCTION__, __LINE__
 
 #define DEBUG_FMT_TCP "[" IP_TCPUDP_FMT "|ID:%04X,IL:%u|" TCP_ST_FMT "]"
 #define DEBUG_ARG_TCP(i, t) IP_TCPUDP_ARG(i,t), ntohs(((struct iphdr *)(i))->id), ntohs(((struct iphdr *)(i))->tot_len), TCP_ST_ARG(t)
@@ -146,11 +146,11 @@ extern char htp_confusion_host[64];
 #define DEBUG_FMT_UDP "[" IP_TCPUDP_FMT "|ID:%04X,IL:%u|" UDP_ST_FMT "]"
 #define DEBUG_ARG_UDP(i, u) IP_TCPUDP_ARG(i,u), ntohs((i)->id), ntohs((i)->tot_len), UDP_ST_ARG(u)
 
-#define DEBUG_TCP_FMT DEBUG_FMT_PREFIX DEBUG_FMT_TCP
-#define DEBUG_TCP_ARG(i, t) DEBUG_ARG_PREFIX, DEBUG_ARG_TCP(i, t)
+#define DEBUG_TCP_FMT "[%s]" DEBUG_FMT_PREFIX DEBUG_FMT_TCP
+#define DEBUG_TCP_ARG(i, t) hooknames[hooknum], DEBUG_ARG_PREFIX, DEBUG_ARG_TCP(i, t)
 
-#define DEBUG_UDP_FMT DEBUG_FMT_PREFIX DEBUG_FMT_UDP
-#define DEBUG_UDP_ARG(i, u) DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(i, u)
+#define DEBUG_UDP_FMT "[%s]" DEBUG_FMT_PREFIX DEBUG_FMT_UDP
+#define DEBUG_UDP_ARG(i, u) hooknames[hooknum], DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(i, u)
 
 #define TUPLE_FMT "%pI4:%u-%c"
 #define TUPLE_ARG(t) &((struct tuple *)(t))->ip, ntohs(((struct tuple *)(t))->port), ((struct tuple *)(t))->encryption ? 'e' : 'o'

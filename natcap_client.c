@@ -415,12 +415,12 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	header_len = offset < 0 ? 0 : offset;
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR("alloc_skb fail\n");
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
 		return -1;
 	}
 	if (offset <= 0) {
 		if (pskb_trim(nskb, nskb->len + offset)) {
-			NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+			NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_trim fail: len=%d, offset=%d\n", DEBUG_ARG_PREFIX, nskb->len, offset);
 			consume_skb(nskb);
 			return -1;
 		}
@@ -1309,7 +1309,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 			skb2 = skb_copy(skb, GFP_ATOMIC);
 			if (skb2 == NULL) {
-				NATCAP_ERROR("alloc_skb fail\n");
+				NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
 				return NF_DROP;
 			}
 			iph = ip_hdr(skb2);
@@ -1357,7 +1357,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				header_len = offset < 0 ? 0 : offset;
 				skb_htp = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
 				if (!skb_htp) {
-					NATCAP_ERROR("alloc_skb fail\n");
+					NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
 					if (skb2) {
 						consume_skb(skb2);
 					}
@@ -1365,7 +1365,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				}
 				if (offset <= 0) {
 					if (pskb_trim(skb_htp, skb_htp->len + offset)) {
-						NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", skb_htp->len, offset);
+						NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_trim fail: len=%d, offset=%d\n", DEBUG_ARG_PREFIX, skb_htp->len, offset);
 						if (skb2) {
 							consume_skb(skb2);
 						}
@@ -1481,7 +1481,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 				consume_skb(skb);
 				skb = nskb;
-				NATCAP_ERROR("pskb_expand_head failed\n");
+				NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
 				continue;
 			}
 			iph = ip_hdr(skb);
@@ -1529,12 +1529,12 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				header_len = offset < 0 ? 0 : offset;
 				nskb = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
 				if (!nskb) {
-					NATCAP_ERROR("alloc_skb fail\n");
+					NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
 					return NF_ACCEPT;
 				}
 				if (offset <= 0) {
 					if (pskb_trim(nskb, nskb->len + offset)) {
-						NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+						NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_trim fail: len=%d, offset=%d\n", DEBUG_ARG_PREFIX, nskb->len, offset);
 						consume_skb(nskb);
 						return NF_DROP;
 					}
@@ -1570,7 +1570,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				int offlen;
 
 				if (skb_tailroom(skb) < 12 && pskb_expand_head(skb, 0, 12, GFP_ATOMIC)) {
-					NATCAP_ERROR("pskb_expand_head failed\n");
+					NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
 					return NF_ACCEPT;
 				}
 				iph = ip_hdr(skb);
@@ -1701,7 +1701,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 	skb = skb_copy(skb_orig, GFP_ATOMIC);
 	if (skb == NULL) {
-		NATCAP_ERROR("alloc_skb fail\n");
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
 		return NF_ACCEPT;
 	}
 	skb_nfct_reset(skb);
@@ -1914,7 +1914,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 			skb2 = skb_copy(skb, GFP_ATOMIC);
 			if (skb2 == NULL) {
-				NATCAP_ERROR("alloc_skb fail\n");
+				NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				consume_skb(skb);
 				return NF_ACCEPT;
@@ -1966,7 +1966,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				header_len = offset < 0 ? 0 : offset;
 				skb_htp = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
 				if (!skb_htp) {
-					NATCAP_ERROR("alloc_skb fail\n");
+					NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
 					if (skb2) {
 						consume_skb(skb2);
 					}
@@ -1974,7 +1974,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				}
 				if (offset <= 0) {
 					if (pskb_trim(skb_htp, skb_htp->len + offset)) {
-						NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", skb_htp->len, offset);
+						NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_trim fail: len=%d, offset=%d\n", DEBUG_ARG_PREFIX, skb_htp->len, offset);
 						if (skb2) {
 							consume_skb(skb2);
 						}
@@ -2073,7 +2073,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 				consume_skb(skb);
 				skb = nskb;
-				NATCAP_ERROR("pskb_expand_head failed\n");
+				NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
 				continue;
 			}
 			iph = ip_hdr(skb);
@@ -2121,13 +2121,13 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				header_len = offset < 0 ? 0 : offset;
 				nskb = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
 				if (!nskb) {
-					NATCAP_ERROR("alloc_skb fail\n");
+					NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
 					consume_skb(skb);
 					return NF_ACCEPT;
 				}
 				if (offset <= 0) {
 					if (pskb_trim(nskb, nskb->len + offset)) {
-						NATCAP_ERROR("pskb_trim fail: len=%d, offset=%d\n", nskb->len, offset);
+						NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_trim fail: len=%d, offset=%d\n", DEBUG_ARG_PREFIX, nskb->len, offset);
 						consume_skb(nskb);
 						consume_skb(skb);
 						return NF_ACCEPT;
@@ -2169,7 +2169,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				int offlen;
 
 				if (skb_tailroom(skb) < 12 && pskb_expand_head(skb, 0, 12, GFP_ATOMIC)) {
-					NATCAP_ERROR("pskb_expand_head failed\n");
+					NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
 					consume_skb(skb);
 					return NF_ACCEPT;
 				}

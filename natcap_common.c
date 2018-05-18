@@ -1236,7 +1236,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	iph = ip_hdr(skb);
 
 	if (!ns) {
-		NATCAP_ERROR("ns is NULL\n");
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "ns is NULL\n", DEBUG_ARG_PREFIX);
 		return -EINVAL;
 	}
 
@@ -1245,7 +1245,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	}
 
 	if (skb_tailroom(skb) < sizeof(struct tcphdr) - sizeof(struct udphdr) && pskb_expand_head(skb, 0, sizeof(struct tcphdr) - sizeof(struct udphdr), GFP_ATOMIC)) {
-		NATCAP_ERROR("pskb_expand_head failed\n");
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
 		return -ENOMEM;
 	}
 	iph = ip_hdr(skb);
