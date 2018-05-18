@@ -989,6 +989,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if ((IPS_NATCAP_BYPASS & ct->status)) {
+		if ((IPS_NATFLOW_STOP & ct->status)) clear_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
 	if ((IPS_NATCAP_DROP & ct->status)) {
@@ -1126,6 +1127,7 @@ do_dnat_setup:
 
 		flow_total_rx_bytes += skb->len;
 		xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+		if (!(IPS_NATFLOW_STOP & ct->status)) set_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
 
 		NATCAP_DEBUG("(SPCI)" DEBUG_TCP_FMT ": after decode\n", DEBUG_TCP_ARG(iph,l4));
 	} else if (iph->protocol == IPPROTO_UDP) {
@@ -1174,6 +1176,7 @@ do_dnat_setup:
 			if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == 0x01) {
 				flow_total_rx_bytes += skb->len;
 				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+				if (!(IPS_NATFLOW_STOP & ct->status)) set_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
 				return NF_ACCEPT;
 			} else if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == 0x02) {
 				int offlen;
@@ -1204,6 +1207,7 @@ do_dnat_setup:
 
 			flow_total_rx_bytes += skb->len;
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+			if (!(IPS_NATFLOW_STOP & ct->status)) set_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
 			return NF_ACCEPT;
 		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -1596,7 +1600,7 @@ static struct nf_hook_ops server_hooks[] = {
 		.hook = natcap_server_pre_ct_test_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_CONNTRACK + 1,
+		.priority = NF_IP_PRI_CONNTRACK + 4,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)

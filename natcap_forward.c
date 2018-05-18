@@ -72,6 +72,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if ((IPS_NATCAP_BYPASS & ct->status)) {
+		if ((IPS_NATFLOW_STOP & ct->status)) clear_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
 	if ((IPS_NATCAP & ct->status)) {
@@ -157,6 +158,7 @@ __do_dnat:
 
 		flow_total_rx_bytes += skb->len;
 		xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+		if (!(IPS_NATFLOW_STOP & ct->status)) set_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
 		NATCAP_DEBUG("(FPCI)" DEBUG_TCP_FMT ": after decode\n", DEBUG_TCP_ARG(iph,l4));
 	} else if (iph->protocol == IPPROTO_UDP) {
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
@@ -245,6 +247,7 @@ __do_dnat:
 		if ((IPS_NATCAP & ct->status)) {
 			flow_total_rx_bytes += skb->len;
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+			if (!(IPS_NATFLOW_STOP & ct->status)) set_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
 		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": first packet in but not ctrl code\n", DEBUG_UDP_ARG(iph,l4));

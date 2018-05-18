@@ -98,6 +98,17 @@ struct natcap_session {
 	unsigned int current_seq;
 };
 
+#define NATCAP_MAGIC 0x43415099
+
+/*XXX refer to natflow.h */
+#define NATFLOW_MAGIC 0x464c4f57
+struct nat_key_t {
+	unsigned int magic;
+	unsigned int ext_magic;
+};
+#define IPS_NATFLOW_STOP_BIT 15
+#define IPS_NATFLOW_STOP (1 << IPS_NATFLOW_STOP_BIT)
+
 // test t1 < t2 return 1
 static inline int tuple_lt(const struct tuple *t1, const struct tuple *t2)
 {

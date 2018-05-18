@@ -1098,6 +1098,7 @@ unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto
 
 int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 {
+	struct nat_key_t *nk;
 	struct natcap_session *ns;
 	struct nf_ct_ext *old, *new;
 	struct nf_conn_nat *nat = NULL;
@@ -1113,13 +1114,68 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		return -1;
 	}
 	if (ct->ext && !!ct->ext->offset[NF_CT_EXT_NAT]) {
-		return -1;
-	}
+		old = ct->ext;
+		nat = (void *)old + old->offset[NF_CT_EXT_NAT];
+		nk = (struct nat_key_t *)((void *)nat - ALIGN(sizeof(struct nat_key_t), sizeof(unsigned long)));
+		if (nk->magic != NATFLOW_MAGIC) {
+			return -1;
+		}
+		if (old->offset[NF_CT_EXT_NAT] + ALIGN(sizeof(struct nf_conn_nat), sizeof(unsigned long)) != old->len) {
+			return -1;
+		}
 
-	old = ct->ext;
-	if (!old) {
-		newoff = ALIGN(sizeof(struct nf_ct_ext), sizeof(unsigned long));
+		newoff = ALIGN(old->len, sizeof(unsigned long));
 		newlen = ALIGN(newoff + var_alloc_len, sizeof(unsigned long));
+		alloc_size = newlen;
+
+		new = __krealloc(old, alloc_size, gfp);
+		if (!new) {
+			return -1;
+		}
+
+		new->len = newlen;
+		memset((void *)new + newoff, 0, newlen - newoff);
+
+		if (new != old) {
+			kfree_rcu(old, rcu);
+			rcu_assign_pointer(ct->ext, new);
+		}
+
+		nat = (void *)new + new->offset[NF_CT_EXT_NAT];
+		nk = (struct nat_key_t *)((void *)nat - ALIGN(sizeof(struct nat_key_t), sizeof(unsigned long)));
+		nk->ext_magic = NATCAP_MAGIC;
+		ns = (struct natcap_session *)((void *)nat + ALIGN(sizeof(struct nf_conn_nat), sizeof(unsigned long)));
+		ns->check_ptr = ct;
+	} else if (ct->ext) {
+		old = ct->ext;
+		newoff = ALIGN(old->len, sizeof(unsigned long));
+		newlen = ALIGN(newoff + var_alloc_len, sizeof(unsigned long)) + ALIGN(sizeof(struct nat_key_t), sizeof(unsigned long));
+		alloc_size = ALIGN(newlen + sizeof(struct nf_conn_nat), sizeof(unsigned long));
+
+		new = __krealloc(old, alloc_size, gfp);
+		if (!new) {
+			return -1;
+		}
+		new->len = newlen;
+		memset((void *)new + newoff, 0, newlen - newoff);
+
+		if (new != old) {
+			kfree_rcu(old, rcu);
+			rcu_assign_pointer(ct->ext, new);
+		}
+
+		nat = nf_ct_ext_add(ct, NF_CT_EXT_NAT, gfp);
+		if (nat == NULL) {
+			return -1;
+		}
+
+		nk = (struct nat_key_t *)((void *)nat - ALIGN(sizeof(struct nat_key_t), sizeof(unsigned long)));
+		nk->magic = NATCAP_MAGIC;
+		ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), sizeof(unsigned long)) - ALIGN(sizeof(struct nat_key_t), sizeof(unsigned long)));
+		ns->check_ptr = ct;
+	} else {
+		newoff = ALIGN(sizeof(struct nf_ct_ext), sizeof(unsigned long));
+		newlen = ALIGN(newoff + var_alloc_len, sizeof(unsigned long)) + ALIGN(sizeof(struct nat_key_t), sizeof(unsigned long));
 		alloc_size = ALIGN(newlen + sizeof(struct nf_conn_nat), sizeof(unsigned long));
 
 		new = kzalloc(alloc_size, gfp);
@@ -1128,56 +1184,44 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		}
 		new->len = newlen;
 		ct->ext = new;
-		nat = nf_ct_ext_add(ct, NF_CT_EXT_NAT, gfp);
-	} else {
-		newoff = ALIGN(old->len, sizeof(unsigned long));
-		newlen = ALIGN(newoff + var_alloc_len, sizeof(unsigned long));
-		alloc_size = ALIGN(newlen + sizeof(struct nf_conn_nat), sizeof(unsigned long));
 
-		new = __krealloc(old, alloc_size, gfp);
-		if (!new) {
+		nat = nf_ct_ext_add(ct, NF_CT_EXT_NAT, gfp);
+		if (nat == NULL) {
 			return -1;
 		}
 
-		if (new != old) {
-			kfree_rcu(old, rcu);
-			rcu_assign_pointer(ct->ext, new);
-		}
-		new->len = newlen;
-		memset((void *)new + newoff, 0, newlen - newoff);
-		nat = nf_ct_ext_add(ct, NF_CT_EXT_NAT, gfp);
+		nk = (struct nat_key_t *)((void *)nat - ALIGN(sizeof(struct nat_key_t), sizeof(unsigned long)));
+		nk->magic = NATCAP_MAGIC;
+		ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), sizeof(unsigned long)) - ALIGN(sizeof(struct nat_key_t), sizeof(unsigned long)));
+		ns->check_ptr = ct;
 	}
 
 	if (nat == NULL) {
 		return -1;
 	}
 
-	if (newlen != ct->ext->offset[NF_CT_EXT_NAT]) {
-		NATCAP_ERROR("nat ext offset(%u) is not at %u as expect\n", ct->ext->offset[NF_CT_EXT_NAT], newlen);
-		return -1;
-	}
-
-	ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), sizeof(unsigned long)));
-	ns->check_ptr = ct;
-
-	NATCAP_DEBUG("nat ext offset(%u) newoff:%u newlen:%u var_alloc_len:%u\n",
-			ct->ext->offset[NF_CT_EXT_NAT], newoff, newlen, (unsigned int)var_alloc_len);
-
 	return 0;
 }
 
 struct natcap_session *natcap_session_get(struct nf_conn *ct)
 {
-	struct natcap_session *ns;
 	struct nf_conn_nat *nat;
+	struct nat_key_t *nk;
+	struct natcap_session *ns = NULL;
 
 	nat  = nfct_nat(ct);
 	if (!nat) {
 		return NULL;
 	}
 
-	ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), sizeof(unsigned long)));
-	if (ns->check_ptr != ct) {
+	nk = (struct nat_key_t *)((void *)nat - ALIGN(sizeof(struct nat_key_t), sizeof(unsigned long)));
+	if (nk->magic == NATCAP_MAGIC) {
+		ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), sizeof(unsigned long)) - ALIGN(sizeof(struct nat_key_t), sizeof(unsigned long)));
+	} else if (nk->magic == NATFLOW_MAGIC && nk->ext_magic == NATCAP_MAGIC) {
+		ns = (struct natcap_session *)((void *)nat + ALIGN(sizeof(struct nf_conn_nat), sizeof(unsigned long)));
+	}
+
+	if (!ns || ns->check_ptr != ct) {
 		return NULL;
 	}
 

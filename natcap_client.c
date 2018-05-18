@@ -546,6 +546,9 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 	if ((IPS_NATCAP_BYPASS & ct->status)) {
 		if (!(IPS_NATCAP_ACK & ct->status)) {
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+			if (!(IPS_NATFLOW_STOP & ct->status)) set_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
+		} else {
+			if ((IPS_NATFLOW_STOP & ct->status)) clear_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
 		}
 		return NF_ACCEPT;
 	}
@@ -671,6 +674,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": TCP dual out to server=%pI4\n", DEBUG_TCP_ARG(iph,l4), &server.ip);
 			}
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+			if (!(IPS_NATFLOW_STOP & ct->status)) set_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
 	} else {
@@ -720,6 +724,7 @@ natcap_dual_out:
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": UDP dual out to server=%pI4\n", DEBUG_UDP_ARG(iph,l4), &server.ip);
 			}
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+			if (!(IPS_NATFLOW_STOP & ct->status)) set_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
 
@@ -791,6 +796,7 @@ natcap_dual_out:
 
 natcaped_out:
 	xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+	if (!(IPS_NATFLOW_STOP & ct->status)) set_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
 	if (iph->protocol == IPPROTO_TCP) {
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
 			return NF_DROP;
