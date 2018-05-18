@@ -1050,7 +1050,11 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				return NF_ACCEPT;
 			}
 			
-			natcap_session_init(ct, GFP_ATOMIC);
+			if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
+				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
 			tcpopt.header.encryption = 0;
 			ret = natcap_tcp_decode(ct, skb, &tcpopt, IP_CT_DIR_ORIGINAL);
 			if (ret != 0) {
@@ -1506,7 +1510,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			}
 
 			if (!(IPS_NATCAP_TCPENC & ct->status) && !test_and_set_bit(IPS_NATCAP_TCPENC_BIT, &ct->status)) { /* first time in */
-				natcap_session_init(ct, GFP_ATOMIC);
+				if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
+					NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
+					return NF_DROP;
+				}
 			}
 			ns = natcap_session_get(ct);
 			ns->foreign_seq = foreign_seq;
@@ -1591,7 +1598,7 @@ static struct nf_hook_ops server_hooks[] = {
 		.hook = natcap_server_pre_in_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_CONNTRACK - 5,
+		.priority = NF_IP_PRI_CONNTRACK - 10 + 1,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -1600,7 +1607,7 @@ static struct nf_hook_ops server_hooks[] = {
 		.hook = natcap_server_pre_ct_test_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_CONNTRACK + 4,
+		.priority = NF_IP_PRI_CONNTRACK + 10 - 1,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -1609,7 +1616,7 @@ static struct nf_hook_ops server_hooks[] = {
 		.hook = natcap_server_pre_ct_in_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_NAT_DST - 35,
+		.priority = NF_IP_PRI_NAT_DST - 35 + 1,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -1618,7 +1625,7 @@ static struct nf_hook_ops server_hooks[] = {
 		.hook = natcap_server_post_out_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_LOCAL_IN,
-		.priority = NF_IP_PRI_LAST,
+		.priority = NF_IP_PRI_LAST - 10 + 1,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -1627,7 +1634,7 @@ static struct nf_hook_ops server_hooks[] = {
 		.hook = natcap_server_post_out_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_POST_ROUTING,
-		.priority = NF_IP_PRI_LAST,
+		.priority = NF_IP_PRI_LAST - 10 + 2,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -1636,7 +1643,7 @@ static struct nf_hook_ops server_hooks[] = {
 		.hook = natcap_server_forward_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_FORWARD,
-		.priority = NF_IP_PRI_FIRST,
+		.priority = NF_IP_PRI_FIRST + 10,
 	},
 };
 

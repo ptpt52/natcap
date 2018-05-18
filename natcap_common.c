@@ -1209,7 +1209,7 @@ struct natcap_session *natcap_session_get(struct nf_conn *ct)
 	struct nat_key_t *nk;
 	struct natcap_session *ns = NULL;
 
-	nat  = nfct_nat(ct);
+	nat = nfct_nat(ct);
 	if (!nat) {
 		return NULL;
 	}
