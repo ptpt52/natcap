@@ -1128,6 +1128,11 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		newlen = ALIGN(newoff + var_alloc_len, sizeof(unsigned long));
 		alloc_size = newlen;
 
+		if (newlen >= 256) {
+			NATCAP_ERROR(DEBUG_FMT_PREFIX "ct->ext no space left (old->len=%u, newlen=%u)\n", DEBUG_ARG_PREFIX, old->len, newlen);
+			return -1;
+		}
+
 		new = __krealloc(old, alloc_size, gfp);
 		if (!new) {
 			return -1;
