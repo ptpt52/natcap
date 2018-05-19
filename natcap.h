@@ -89,13 +89,12 @@ struct tuple {
 };
 
 struct natcap_session {
-	void *check_ptr;
 	struct tuple tup;
-	__be16 new_source;
 	int tcp_seq_offset;
 	int tcp_ack_offset;
 	unsigned int foreign_seq;
 	unsigned int current_seq;
+	__be16 new_source;
 };
 
 #define NATCAP_MAGIC 0x43415099
