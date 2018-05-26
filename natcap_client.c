@@ -550,8 +550,6 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		if (!(IPS_NATCAP_ACK & ct->status)) {
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 			if (!(IPS_NATFLOW_STOP & ct->status)) set_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
-		} else {
-			if ((IPS_NATFLOW_STOP & ct->status)) clear_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
 		}
 		return NF_ACCEPT;
 	}

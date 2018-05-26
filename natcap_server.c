@@ -989,7 +989,6 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if ((IPS_NATCAP_BYPASS & ct->status)) {
-		if ((IPS_NATFLOW_STOP & ct->status)) clear_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
 		return NF_ACCEPT;
 	}
 	if ((IPS_NATCAP_DROP & ct->status)) {
