@@ -201,6 +201,8 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	nudph->check = CSUM_MANGLED_0;
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(nskb);
+
 	if ((IPS_NATCAP_TCPENC & ct->status)) {
 		natcap_udp_to_tcp_pack(nskb, natcap_session_get(ct), 1);
 	}
