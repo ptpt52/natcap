@@ -43,9 +43,7 @@ extern const char *ipfilter_acl_str[NATCAP_ACL_MAX];
 extern unsigned int server_persist_timeout;
 extern unsigned int encode_http_only;
 extern unsigned int http_confusion;
-extern unsigned int shadowsocks;
 extern unsigned int sproxy;
-extern unsigned int enable_hosts;
 
 extern unsigned int dns_server;
 extern unsigned short dns_port;
