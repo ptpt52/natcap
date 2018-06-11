@@ -1549,7 +1549,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 	l4 = (void *)iph + iph->ihl * 4;
 
 	if (skb_is_gso(skb)) {
-		NATCAP_ERROR("(SPI)" DEBUG_UDP_FMT ": skb_is_gso\n", DEBUG_UDP_ARG(iph,l4));
+		NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": skb_is_gso\n", DEBUG_UDP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
 

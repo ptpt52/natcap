@@ -349,6 +349,7 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 	if (nsi->last_dir[hash] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[hash]) <= natcap_touch_timeout * HZ) {
 		found = 1;
 	} else {
+		unsigned int oldhash = hash;
 		hash = (hash + jiffies) % count;
 		for (i = hash; i < count; i++) {
 			if (nsi->last_dir[i] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[i]) > 512 * HZ) {
@@ -356,7 +357,9 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 				hash = i;
 				server_index = i;
 				nsi->last_dir[i] = NATCAP_SERVER_IN;
-				NATCAP_WARN("current server is not available, reuse old state server=" TUPLE_FMT "\n", TUPLE_ARG(&nsi->server[m][hash]));
+				NATCAP_WARN("current server(" TUPLE_FMT ") is blocked, switch to next=" TUPLE_FMT "\n",
+						TUPLE_ARG(&nsi->server[m][oldhash]),
+						TUPLE_ARG(&nsi->server[m][hash]));
 				break;
 			}
 		}
@@ -366,13 +369,18 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 				hash = i;
 				server_index = i;
 				nsi->last_dir[i] = NATCAP_SERVER_IN;
-				NATCAP_WARN("current server is not available, reuse old state server=" TUPLE_FMT "\n", TUPLE_ARG(&nsi->server[m][hash]));
+				NATCAP_WARN("current server(" TUPLE_FMT ") is blocked, switch to next=" TUPLE_FMT "\n",
+						TUPLE_ARG(&nsi->server[m][oldhash]),
+						TUPLE_ARG(&nsi->server[m][hash]));
 				break;
 			}
 		}
 		if (!found) {
-			NATCAP_WARN("no server is availabe, force change next. current=" TUPLE_FMT "\n", TUPLE_ARG(&nsi->server[m][hash]));
 			natcap_server_info_change(1);
+			hash = server_index % count;
+			NATCAP_WARN("all servers are blocked, force change. " TUPLE_FMT " -> " TUPLE_FMT "\n",
+					TUPLE_ARG(&nsi->server[m][oldhash]),
+					TUPLE_ARG(&nsi->server[m][hash]));
 		}
 	}
 
