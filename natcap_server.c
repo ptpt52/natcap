@@ -1483,7 +1483,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 	iph = ip_hdr(skb);
 	if (iph->protocol == IPPROTO_TCP) {
-		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 4)) {
+		if (skb->len < iph->ihl * 4 + sizeof(struct tcphdr) + 4) {
+			return NF_ACCEPT;
+		}
+		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 4)) {
 			return NF_ACCEPT;
 		}
 		iph = ip_hdr(skb);
@@ -1502,6 +1505,12 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 				skb->csum = 0;
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
 			}
+
+			if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 4)) {
+				return NF_DROP;
+			}
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
 
 			memmove((void *)UDPH(l4) + sizeof(struct udphdr), (void *)UDPH(l4) + sizeof(struct tcphdr), skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct tcphdr));
 			iph->tot_len = htons(ntohs(iph->tot_len) - (sizeof(struct tcphdr) - sizeof(struct udphdr)));
@@ -1542,16 +1551,21 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 4)) {
-		return NF_ACCEPT;
-	}
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
-
 	if (skb_is_gso(skb)) {
 		NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": skb_is_gso\n", DEBUG_UDP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
+
+	if (skb->len < iph->ihl * 4 + sizeof(struct tcphdr) + 8) {
+		return NF_ACCEPT;
+	}
+	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 8)) {
+		return NF_ACCEPT;
+	}
+	iph = ip_hdr(skb);
+	l4 = (void *)iph + iph->ihl * 4;
 
 	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xFFFF0099)) {
 		int offlen;
@@ -1565,11 +1579,6 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 		}
 
-		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 8)) {
-			return NF_DROP;
-		}
-		iph = ip_hdr(skb);
-		l4 = (void *)iph + iph->ihl * 4;
 		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4)) {
 			return NF_DROP;
 		}
