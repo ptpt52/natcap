@@ -65,10 +65,6 @@ extern unsigned int auth_enabled;
 extern unsigned int mode;
 extern const char *const mode_str[];
 
-extern unsigned int encode_mode;
-extern unsigned int udp_encode_mode;
-extern const char *const encode_mode_str[];
-
 extern unsigned int disabled;
 extern unsigned int debug;
 extern unsigned int server_seed;
@@ -168,8 +164,8 @@ extern char htp_confusion_host[64];
 #define DEBUG_UDP_FMT "[%s]" DEBUG_FMT_PREFIX DEBUG_FMT_UDP
 #define DEBUG_UDP_ARG(i, u) hooknames[hooknum], DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(i, u)
 
-#define TUPLE_FMT "%pI4:%u-%c"
-#define TUPLE_ARG(t) &((struct tuple *)(t))->ip, ntohs(((struct tuple *)(t))->port), ((struct tuple *)(t))->encryption ? 'e' : 'o'
+#define TUPLE_FMT "%pI4:%u-%c-%c-%c"
+#define TUPLE_ARG(t) &((struct tuple *)(t))->ip, ntohs(((struct tuple *)(t))->port), ((struct tuple *)(t))->encryption ? 'e' : 'o', ((struct tuple *)(t))->tcp_encode == TCP_ENCODE ? 'T' : 'U', ((struct tuple *)(t))->udp_encode == UDP_ENCODE ? 'U' : 'T'
 
 #define TCPH(t) ((struct tcphdr *)(t))
 #define UDPH(u) ((struct udphdr *)(u))

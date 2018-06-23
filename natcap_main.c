@@ -74,8 +74,6 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"# Usage:\n"
 				"#    disabled=Number -- set disable/enable\n"
 				"#    debug=Number -- set debug value\n"
-				"#    encode_mode=[TCP/UDP] -- set encode mode\n"
-				"#    udp_encode_mode=[TCP/UDP] -- set UDP encode mode\n"
 				"#    server [ip]:[port]-[e/o] -- add one server\n"
 				"#    delete [ip]:[port]-[e/o] -- delete one server\n"
 				"#    clean -- remove all existing server(s)\n"
@@ -108,8 +106,6 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"clean\n"
 				"disabled=%u\n"
 				"debug=%u\n"
-				"encode_mode=%s\n"
-				"udp_encode_mode=%s\n"
 				"server_persist_timeout=%u\n"
 				"cnipwhitelist_mode=%u\n"
 				"dns_server=%pI4:%u\n"
@@ -127,7 +123,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				htp_confusion_host,
 				macfilter_acl_str[macfilter], macfilter,
 				ipfilter_acl_str[ipfilter], ipfilter,
-				disabled, debug, encode_mode_str[encode_mode], encode_mode_str[udp_encode_mode], server_persist_timeout,
+				disabled, debug, server_persist_timeout,
 				cnipwhitelist_mode, &dns_server, ntohs(dns_port));
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
@@ -252,10 +248,12 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	} else if (strncmp(data, "server ", 7) == 0) {
 		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == FORWARD_MODE) {
 			unsigned int a, b, c, d, e;
-			char f;
-			n = sscanf(data, "server %u.%u.%u.%u:%u-%c", &a, &b, &c, &d, &e, &f);
-			if ( (n == 6 && e <= 0xffff) &&
+			char f, g, h;
+			n = sscanf(data, "server %u.%u.%u.%u:%u-%c-%c-%c", &a, &b, &c, &d, &e, &f, &g, &h);
+			if ( (n == 8 && e <= 0xffff) &&
 					(f == 'e' || f == 'o') &&
+					(g == 'T' || g == 'U') &&
+					(h == 'U' || h == 'T') &&
 					(((a & 0xff) == a) &&
 					 ((b & 0xff) == b) &&
 					 ((c & 0xff) == c) &&
@@ -263,6 +261,8 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 				dst.port = htons(e);
 				dst.encryption = !!(f == 'e');
+				dst.tcp_encode = g == 'T' ? TCP_ENCODE : UDP_ENCODE;
+				dst.udp_encode = h == 'U' ? UDP_ENCODE : TCP_ENCODE;
 				if ((err = natcap_server_info_add(&dst)) == 0)
 				{
 					natcap_server_info_change(1);
@@ -392,26 +392,6 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 					ipfilter = d;
 					goto done;
 				}
-			}
-		}
-	} else if (strncmp(data, "encode_mode=", 12) == 0) {
-		if (mode == FORWARD_MODE || mode == CLIENT_MODE || mode == MIXING_MODE) {
-			if (strncmp(data + 12, encode_mode_str[TCP_ENCODE], strlen(encode_mode_str[TCP_ENCODE])) == 0) {
-				encode_mode = TCP_ENCODE;
-				goto done;
-			} else if (strncmp(data + 12, encode_mode_str[UDP_ENCODE], strlen(encode_mode_str[UDP_ENCODE])) == 0) {
-				encode_mode = UDP_ENCODE;
-				goto done;
-			}
-		}
-	} else if (strncmp(data, "udp_encode_mode=", 16) == 0) {
-		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
-			if (strncmp(data + 16, encode_mode_str[TCP_ENCODE], strlen(encode_mode_str[TCP_ENCODE])) == 0) {
-				udp_encode_mode = TCP_ENCODE;
-				goto done;
-			} else if (strncmp(data + 16, encode_mode_str[UDP_ENCODE], strlen(encode_mode_str[UDP_ENCODE])) == 0) {
-				udp_encode_mode = UDP_ENCODE;
-				goto done;
 			}
 		}
 	} else if (strncmp(data, "knock_port=", 11) == 0) {

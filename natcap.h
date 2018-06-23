@@ -99,7 +99,9 @@ struct cone_nat_session {
 #pragma pack(pop)
 
 struct tuple {
-	u16 encryption;
+	u16 encryption:8,
+		tcp_encode:4,
+		udp_encode:4;
 	__be16 port;
 	__be32 ip;
 };

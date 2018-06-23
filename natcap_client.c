@@ -656,7 +656,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			if (server.encryption) {
 				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 			}
-			if (encode_mode == UDP_ENCODE) {
+			if (server.tcp_encode == UDP_ENCODE) {
 				set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status);
 			}
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, select server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
@@ -764,7 +764,7 @@ natcap_dual_out:
 			if (server.encryption) {
 				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 			}
-			if (udp_encode_mode == TCP_ENCODE) {
+			if (server.udp_encode == TCP_ENCODE) {
 				set_bit(IPS_NATCAP_TCPENC_BIT, &ct->status);
 			}
 			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
@@ -1882,12 +1882,12 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 		switch(iph->protocol) {
 			case IPPROTO_TCP:
-				if (encode_mode == UDP_ENCODE) {
+				if (ns->tup.tcp_encode == UDP_ENCODE) {
 					set_bit(IPS_NATCAP_UDPENC_BIT, &master->status);
 				}
 				break;
 			case IPPROTO_UDP:
-				if (udp_encode_mode == TCP_ENCODE) {
+				if (ns->tup.udp_encode == TCP_ENCODE) {
 					set_bit(IPS_NATCAP_TCPENC_BIT, &master->status);
 				}
 				break;

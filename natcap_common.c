@@ -91,13 +91,6 @@ const char *const mode_str[] = {
 	[KNOCK_MODE] = "KNOCK",
 };
 
-unsigned int encode_mode = TCP_ENCODE;
-unsigned int udp_encode_mode = UDP_ENCODE;
-const char *const encode_mode_str[] = {
-	[TCP_ENCODE] = "TCP",
-	[UDP_ENCODE] = "UDP",
-};
-
 const char *const hooknames[] = {
 	[NF_INET_PRE_ROUTING] = "PRE",
 	[NF_INET_LOCAL_IN] = "IN",

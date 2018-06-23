@@ -477,10 +477,6 @@ static unsigned int natcap_forward_pre_in_hook(void *priv,
 	if (disabled)
 		return NF_ACCEPT;
 
-	if (encode_mode == UDP_ENCODE) {
-		return NF_ACCEPT;
-	}
-
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_UDP) {
 		return NF_ACCEPT;
