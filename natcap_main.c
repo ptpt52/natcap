@@ -265,7 +265,6 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				dst.udp_encode = h == 'U' ? UDP_ENCODE : TCP_ENCODE;
 				if ((err = natcap_server_info_add(&dst)) == 0)
 				{
-					natcap_server_info_change(1);
 					goto done;
 				}
 				NATCAP_println("natcap_server_add() failed ret=%d", err);
