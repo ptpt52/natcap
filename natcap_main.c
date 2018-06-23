@@ -446,8 +446,6 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				strcpy(htp_confusion_host, tmp);
 				kfree(tmp);
 				sprintf(htp_confusion_req, htp_confusion_req_format, prandom_u32(), htp_confusion_host);
-				printk("%s\n", htp_confusion_req);
-				printk("len=%d\n", (int)strlen(htp_confusion_req));
 				goto done;
 			}
 			kfree(tmp);
