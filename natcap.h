@@ -105,22 +105,17 @@ struct tuple {
 };
 
 struct natcap_session {
+	unsigned int magic;
+	__be16 new_source;
 	struct tuple tup;
 	int tcp_seq_offset;
 	int tcp_ack_offset;
 	unsigned int foreign_seq;
 	unsigned int current_seq;
-	__be16 new_source;
 };
 
 #define NATCAP_MAGIC 0x43415099
 
-/*XXX refer to natflow.h */
-#define NATFLOW_MAGIC 0x464c4f57
-struct nat_key_t {
-	unsigned int magic;
-	unsigned int ext_magic;
-};
 /*XXX refer to drivers/nos/src/nos.h */
 #define IPS_NOS_TRACK_INIT_BIT 15
 #define IPS_NOS_TRACK_INIT (1 << IPS_NOS_TRACK_INIT_BIT)

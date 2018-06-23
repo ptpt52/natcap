@@ -1116,7 +1116,6 @@ unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto
 
 int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 {
-	struct nat_key_t *nk;
 	struct natcap_session *ns;
 	struct nf_ct_ext *old, *new;
 	struct nf_conn_nat *nat = NULL;
@@ -1132,46 +1131,13 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		return -1;
 	}
 	if (ct->ext && !!ct->ext->offset[NF_CT_EXT_NAT]) {
-		old = ct->ext;
-		nat = (void *)old + old->offset[NF_CT_EXT_NAT];
-		nk = (struct nat_key_t *)((void *)nat - ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS));
-		if (nk->magic != NATFLOW_MAGIC) {
-			return -1;
-		}
-		if (old->offset[NF_CT_EXT_NAT] + ALIGN(sizeof(struct nf_conn_nat), __ALIGN_64BITS) != old->len) {
-			return -1;
-		}
+		return -1;
+	}
 
+	if (ct->ext) {
+		old = ct->ext;
 		newoff = ALIGN(old->len, __ALIGN_64BITS);
 		newlen = ALIGN(newoff + var_alloc_len, __ALIGN_64BITS);
-		alloc_size = newlen;
-
-		if (newlen > 255u) {
-			NATCAP_ERROR(DEBUG_FMT_PREFIX "ct->ext no space left (old->len=%u, newlen=%u)\n", DEBUG_ARG_PREFIX, old->len, newlen);
-			return -1;
-		}
-
-		new = __krealloc(old, alloc_size, gfp);
-		if (!new) {
-			return -1;
-		}
-
-		new->len = newlen;
-		memset((void *)new + newoff, 0, newlen - newoff);
-
-		if (new != old) {
-			kfree_rcu(old, rcu);
-			rcu_assign_pointer(ct->ext, new);
-		}
-
-		nat = (void *)new + new->offset[NF_CT_EXT_NAT];
-		nk = (struct nat_key_t *)((void *)nat - ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS));
-		nk->ext_magic = NATCAP_MAGIC;
-		ns = (struct natcap_session *)((void *)nat + ALIGN(sizeof(struct nf_conn_nat), __ALIGN_64BITS));
-	} else if (ct->ext) {
-		old = ct->ext;
-		newoff = ALIGN(old->len, __ALIGN_64BITS);
-		newlen = ALIGN(newoff + var_alloc_len, __ALIGN_64BITS) + ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS);
 		alloc_size = ALIGN(newlen + sizeof(struct nf_conn_nat), __ALIGN_64BITS);
 
 		if (newlen > 255u) {
@@ -1195,13 +1161,9 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		if (nat == NULL) {
 			return -1;
 		}
-
-		nk = (struct nat_key_t *)((void *)nat - ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS));
-		nk->magic = NATCAP_MAGIC;
-		ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), __ALIGN_64BITS) - ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS));
 	} else {
 		newoff = ALIGN(sizeof(struct nf_ct_ext), __ALIGN_64BITS);
-		newlen = ALIGN(newoff + var_alloc_len, __ALIGN_64BITS) + ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS);
+		newlen = ALIGN(newoff + var_alloc_len, __ALIGN_64BITS);
 		alloc_size = ALIGN(newlen + sizeof(struct nf_conn_nat), __ALIGN_64BITS);
 
 		new = kzalloc(alloc_size, gfp);
@@ -1215,15 +1177,10 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		if (nat == NULL) {
 			return -1;
 		}
-
-		nk = (struct nat_key_t *)((void *)nat - ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS));
-		nk->magic = NATCAP_MAGIC;
-		ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), __ALIGN_64BITS) - ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS));
 	}
 
-	if (nat == NULL) {
-		return -1;
-	}
+	ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), __ALIGN_64BITS));
+	ns->magic = NATCAP_MAGIC;
 
 	return 0;
 }
@@ -1231,7 +1188,6 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 struct natcap_session *natcap_session_get(struct nf_conn *ct)
 {
 	struct nf_conn_nat *nat;
-	struct nat_key_t *nk;
 	struct natcap_session *ns = NULL;
 
 	nat = nfct_nat(ct);
@@ -1239,12 +1195,9 @@ struct natcap_session *natcap_session_get(struct nf_conn *ct)
 		return NULL;
 	}
 
-	nk = (struct nat_key_t *)((void *)nat - ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS));
-	if (nk->magic == NATCAP_MAGIC) {
-		ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), __ALIGN_64BITS) - ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS));
-	} else if (nk->magic == NATFLOW_MAGIC && nk->ext_magic == NATCAP_MAGIC) {
-		ns = (struct natcap_session *)((void *)nat + ALIGN(sizeof(struct nf_conn_nat), __ALIGN_64BITS));
-	}
+	ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), __ALIGN_64BITS));
+	if (ns->magic != NATCAP_MAGIC)
+		return NULL;
 
 	return ns;
 }
