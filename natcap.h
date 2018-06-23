@@ -140,6 +140,16 @@ static inline int tuple_lt(const struct tuple *t1, const struct tuple *t2)
 		return 0;
 	else if (t1->encryption < t2->encryption)
 		return 1;
+	else if (t1->encryption > t2->encryption)
+		return 0;
+	else if (t1->tcp_encode < t2->tcp_encode)
+		return 1;
+	else if (t1->tcp_encode > t2->tcp_encode)
+		return 0;
+	else if (t1->udp_encode < t2->udp_encode)
+		return 1;
+	else if (t1->udp_encode > t2->udp_encode)
+		return 0;
 	else
 		return 0;
 }
@@ -148,12 +158,16 @@ static inline int tuple_eq(const struct tuple *t1, const struct tuple *t2)
 {
 	return (t1->ip == t2->ip &&
 			t1->port == t2->port &&
-			t1->encryption == t2->encryption);
+			t1->encryption == t2->encryption &&
+			t1->tcp_encode == t2->tcp_encode &&
+			t1->udp_encode == t2->udp_encode);
 }
 
 static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 {
 	to->encryption = from->encryption;
+	to->tcp_encode = from->tcp_encode;
+	to->udp_encode = from->udp_encode;
 	to->port = from->port;
 	to->ip = from->ip;
 }
