@@ -37,6 +37,7 @@
 #include <linux/udp.h>
 #include <linux/version.h>
 #include <net/netfilter/nf_conntrack.h>
+#include <net/netfilter/nf_conntrack_helper.h>
 #include "natcap_common.h"
 #include "natcap_client.h"
 #include "natcap_knock.h"
@@ -663,6 +664,8 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			if (!nf_ct_is_confirmed(ct)) {
+				struct nf_conn_help *help;
+
 				if (ipv4_is_lbcast(iph->daddr) ||
 						ipv4_is_loopback(iph->daddr) ||
 						ipv4_is_multicast(iph->daddr) ||
@@ -671,6 +674,11 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 					return NF_ACCEPT;
 				}
 				if (ct->master) {
+					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+					return NF_ACCEPT;
+				}
+				help = nfct_help(ct);
+				if (help && help->helper) {
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
@@ -709,6 +717,8 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 natcap_dual_out:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			if (!nf_ct_is_confirmed(ct)) {
+				struct nf_conn_help *help;
+
 				if (ipv4_is_lbcast(iph->daddr) ||
 						ipv4_is_loopback(iph->daddr) ||
 						ipv4_is_multicast(iph->daddr) ||
@@ -717,6 +727,11 @@ natcap_dual_out:
 					return NF_ACCEPT;
 				}
 				if (ct->master) {
+					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+					return NF_ACCEPT;
+				}
+				help = nfct_help(ct);
+				if (help && help->helper) {
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
