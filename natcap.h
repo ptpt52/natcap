@@ -119,13 +119,8 @@ struct natcap_session {
 #define NATCAP_MAGIC 0x43415099
 
 /*XXX refer to drivers/nos/src/nos.h */
-#define IPS_NOS_TRACK_INIT_BIT 15
-#define IPS_NOS_TRACK_INIT (1 << IPS_NOS_TRACK_INIT_BIT)
-#define IPS_NATFLOW_STOP_BIT 18
-#define IPS_NATFLOW_STOP (1 << IPS_NATFLOW_STOP_BIT)
-
-#define IPS_NATFLOW_FF_BIT 14
-#define IPS_NATFLOW_FF (1 << IPS_NATFLOW_FF_BIT)
+#define IPS_NATFLOW_FF_STOP_BIT 14
+#define IPS_NATFLOW_FF_STOP (1 << IPS_NATFLOW_FF_STOP_BIT)
 
 // test t1 < t2 return 1
 static inline int tuple_lt(const struct tuple *t1, const struct tuple *t2)

@@ -1148,7 +1148,7 @@ do_dnat_setup:
 
 		flow_total_rx_bytes += skb->len;
 		xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
-		if (!(IPS_NATFLOW_STOP & ct->status)) set_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
+		if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 
 		NATCAP_DEBUG("(SPCI)" DEBUG_TCP_FMT ": after decode\n", DEBUG_TCP_ARG(iph,l4));
 	} else if (iph->protocol == IPPROTO_UDP) {
@@ -1197,7 +1197,7 @@ do_dnat_setup:
 			if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == 0x01) {
 				flow_total_rx_bytes += skb->len;
 				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
-				if (!(IPS_NATFLOW_STOP & ct->status)) set_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
+				if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 				return NF_ACCEPT;
 			} else if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == 0x02) {
 				int offlen;
@@ -1228,7 +1228,7 @@ do_dnat_setup:
 
 			flow_total_rx_bytes += skb->len;
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
-			if (!(IPS_NATFLOW_STOP & ct->status)) set_bit(IPS_NATFLOW_STOP_BIT, &ct->status);
+			if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 			return NF_ACCEPT;
 		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
