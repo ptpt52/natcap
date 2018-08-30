@@ -71,6 +71,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 	if ((*pos) == 0) {
 		n = snprintf(natcap_ctl_buffer,
 				sizeof(natcap_ctl_buffer) - 1,
+				"# Version: %s\n"
 				"# Usage:\n"
 				"#    disabled=Number -- set disable/enable\n"
 				"#    debug=Number -- set debug value\n"
@@ -110,6 +111,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"cnipwhitelist_mode=%u\n"
 				"dns_server=%pI4:%u\n"
 				"\n",
+				NATCAP_VERSION,
 				mode_str[mode], mode,
 				TUPLE_ARG(natcap_server_info_current()),
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
