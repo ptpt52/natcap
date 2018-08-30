@@ -134,9 +134,9 @@ static inline int tuple_lt(const struct tuple *t1, const struct tuple *t2)
 		return 1;
 	else if (ntohl(t1->ip) > ntohl(t2->ip))
 		return 0;
-	else if (ntohs(t1->port) < ntohl(t2->port))
+	else if (ntohs(t1->port) < ntohs(t2->port))
 		return 1;
-	else if (ntohs(t1->port) > ntohl(t2->port))
+	else if (ntohs(t1->port) > ntohs(t2->port))
 		return 0;
 	else if (t1->encryption < t2->encryption)
 		return 1;
