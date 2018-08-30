@@ -219,7 +219,7 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
 
-	if ((IPS_NATCAP_TCPENC & ct->status)) {
+	if ((IPS_NATCAP_TCPUDPENC & ct->status)) {
 		natcap_udp_to_tcp_pack(nskb, natcap_session_get(ct), 1);
 	}
 
@@ -244,7 +244,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	oiph = ip_hdr(oskb);
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
-	if ((IPS_NATCAP_UDPENC & ct->status)) {
+	if ((IPS_NATCAP_TCPUDPENC & ct->status)) {
 		add_len = 8;
 		protocol = IPPROTO_UDP;
 	}
@@ -347,7 +347,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	oiph = ip_hdr(oskb);
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
-	if ((IPS_NATCAP_UDPENC & ct->status)) {
+	if ((IPS_NATCAP_TCPUDPENC & ct->status)) {
 		add_len = 8;
 		protocol = IPPROTO_UDP;
 	}
@@ -451,7 +451,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	oiph = ip_hdr(oskb);
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
-	if ((IPS_NATCAP_UDPENC & ct->status)) {
+	if ((IPS_NATCAP_TCPUDPENC & ct->status)) {
 		add_len = 8;
 		protocol = IPPROTO_UDP;
 	}
@@ -1297,7 +1297,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 					return natcap_try_http_redirect(iph, skb, ct, in);
 				}
 			}
-			if ((IPS_NATCAP_UDPENC & ct->status) && TCPH(l4)->syn) {
+			if ((IPS_NATCAP_TCPUDPENC & ct->status) && TCPH(l4)->syn) {
 				natcap_tcpmss_adjust(skb, TCPH(l4), -8);
 				return NF_ACCEPT;
 			}
@@ -1347,7 +1347,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 		NATCAP_DEBUG("(SPO)" DEBUG_TCP_FMT ":after encode\n", DEBUG_TCP_ARG(iph,l4));
 
-		if (!(IPS_NATCAP_UDPENC & ct->status)) {
+		if (!(IPS_NATCAP_TCPUDPENC & ct->status)) {
 			return NF_ACCEPT;
 		}
 
@@ -1414,7 +1414,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			skb_rcsum_tcpudp(skb);
 		}
 
-		if ((IPS_NATCAP_TCPENC & ct->status)) {
+		if ((IPS_NATCAP_TCPUDPENC & ct->status)) {
 			natcap_udp_to_tcp_pack(skb, natcap_session_get(ct), 1);
 		}
 		return NF_ACCEPT;
@@ -1523,7 +1523,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 				return NF_DROP;
 			}
 
-			if (!(IPS_NATCAP_TCPENC & ct->status) && !test_and_set_bit(IPS_NATCAP_TCPENC_BIT, &ct->status)) { /* first time in */
+			if (!(IPS_NATCAP_TCPUDPENC & ct->status) && !test_and_set_bit(IPS_NATCAP_TCPUDPENC_BIT, &ct->status)) { /* first time in */
 				if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
 					NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
 					return NF_DROP;
@@ -1596,7 +1596,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			return NF_DROP;
 		}
 
-		if (!(IPS_NATCAP_UDPENC & ct->status) && !test_and_set_bit(IPS_NATCAP_UDPENC_BIT, &ct->status)) { /* first time in */
+		if (!(IPS_NATCAP_TCPUDPENC & ct->status) && !test_and_set_bit(IPS_NATCAP_TCPUDPENC_BIT, &ct->status)) { /* first time in */
 			return NF_ACCEPT;
 		}
 	}

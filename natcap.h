@@ -185,19 +185,17 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_DROP (1 << IPS_NATCAP_DROP_BIT)
 #define IPS_NATCAP_MASTER_BIT 28 /* only use in client: overlay with IPS_NATCAP_DROP_BIT is okay */
 #define IPS_NATCAP_MASTER (1 << IPS_NATCAP_MASTER_BIT)
-#define IPS_NATCAP_SYN1_BIT 29
+#define IPS_NATCAP_SYN0_BIT 29
+#define IPS_NATCAP_SYN0 (1 << IPS_NATCAP_SYN0_BIT)
+#define IPS_NATCAP_SYN1_BIT 30
 #define IPS_NATCAP_SYN1 (1 << IPS_NATCAP_SYN1_BIT)
-#define IPS_NATCAP_SYN2_BIT 30
-#define IPS_NATCAP_SYN2 (1 << IPS_NATCAP_SYN2_BIT)
-#define IPS_NATCAP_UDPENC_BIT 31
-#define IPS_NATCAP_UDPENC (1 << IPS_NATCAP_UDPENC_BIT)
-#define IPS_NATCAP_TCPENC_BIT IPS_NATCAP_UDPENC_BIT
-#define IPS_NATCAP_TCPENC IPS_NATCAP_UDPENC
+#define IPS_NATCAP_TCPUDPENC_BIT 31
+#define IPS_NATCAP_TCPUDPENC (1 << IPS_NATCAP_TCPUDPENC_BIT)
 
 #define IPS_NATCAP_ACK_BIT 23
 #define IPS_NATCAP_ACK (1 << IPS_NATCAP_ACK_BIT)
-#define IPS_NATCAP_SYN_BIT 22 /* only use in client */
-#define IPS_NATCAP_SYN (1 << IPS_NATCAP_SYN_BIT)
+#define IPS_NATCAP_SYN2_BIT 22 /* only use in client */
+#define IPS_NATCAP_SYN2 (1 << IPS_NATCAP_SYN2_BIT)
 #define IPS_NATCAP_DST_BIT 22 /* only use in server */
 #define IPS_NATCAP_DST (1 << IPS_NATCAP_DST_BIT)
 #define IPS_NATCAP_CFM_BIT 21
