@@ -660,8 +660,8 @@ static inline unsigned int natcap_try_http_redirect(struct iphdr *iph, struct sk
 	data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
 	if ((data_len > 4 && strncasecmp(data, "GET ", 4) == 0) ||
 			(data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
+		set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
 		natcap_auth_http_302(in, skb, ct);
-		set_bit(IPS_NATCAP_NEED_REPLY_FINACK_BIT, &ct->status);
 		natcap_auth_tcp_to_rst(skb);
 		return NF_ACCEPT;
 	} else if (data_len > 0) {
@@ -669,12 +669,6 @@ static inline unsigned int natcap_try_http_redirect(struct iphdr *iph, struct sk
 		natcap_auth_tcp_reply_rst(in, skb, ct, IP_CT_DIR_ORIGINAL);
 		natcap_auth_tcp_to_rst(skb);
 		return NF_ACCEPT;
-	} else if ((IPS_NATCAP_NEED_REPLY_FINACK & ct->status)) {
-		if (TCPH(l4)->fin && TCPH(l4)->ack) {
-			natcap_auth_tcp_reply_rstack(in, skb, ct);
-			set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-		}
-		return NF_DROP;
 	}
 
 	return NF_ACCEPT;
@@ -818,6 +812,20 @@ static unsigned int natcap_server_forward_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if ((IPS_NATCAP_DROP & ct->status)) {
+		if (iph->protocol == IPPROTO_TCP) {
+			void *l4 = (void *)iph + iph->ihl * 4;
+			if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
+				if (TCPH(l4)->fin && TCPH(l4)->ack) {
+					natcap_auth_tcp_reply_rstack(in, skb, ct);
+				}
+			} else {
+				if (!(TCPH(l4)->syn && TCPH(l4)->ack)) {
+					natcap_auth_tcp_reply_rst(in, skb, ct, IP_CT_DIR_REPLY);
+					natcap_auth_tcp_to_rst(skb);
+					return NF_ACCEPT;
+				}
+			}
+		}
 		return NF_DROP;
 	}
 
@@ -825,26 +833,6 @@ static unsigned int natcap_server_forward_hook(void *priv,
 		if ((IPS_NATCAP_AUTH & ct->status)) {
 			if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
 				return natcap_try_http_redirect(iph, skb, ct, in);
-			} else {
-				void *l4;
-
-				if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
-					return NF_DROP;
-				}
-				iph = ip_hdr(skb);
-				l4 = (void *)iph + iph->ihl * 4;
-				if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
-					return NF_DROP;
-				}
-				iph = ip_hdr(skb);
-				l4 = (void *)iph + iph->ihl * 4;
-
-				if (!(TCPH(l4)->syn && TCPH(l4)->ack)) {
-					set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
-					natcap_auth_tcp_reply_rst(in, skb, ct, IP_CT_DIR_REPLY);
-					natcap_auth_tcp_to_rst(skb);
-					return NF_ACCEPT;
-				}
 			}
 		}
 	}
