@@ -1036,7 +1036,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			ns = natcap_session_get(ct);
 			if (NULL == ns) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_session_get failed\n", DEBUG_TCP_ARG(iph,l4));
-				return NF_DROP;
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				return NF_ACCEPT;
 			}
 
 			tcpopt.header.encryption = !!(IPS_NATCAP_ENC & ct->status);
@@ -1046,13 +1047,10 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				return NF_DROP;
 			}
 			if (NTCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION) {
-				struct natcap_session *ns = natcap_session_get(ct);
-				if (ns) {
-					natcap_confusion_tcp_reply_ack(in, skb, ct, ns);
-					short_clear_bit(NS_NATCAP_CONFUSION_BIT, &ns->status);
-					ns->tcp_seq_offset = 0;
-					ns->tcp_ack_offset = 0;
-				}
+				natcap_confusion_tcp_reply_ack(in, skb, ct, ns);
+				short_clear_bit(NS_NATCAP_CONFUSION_BIT, &ns->status);
+				ns->tcp_seq_offset = 0;
+				ns->tcp_ack_offset = 0;
 				return NF_DROP;
 			}
 			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, NULL);
@@ -1072,12 +1070,6 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				return NF_ACCEPT;
 			}
 			
-			ns = natcap_session_in(ct);
-			if (NULL == ns) {
-				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
-				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-				return NF_ACCEPT;
-			}
 			tcpopt.header.encryption = 0;
 			ret = natcap_tcp_decode(ct, skb, &tcpopt, IP_CT_DIR_ORIGINAL);
 			if (ret != 0) {
@@ -1088,11 +1080,15 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
+			ns = natcap_session_in(ct);
+			if (NULL == ns) {
+				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
+
 			if (tcpopt.header.type & NATCAP_TCPOPT_CONFUSION) {
-				struct natcap_session *ns = natcap_session_get(ct);
-				if (ns) {
-					short_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->status);
-				}
+				short_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->status);
 			}
 
 			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, &server);
@@ -1114,8 +1110,11 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
 				NATCAP_INFO("(SPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 
+				if (server.encryption) {
+					set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+				}
+
 				if (mode == SERVER_MODE && natcap_redirect_port != 0 && (tcpopt.header.type & NATCAP_TCPOPT_SPROXY)) {
-					struct natcap_session *ns;
 					__be32 newdst = 0;
 					struct in_device *indev;
 					struct in_ifaddr *ifa;
@@ -1128,29 +1127,19 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					}
 					rcu_read_unlock();
 
-					if (!newdst || newdst == server.ip) {
-						goto do_dnat_setup;
-					}
-					ns = natcap_session_get(ct);
-					if (!ns) {
-						goto do_dnat_setup;
-					}
+					if (newdst && newdst != server.ip) {
+						memcpy(&ns->tup, &server, sizeof(struct tuple));
+						short_set_bit(NS_NATCAP_DST_BIT, &ns->status);
 
-					memcpy(&ns->tup, &server, sizeof(struct tuple));
-					short_set_bit(NS_NATCAP_DST_BIT, &ns->status);
-
-					server.ip = newdst;
-					server.port = natcap_redirect_port;
+						server.ip = newdst;
+						server.port = natcap_redirect_port;
+					}
 				}
 
-do_dnat_setup:
 				if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 					NATCAP_ERROR("(SPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					return NF_DROP;
-				}
-				if (server.encryption) {
-					set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
 				}
 			}
 		}
@@ -1179,6 +1168,13 @@ do_dnat_setup:
 				}
 				skb->csum = 0;
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
+			}
+
+			ns = natcap_session_in(ct);
+			if (NULL == ns) {
+				NATCAP_WARN("(SPCI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				return NF_ACCEPT;
 			}
 
 			NATCAP_DEBUG("(SPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
@@ -1226,6 +1222,13 @@ do_dnat_setup:
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if ((IPS_NATCAP & ct->status)) {
+			ns = natcap_session_get(ct);
+			if (NULL == ns) {
+				NATCAP_WARN("(SPCI)" DEBUG_UDP_FMT ": natcap_session_get failed\n", DEBUG_UDP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
+
 			if ((IPS_NATCAP_ENC & ct->status)) {
 				if (!skb_make_writable(skb, skb->len)) {
 					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": natcap_udp_decode() failed\n", DEBUG_UDP_ARG(iph,l4));
@@ -1442,7 +1445,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 		}
 
 		if ((NS_NATCAP_TCPUDPENC & ns->status)) {
-			natcap_udp_to_tcp_pack(skb, natcap_session_get(ct), 1);
+			natcap_udp_to_tcp_pack(skb, ns, 1);
 		}
 		return NF_ACCEPT;
 	}
@@ -1579,7 +1582,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 			ns = natcap_session_in(ct);
 			if (ns == NULL) {
-				NATCAP_WARN("(SPI)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(SPI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_DROP;
 			}
@@ -1667,7 +1670,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 		ns = natcap_session_in(ct);
 		if (ns == NULL) {
-			NATCAP_WARN("(SPI)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(SPI)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
 		}
@@ -1776,19 +1779,17 @@ static int get_natcap_dst(struct sock *sk, int optval, void __user *user, int *l
 
 		ns = natcap_session_get(ct);
 		if ((IPS_NATCAP & ct->status) && ns && (NS_NATCAP_DST & ns->status)) {
-			if (ns) {
-				sin.sin_family = AF_INET;
-				sin.sin_port = ns->tup.port;
-				sin.sin_addr.s_addr = ns->tup.ip;
-				memset(sin.sin_zero, 0, sizeof(sin.sin_zero));
+			sin.sin_family = AF_INET;
+			sin.sin_port = ns->tup.port;
+			sin.sin_addr.s_addr = ns->tup.ip;
+			memset(sin.sin_zero, 0, sizeof(sin.sin_zero));
 
-				NATCAP_DEBUG("SO_NATCAP_DST: %pI4 %u\n", &sin.sin_addr.s_addr, ntohs(sin.sin_port));
-				nf_ct_put(ct);
-				if (copy_to_user(user, &sin, sizeof(sin)) != 0)
-					return -EFAULT;
-				else
-					return 0;
-			}
+			NATCAP_DEBUG("SO_NATCAP_DST: %pI4 %u\n", &sin.sin_addr.s_addr, ntohs(sin.sin_port));
+			nf_ct_put(ct);
+			if (copy_to_user(user, &sin, sizeof(sin)) != 0)
+				return -EFAULT;
+			else
+				return 0;
 		}
 		nf_ct_put(ct);
 	}

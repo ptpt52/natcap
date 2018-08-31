@@ -920,6 +920,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
+	struct natcap_session *ns;
 	struct iphdr *iph;
 	void *l4;
 	struct natcap_TCPOPT tcpopt;
@@ -990,6 +991,10 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+	ns = natcap_session_get(ct);
+	if (NULL == ns) {
+		return NF_ACCEPT;
+	}
 
 	flow_total_rx_bytes += skb->len;
 
@@ -1017,10 +1022,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			return NF_DROP;
 		}
 		if (NTCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION) {
-			struct natcap_session *ns = natcap_session_get(ct);
-			if (ns) {
-				ns->tcp_ack_offset = 0;
-			}
+			ns->tcp_ack_offset = 0;
 			return NF_DROP;
 		}
 
@@ -1181,7 +1183,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 			ns = natcap_session_in(ct);
 			if (ns == NULL) {
-				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_DROP;
 			}
@@ -1269,7 +1271,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 		ns = natcap_session_in(ct);
 		if (ns == NULL) {
-			NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
 		}
@@ -1661,7 +1663,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 
 				if ((NS_NATCAP_TCPUDPENC & ns->status)) {
-					natcap_udp_to_tcp_pack(nskb, natcap_session_get(ct), 0);
+					natcap_udp_to_tcp_pack(nskb, ns, 0);
 					skb_nfct_reset(nskb);
 					if ((ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, nskb)) == NF_ACCEPT) {
 						ret = nf_conntrack_confirm(nskb);
@@ -1703,7 +1705,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		}
 
 		if ((NS_NATCAP_TCPUDPENC & ns->status)) {
-			natcap_udp_to_tcp_pack(skb, natcap_session_get(ct), 0);
+			natcap_udp_to_tcp_pack(skb, ns, 0);
 			skb_nfct_reset(skb);
 			if ((ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, skb)) == NF_ACCEPT) {
 				ret = nf_conntrack_confirm(skb);
@@ -1945,10 +1947,10 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	if (NULL == master_ns) {
 		switch(iph->protocol) {
 			case IPPROTO_TCP:
-				NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
 				break;
 			case IPPROTO_UDP:
-				NATCAP_WARN("(CPMO)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CPMO)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
 				break;
 		}
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -2301,7 +2303,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 
 				if ((NS_NATCAP_TCPUDPENC & master_ns->status)) {
-					natcap_udp_to_tcp_pack(nskb, natcap_session_get(master), 0);
+					natcap_udp_to_tcp_pack(nskb, master_ns, 0);
 					skb_nfct_reset(nskb);
 					if ((ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, nskb)) == NF_ACCEPT) {
 						ret = nf_conntrack_confirm(nskb);
@@ -2349,7 +2351,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 
 		if ((NS_NATCAP_TCPUDPENC & master_ns->status)) {
-			natcap_udp_to_tcp_pack(skb, natcap_session_get(master), 0);
+			natcap_udp_to_tcp_pack(skb, master_ns, 0);
 			skb_nfct_reset(skb);
 			if ((ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, skb)) == NF_ACCEPT) {
 				ret = nf_conntrack_confirm(skb);
