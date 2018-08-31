@@ -799,6 +799,7 @@ static unsigned int natcap_server_forward_hook(void *priv,
 #endif
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
+	struct natcap_session *ns;
 	struct iphdr *iph;
 
 	if (disabled)
@@ -838,7 +839,8 @@ static unsigned int natcap_server_forward_hook(void *priv,
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
-		if ((IPS_NATCAP_AUTH & ct->status)) {
+		ns = natcap_session_get(ct);
+		if (ns && (NS_NATCAP_AUTH & ns->status)) {
 			if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
 				return natcap_try_http_redirect(iph, skb, ct, in);
 			}
@@ -982,6 +984,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
+	struct natcap_session *ns;
 	struct iphdr *iph;
 	void *l4;
 	struct natcap_TCPOPT tcpopt;
@@ -1030,6 +1033,12 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 		if ((IPS_NATCAP & ct->status)) {
 			NATCAP_DEBUG("(SPCI)" DEBUG_TCP_FMT ": before decode\n", DEBUG_TCP_ARG(iph,l4));
 
+			ns = natcap_session_get(ct);
+			if (NULL == ns) {
+				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_session_get failed\n", DEBUG_TCP_ARG(iph,l4));
+				return NF_DROP;
+			}
+
 			tcpopt.header.encryption = !!(IPS_NATCAP_ENC & ct->status);
 			ret = natcap_tcp_decode(ct, skb, &tcpopt, IP_CT_DIR_ORIGINAL);
 			if (ret != 0) {
@@ -1050,7 +1059,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			if (ret != E_NATCAP_OK) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				if (ret == E_NATCAP_AUTH_FAIL) {
-					set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
+					short_set_bit(NS_NATCAP_AUTH_BIT, &ns->status);
 				} else {
 					set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
 					return NF_DROP;
@@ -1063,7 +1072,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				return NF_ACCEPT;
 			}
 			
-			if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
+			ns = natcap_session_in(ct);
+			if (NULL == ns) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1089,7 +1099,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			if (ret != E_NATCAP_OK) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				if (ret == E_NATCAP_AUTH_FAIL) {
-					set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
+					short_set_bit(NS_NATCAP_AUTH_BIT, &ns->status);
 				} else {
 					set_bit(IPS_NATCAP_DROP_BIT, &ct->status);
 					return NF_DROP;
@@ -1309,7 +1319,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
 		if (iph->protocol == IPPROTO_TCP) {
-			if ((IPS_NATCAP_AUTH & ct->status)) {
+			if ((NS_NATCAP_AUTH & ns->status)) {
 				if (TCPH(l4)->dest == natcap_redirect_port) {
 					return natcap_try_http_redirect(iph, skb, ct, in);
 				}

@@ -343,6 +343,10 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 	struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 	struct natcap_session *ns = natcap_session_get(ct);
 
+	if (NULL == ns) {
+		return -1;
+	}
+
 	if ((status & NATCAP_NEED_ENC))
 		tcpopt->header.encryption = 1;
 	else
@@ -352,7 +356,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		int add_len = 0;
 		//not syn
 		if (!(tcph->syn && !tcph->ack)) {
-			if ((IPS_NATCAP_AUTH & ct->status)) {
+			if ((NS_NATCAP_AUTH & ns->status)) {
 				tcpopt->header.type = NATCAP_TCPOPT_TYPE_NONE;
 				tcpopt->header.opsize = 0;
 				return 0;
@@ -364,7 +368,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 				tcpopt->header.opsize = size;
 				memcpy(tcpopt->user.data.mac_addr, default_mac_addr, ETH_ALEN);
 				tcpopt->user.data.u_hash = default_u_hash;
-				set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
+				short_set_bit(NS_NATCAP_AUTH_BIT, &ns->status);
 				return 0;
 			}
 			tcpopt->header.type = NATCAP_TCPOPT_TYPE_NONE;
@@ -392,7 +396,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 				set_byte4((unsigned char *)tcpopt + size - add_len, htonl(ns->tcp_seq_offset));
 				tcpopt->header.type |= NATCAP_TCPOPT_CONFUSION;
 			}
-			set_bit(IPS_NATCAP_AUTH_BIT, &ct->status);
+			short_set_bit(NS_NATCAP_AUTH_BIT, &ns->status);
 			return 0;
 		}
 		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst) + add_len, sizeof(unsigned int));

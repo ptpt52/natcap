@@ -114,6 +114,8 @@ struct natcap_session {
 #define NS_NATCAP_DST (1 << NS_NATCAP_DST_BIT)
 #define NS_NATCAP_TCPUDPENC_BIT 2
 #define NS_NATCAP_TCPUDPENC (1 << NS_NATCAP_TCPUDPENC_BIT)
+#define NS_NATCAP_AUTH_BIT 3
+#define NS_NATCAP_AUTH (1 << NS_NATCAP_AUTH_BIT)
 	unsigned short status;
 	__be16 new_source;
 	struct tuple tup;
@@ -186,8 +188,6 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_BYPASS (1 << IPS_NATCAP_BYPASS_BIT)
 #define IPS_NATCAP_ENC_BIT 26
 #define IPS_NATCAP_ENC (1 << IPS_NATCAP_ENC_BIT)
-#define IPS_NATCAP_AUTH_BIT 27
-#define IPS_NATCAP_AUTH (1 << IPS_NATCAP_AUTH_BIT)
 
 #define IPS_NATCAP_DROP_BIT 28 /* only use in server */
 #define IPS_NATCAP_DROP (1 << IPS_NATCAP_DROP_BIT)
