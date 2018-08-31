@@ -65,6 +65,7 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 #endif
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
+	struct natcap_session *ns;
 	struct iphdr *iph;
 	void *l4;
 	struct tuple server;
@@ -153,6 +154,13 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 		}
 
 __do_dnat:
+		ns = natcap_session_in(ct);
+		if (!ns) {
+			NATCAP_WARN("(FPCI)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			return NF_ACCEPT;
+		}
+
 		if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in */
 			natcap_server_info_select(iph->daddr, TCPH(l4)->dest, &server);
 			if (server.ip == 0) {
@@ -203,6 +211,14 @@ __do_dnat:
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
+
+				ns = natcap_session_in(ct);
+				if (!ns) {
+					NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+					return NF_ACCEPT;
+				}
+
 				NATCAP_INFO("(FPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
 				if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 					NATCAP_ERROR("(FPCI)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
@@ -240,6 +256,14 @@ __do_dnat:
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
+
+				ns = natcap_session_in(ct);
+				if (!ns) {
+					NATCAP_WARN("(FPCI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+					return NF_ACCEPT;
+				}
+
 				if (natcap_tcp_encode_fwdupdate(skb, TCPH(l4 + 8), &server) > 0) {
 					skb_rcsum_tcpudp(skb);
 				}
@@ -250,7 +274,7 @@ __do_dnat:
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					return NF_DROP;
 				}
-				set_bit(IPS_NATCAP_TCPUDPENC_BIT, &ct->status);
+				short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->status);
 			}
 
 			NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": pass UDP encoded data\n", DEBUG_UDP_ARG(iph,l4));
@@ -307,6 +331,7 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 	int ret;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
+	struct natcap_session *ns;
 	struct iphdr *iph;
 	void *l4;
 
@@ -329,11 +354,15 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 	if (!(IPS_NATCAP & ct->status)) {
 		return NF_ACCEPT;
 	}
+	ns = natcap_session_get(ct);
+	if (NULL == ns) {
+		return NF_ACCEPT;
+	}
 	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_REPLY) {
 		natcap_server_in_touch(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 		flow_total_tx_bytes += skb->len;
 	}
-	if (!(IPS_NATCAP_TCPUDPENC & ct->status)) {
+	if (!(NS_NATCAP_TCPUDPENC & ns->status)) {
 		return NF_ACCEPT;
 	}
 
@@ -470,6 +499,7 @@ static unsigned int natcap_forward_pre_in_hook(void *priv,
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
+	struct natcap_session *ns;
 	struct iphdr *iph;
 	void *l4;
 	struct net *net = &init_net;
@@ -539,8 +569,14 @@ static unsigned int natcap_forward_pre_in_hook(void *priv,
 			return NF_DROP;
 		}
 
-		if (!(IPS_NATCAP_TCPUDPENC & ct->status) && !test_and_set_bit(IPS_NATCAP_TCPUDPENC_BIT, &ct->status)) { /* first time in */
-			return NF_ACCEPT;
+		ns = natcap_session_in(ct);
+		if (ns == NULL) {
+			NATCAP_WARN("(FPI)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			return NF_DROP;
+		}
+		if (!(NS_NATCAP_TCPUDPENC & ns->status)) {
+			short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->status);
 		}
 	}
 

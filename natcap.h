@@ -110,6 +110,10 @@ struct natcap_session {
 	unsigned int magic;
 #define NS_NATCAP_CONFUSION_BIT 0
 #define NS_NATCAP_CONFUSION (1 << NS_NATCAP_CONFUSION_BIT)
+#define NS_NATCAP_DST_BIT 1
+#define NS_NATCAP_DST (1 << NS_NATCAP_DST_BIT)
+#define NS_NATCAP_TCPUDPENC_BIT 2
+#define NS_NATCAP_TCPUDPENC (1 << NS_NATCAP_TCPUDPENC_BIT)
 	unsigned short status;
 	__be16 new_source;
 	struct tuple tup;
@@ -184,9 +188,9 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_ENC (1 << IPS_NATCAP_ENC_BIT)
 #define IPS_NATCAP_AUTH_BIT 27
 #define IPS_NATCAP_AUTH (1 << IPS_NATCAP_AUTH_BIT)
+
 #define IPS_NATCAP_DROP_BIT 28 /* only use in server */
 #define IPS_NATCAP_DROP (1 << IPS_NATCAP_DROP_BIT)
-
 #define IPS_NATCAP_MASTER_BIT 28 /* only use in client: overlay with IPS_NATCAP_DROP_BIT is okay */
 #define IPS_NATCAP_MASTER (1 << IPS_NATCAP_MASTER_BIT)
 
@@ -195,23 +199,16 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_SYN1_BIT 30 /* only use in client */
 #define IPS_NATCAP_SYN1 (1 << IPS_NATCAP_SYN1_BIT)
 
-#define IPS_NATCAP_DST_BIT 30 /* only use in server */
-#define IPS_NATCAP_DST (1 << IPS_NATCAP_DST_BIT)
-
-#define IPS_NATCAP_TCPUDPENC_BIT 31
-#define IPS_NATCAP_TCPUDPENC (1 << IPS_NATCAP_TCPUDPENC_BIT)
+#define IPS_NATCAP_SYN2_BIT 31
+#define IPS_NATCAP_SYN2 (1 << IPS_NATCAP_SYN2_BIT)
+#define IPS_NATCAP_PRE_BIT 31 /* overlay with IPS_NATCAP_SYN2_BIT */
+#define IPS_NATCAP_PRE (1 << IPS_NATCAP_PRE_BIT)
 
 #define IPS_NATCAP_ACK_BIT 23
 #define IPS_NATCAP_ACK (1 << IPS_NATCAP_ACK_BIT)
-#define IPS_NATCAP_SYN2_BIT 22
-#define IPS_NATCAP_SYN2 (1 << IPS_NATCAP_SYN2_BIT)
-
-#define IPS_NATCAP_PRE_BIT 22 /* overlay with IPS_NATCAP_SYN2_BIT */
-#define IPS_NATCAP_PRE (1 << IPS_NATCAP_PRE_BIT)
-
-#define IPS_NATCAP_CFM_BIT 21
+#define IPS_NATCAP_CFM_BIT 22
 #define IPS_NATCAP_CFM (1 << IPS_NATCAP_CFM_BIT)
-#define IPS_NATCAP_SERVER_BIT 20
+#define IPS_NATCAP_SERVER_BIT 21
 #define IPS_NATCAP_SERVER (1 << IPS_NATCAP_SERVER_BIT)
 
 #define NATCAP_UDP_GET_TYPE(x) (0xFF & ntohs(x))
