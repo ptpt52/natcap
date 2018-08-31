@@ -1211,7 +1211,8 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 		return -EINVAL;
 	}
 
-	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "skb_make_writable failed\n", DEBUG_ARG_PREFIX);
 		return -ENOMEM;
 	}
 
@@ -1229,7 +1230,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	iph->protocol = IPPROTO_TCP;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 
-	TCPH(l4)->seq = ns->current_seq == 0 ? htonl(jiffies) : ns->current_seq;
+	TCPH(l4)->seq = ns->current_seq == 0 ? htonl(jiffies) : htonl(ns->current_seq);
 	TCPH(l4)->ack_seq = (m == 0 && ns->current_seq == 0) ? 0 : htonl(ns->foreign_seq);
 	TCPH(l4)->res1 = 0;
 	TCPH(l4)->doff = 5;
