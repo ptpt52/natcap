@@ -1201,6 +1201,7 @@ struct natcap_session *natcap_session_get(struct nf_conn *ct)
 
 int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m)
 {
+	int ret;
 	struct iphdr *iph;
 	void *l4;
 
@@ -1249,6 +1250,15 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	skb_rcsum_tcpudp(skb);
 
 	ns->current_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - sizeof(struct tcphdr);
+
+	skb_nfct_reset(skb);
+	if ((ret = nf_conntrack_in(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb)) == NF_ACCEPT) {
+		ret = nf_conntrack_confirm(skb);
+	}
+	if (ret != NF_ACCEPT) {
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
