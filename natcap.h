@@ -128,7 +128,7 @@ struct natcap_session {
 #define NATCAP_MAGIC 0x43415099
 
 /*XXX refer to drivers/nos/src/nos.h */
-#define IPS_NATFLOW_FF_STOP_BIT 14
+#define IPS_NATFLOW_FF_STOP_BIT 18
 #define IPS_NATFLOW_FF_STOP (1 << IPS_NATFLOW_FF_STOP_BIT)
 
 // test t1 < t2 return 1
