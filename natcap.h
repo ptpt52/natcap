@@ -189,6 +189,9 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_ENC_BIT 26
 #define IPS_NATCAP_ENC (1 << IPS_NATCAP_ENC_BIT)
 
+#define IPS_NATCAP_SERVER_BIT 27
+#define IPS_NATCAP_SERVER (1 << IPS_NATCAP_SERVER_BIT)
+
 #define IPS_NATCAP_DROP_BIT 28 /* only use in server */
 #define IPS_NATCAP_DROP (1 << IPS_NATCAP_DROP_BIT)
 #define IPS_NATCAP_MASTER_BIT 28 /* only use in client: overlay with IPS_NATCAP_DROP_BIT is okay */
@@ -208,8 +211,6 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_ACK (1 << IPS_NATCAP_ACK_BIT)
 #define IPS_NATCAP_CFM_BIT 22
 #define IPS_NATCAP_CFM (1 << IPS_NATCAP_CFM_BIT)
-#define IPS_NATCAP_SERVER_BIT 21
-#define IPS_NATCAP_SERVER (1 << IPS_NATCAP_SERVER_BIT)
 
 #define NATCAP_UDP_GET_TYPE(x) (0xFF & ntohs(x))
 #define NATCAP_UDP_GET_ENC(x) ((0xFF00 & ntohs(x)) >> 8)
