@@ -1415,7 +1415,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 		ns = natcap_session_get(ct);
 		if (ns && ns->tcp_seq_offset && TCPH(l4)->ack && !(IPS_NATCAP_TCPUDPENC & ct->status) && (IPS_NATCAP_ENC & ct->status)) {
-			if ((IPS_SEEN_REPLY & ct->status) && !(IPS_NATCAP_CONFUSION & ct->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status)) {
+			if ((IPS_SEEN_REPLY & ct->status) && !(NS_NATCAP_CONFUSION & ns->status) && !short_test_and_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->status)) {
 				//TODO send confuse pkt
 				struct natcap_TCPOPT *tcpopt;
 				int offset, header_len;
@@ -2050,7 +2050,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 		ns = natcap_session_get(master);
 		if (ns && ns->tcp_seq_offset && TCPH(l4)->ack && !(IPS_NATCAP_TCPUDPENC & master->status) && (IPS_NATCAP_ENC & ct->status)) {
-			if ((IPS_SEEN_REPLY & master->status) && !(IPS_NATCAP_CONFUSION & master->status) && !test_and_set_bit(IPS_NATCAP_CONFUSION_BIT, &master->status)) {
+			if ((IPS_SEEN_REPLY & master->status) && !(NS_NATCAP_CONFUSION & ns->status) && !short_test_and_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->status)) {
 				//TODO send confuse pkt
 				struct natcap_TCPOPT *tcpopt;
 				int offset, header_len;

@@ -1032,7 +1032,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				struct natcap_session *ns = natcap_session_get(ct);
 				if (ns) {
 					natcap_confusion_tcp_reply_ack(in, skb, ct, ns);
-					clear_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status);
+					short_clear_bit(NS_NATCAP_CONFUSION_BIT, &ns->status);
 					ns->tcp_seq_offset = 0;
 					ns->tcp_ack_offset = 0;
 				}
@@ -1071,7 +1071,10 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				return NF_ACCEPT;
 			}
 			if (tcpopt.header.type & NATCAP_TCPOPT_CONFUSION) {
-				set_bit(IPS_NATCAP_CONFUSION_BIT, &ct->status);
+				struct natcap_session *ns = natcap_session_get(ct);
+				if (ns) {
+					short_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->status);
+				}
 			}
 
 			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, &server);

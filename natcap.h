@@ -108,6 +108,9 @@ struct tuple {
 
 struct natcap_session {
 	unsigned int magic;
+#define NS_NATCAP_CONFUSION_BIT 0
+#define NS_NATCAP_CONFUSION (1 << NS_NATCAP_CONFUSION_BIT)
+	unsigned short status;
 	__be16 new_source;
 	struct tuple tup;
 	int tcp_seq_offset;
@@ -211,9 +214,6 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_SERVER_BIT 20
 #define IPS_NATCAP_SERVER (1 << IPS_NATCAP_SERVER_BIT)
 
-#define IPS_NATCAP_CONFUSION_BIT 19
-#define IPS_NATCAP_CONFUSION (1 << IPS_NATCAP_CONFUSION_BIT)
-
 #define NATCAP_UDP_GET_TYPE(x) (0xFF & ntohs(x))
 #define NATCAP_UDP_GET_ENC(x) ((0xFF00 & ntohs(x)) >> 8)
 
@@ -225,5 +225,34 @@ enum {
 #endif /* __KERNEL__ */
 
 #define SO_NATCAP_DST 153
+
+static inline int short_test_bit(int nr, const unsigned short *addr)
+{
+	return 1U & (addr[nr/16] >> (nr & (16-1)));
+}
+
+static inline void short_clear_bit(int nr, unsigned short *addr)
+{
+	unsigned short mask = (1U << ((nr) % 16));
+	unsigned short *p = ((unsigned short *)addr) + nr/16;
+	*p &= ~mask;
+}
+
+static inline void short_set_bit(int nr, unsigned short *addr)
+{
+	unsigned short mask = (1U << ((nr) % 16));
+	unsigned short *p = ((unsigned short *)addr) + nr/16;
+	*p |= mask;
+}
+
+static inline int short_test_and_set_bit(int nr, unsigned short *addr)
+{
+	unsigned short mask = (1U << ((nr) % 16));
+	unsigned short *p = ((unsigned short *)addr) + nr/16;
+	unsigned short old;
+	old = *p;
+	*p |= mask;
+	return (old & mask) != 0;
+}
 
 #endif /* _NATCAP_H_ */

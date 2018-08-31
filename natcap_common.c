@@ -410,7 +410,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		}
 		return -1;
 	} else {
-		if ((IPS_NATCAP_CONFUSION & ct->status) && ns) {
+		if (ns && (NS_NATCAP_CONFUSION & ns->status)) {
 			int add_len = 0;
 			if (tcph->syn && tcph->ack) {
 				add_len += sizeof(unsigned int);
