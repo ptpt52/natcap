@@ -1178,6 +1178,9 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 
 			NATCAP_DEBUG("(SPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
+			if (NATCAP_UDP_GET_ENC(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == 0x01) {
+				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+			}
 			//reply ACK pkt
 			natcap_udp_reply_cfm(in, skb, ct);
 
@@ -1185,6 +1188,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			server.port = get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 8);
 
 			if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
+				//XXX overwrite DNS server
 				if (server.port == __constant_htons(53)) {
 					dns_server_node_random_select(&server.ip);
 				}
@@ -1196,9 +1200,6 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				}
 			}
 
-			if (NATCAP_UDP_GET_ENC(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == 0x01) {
-				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-			}
 			if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == 0x01) {
 				flow_total_rx_bytes += skb->len;
 				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
@@ -1317,6 +1318,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	}
 	ns = natcap_session_get(ct);
 	if (NULL == ns) {
+		NATCAP_ERROR("(SPO)" DEBUG_TCP_FMT ": natcap_session_get failed\n", DEBUG_TCP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
 
