@@ -1378,10 +1378,6 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	if (nf_nat_initialized(ct, NF_NAT_MANIP_DST)) {
 		return NF_ACCEPT;
 	}
-#else
-	if (nf_nat_initialized(ct, NF_NAT_MANIP_DST)) {
-		return NF_ACCEPT;
-	}
 #endif
 
 	if (cone_nat_array && IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {

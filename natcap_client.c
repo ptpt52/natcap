@@ -622,7 +622,9 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		if (IP_SET_test_dst_ip(state, in, out, skb, "knocklist") > 0) {
 			natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, knock select target server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
-		} else if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 || IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) {
+		} else if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
+				IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
+				IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
@@ -709,7 +711,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				}
 				memcpy(&ns->tup, &server, sizeof(struct tuple));
 
-				set_bit(IPS_NATCAP_SYN0_BIT, &ct->status);
+				set_bit(IPS_NATCAP_DUAL_BIT, &ct->status);
 
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": TCP dual out to server=%pI4\n", DEBUG_TCP_ARG(iph,l4), &server.ip);
 			}
@@ -762,7 +764,7 @@ natcap_dual_out:
 				}
 				memcpy(&ns->tup, &server, sizeof(struct tuple));
 
-				set_bit(IPS_NATCAP_SYN0_BIT, &ct->status);
+				set_bit(IPS_NATCAP_DUAL_BIT, &ct->status);
 
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": UDP dual out to server=%pI4\n", DEBUG_UDP_ARG(iph,l4), &server.ip);
 			}
@@ -771,7 +773,9 @@ natcap_dual_out:
 			return NF_ACCEPT;
 		}
 
-		if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 || IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) {
+		if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
+				IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
+				IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
@@ -1781,7 +1785,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	if ((IPS_NATCAP & ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (!(IPS_NATCAP_SYN0 & ct->status)) {
+	if (!(IPS_NATCAP_DUAL & ct->status)) {
 		return NF_ACCEPT;
 	}
 	if ((IPS_NATCAP_ACK & ct->status)) {
@@ -1952,7 +1956,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (!(IPS_NATCAP_SYN0 & master->status) && !test_and_set_bit(IPS_NATCAP_SYN0_BIT, &master->status)) {
+	if (!(IPS_NATCAP_DUAL & master->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &master->status)) {
 		if (master->master) {
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			consume_skb(skb);
@@ -2462,7 +2466,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 	if ((IPS_NATCAP_SERVER & ct->status)) {
 		return NF_ACCEPT;
 	}
-	if (!(IPS_NATCAP_SYN0 & ct->status)) {
+	if (!(IPS_NATCAP_DUAL & ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
@@ -2486,7 +2490,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 		if ((IPS_NATCAP & ct->status)) {
 			master = ct->master;
-			if (!master || !(IPS_NATCAP_SYN0 & master->status)) {
+			if (!master || !(IPS_NATCAP_DUAL & master->status)) {
 				return NF_DROP;
 			}
 			if (iph->daddr != master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip) {
@@ -2496,6 +2500,23 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": got cfm\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+
+				if (!TCPH(l4)->rst) {
+					__be32 saddr = iph->saddr;
+					__be16 dest = TCPH(l4)->dest;
+					__be16 source = TCPH(l4)->source;
+
+					iph->saddr = master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
+					TCPH(l4)->dest = master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all;
+					TCPH(l4)->source = master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all;
+					if (!is_natcap_server(iph->saddr) && IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
+						NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn natcap got response add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
+						IP_SET_add_src_ip(state, in, out, skb, "gfwlist");
+					}
+					iph->saddr = saddr;
+					TCPH(l4)->dest = dest;
+					TCPH(l4)->source = source;
+				}
 			}
 			if (!(IPS_NATCAP_ACK & ct->status)) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": drop without lock cfm\n", DEBUG_TCP_ARG(iph,l4));
@@ -2546,13 +2567,6 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			}
 
 			NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": after natcap reply\n", DEBUG_TCP_ARG(iph,l4));
-
-			if (!(IPS_NATCAP_MASTER & ct->status) && !test_and_set_bit(IPS_NATCAP_MASTER_BIT, &ct->status) && !TCPH(l4)->rst) {
-				if (!is_natcap_server(iph->saddr) && IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
-					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn natcap got response add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
-					IP_SET_add_src_ip(state, in, out, skb, "gfwlist");
-				}
-			}
 		} else {
 			if (TCPH(l4)->rst) {
 				if (TCPH(l4)->source == __constant_htons(80) && IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
@@ -2563,6 +2577,10 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": got cfm\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				if (!TCPH(l4)->rst && IP_SET_test_src_ip(state, in, out, skb, "cniplist") > 0) {
+					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn bypass got response add target to bypasslist\n", DEBUG_TCP_ARG(iph,l4));
+					IP_SET_add_src_ip(state, in, out, skb, "bypasslist");
+				}
 			}
 			if (!(IPS_NATCAP_ACK & ct->status)) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": drop without lock cfm\n", DEBUG_TCP_ARG(iph,l4));
@@ -2570,12 +2588,6 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					natcap_reset_synack(skb, in, ct);
 				}
 				return NF_DROP;
-			}
-			if (!(IPS_NATCAP_MASTER & ct->status) && !test_and_set_bit(IPS_NATCAP_MASTER_BIT, &ct->status) && !TCPH(l4)->rst) {
-				if (IP_SET_test_src_ip(state, in, out, skb, "cniplist") > 0) {
-					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn bypass got response add target to bypasslist\n", DEBUG_TCP_ARG(iph,l4));
-					IP_SET_add_src_ip(state, in, out, skb, "bypasslist");
-				}
 			}
 		}
 		return NF_ACCEPT;
@@ -2594,7 +2606,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 		if ((IPS_NATCAP & ct->status)) {
 			master = ct->master;
-			if (!master || !(IPS_NATCAP_SYN0 & master->status)) {
+			if (!master || !(IPS_NATCAP_DUAL & master->status)) {
 				return NF_DROP;
 			}
 			if (iph->daddr != master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip) {
