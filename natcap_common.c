@@ -1369,6 +1369,10 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	if ((IPS_NATCAP & ct->status)) {
 		return NF_ACCEPT;
 	}
+	if ((IPS_NATCAP_CONE & ct->status)) {
+		xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+		return NF_ACCEPT;
+	}
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)
 	if (nf_nat_initialized(ct, IP_NAT_MANIP_DST)) {
@@ -1384,9 +1388,15 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 		memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->dest)], sizeof(cns));
 		if (cns.ip != 0 && cns.port != 0) {
 			if (natcap_dnat_setup(ct, cns.ip, cns.port) != NF_ACCEPT) {
-				NATCAP_ERROR("(CCI)" DEBUG_UDP_FMT ": do mapping failed, target=%pI4:%u @port=%u\n", DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
+				NATCAP_ERROR("(CCI)" DEBUG_UDP_FMT ": do mapping failed, target=%pI4:%u @port=%u\n",
+						DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
+				return NF_ACCEPT;
 			}
-			NATCAP_INFO("(CCI)" DEBUG_UDP_FMT ": do mapping, target=%pI4:%u @port=%u\n", DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
+
+			NATCAP_INFO("(CCI)" DEBUG_UDP_FMT ": do mapping, target=%pI4:%u @port=%u\n",
+					DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
+
+			set_bit(IPS_NATCAP_CONE_BIT, &ct->status);
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 		}
 	}
@@ -1446,6 +1456,9 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+	if ((IPS_NATCAP_CONE & ct->status)) {
 		return NF_ACCEPT;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {

@@ -1020,6 +1020,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		if ((IPS_NATCAP & ct->status)) {
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+			if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 		}
 		return NF_ACCEPT;
 	}
