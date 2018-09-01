@@ -1096,7 +1096,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 #endif
 	int ret = 0;
 	enum ip_conntrack_info ctinfo;
-	struct nf_conn *ct;
+	struct nf_conn *ct, *master;
 	struct natcap_session *ns;
 	struct iphdr *iph;
 	void *l4;
@@ -1110,14 +1110,14 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	ct = nf_ct_get(skb, &ctinfo);
-	if (NULL == ct) {
+	master = nf_ct_get(skb, &ctinfo);
+	if (NULL == master) {
 		return NF_ACCEPT;
 	}
-	if ((IPS_NATCAP & ct->status)) {
+	if ((IPS_NATCAP & master->status)) {
 		return NF_ACCEPT;
 	}
-	if ((IPS_NATCAP_PRE & ct->status)) {
+	if ((IPS_NATCAP_PRE & master->status)) {
 		return NF_ACCEPT;
 	}
 
@@ -1180,6 +1180,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			if (!ct) {
 				return NF_DROP;
 			}
+			natcap_clone_timeout(master, ct);
 
 			ns = natcap_session_in(ct);
 			if (ns == NULL) {
@@ -1196,7 +1197,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": after decode for UDP-to-TCP packet\n", DEBUG_UDP_ARG(iph,l4));
 			return NF_ACCEPT;
 		} else {
-			set_bit(IPS_NATCAP_PRE_BIT, &ct->status);
+			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
 			return NF_ACCEPT;
 		}
 	}
@@ -1268,6 +1269,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		if (!ct) {
 			return NF_DROP;
 		}
+		natcap_clone_timeout(master, ct);
 
 		ns = natcap_session_in(ct);
 		if (ns == NULL) {
@@ -1279,7 +1281,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->status);
 		}
 	} else {
-		set_bit(IPS_NATCAP_PRE_BIT, &ct->status);
+		set_bit(IPS_NATCAP_PRE_BIT, &master->status);
 		return NF_ACCEPT;
 	}
 

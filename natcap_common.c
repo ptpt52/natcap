@@ -1199,6 +1199,44 @@ struct natcap_session *natcap_session_get(struct nf_conn *ct)
 	return ns;
 }
 
+void natcap_clone_timeout(struct nf_conn *dst, struct nf_conn *src)
+{
+	unsigned long extra_jiffies;
+	unsigned long current_jiffies = jiffies;
+
+	if (!nf_ct_is_confirmed(src)) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
+		extra_jiffies = src->timeout.expires;
+#else
+		extra_jiffies = src->timeout;
+#endif
+	} else {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
+		extra_jiffies = src->timeout.expires - current_jiffies;
+#else
+		extra_jiffies = src->timeout - current_jiffies;
+#endif
+	}
+
+	if (!nf_ct_is_confirmed(dst)) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
+		dst->timeout.expires = extra_jiffies;
+#else
+		dst->timeout = extra_jiffies;
+#endif
+	} else {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
+		extra_jiffies += current_jiffies;
+		if (extra_jiffies - dst->timeout.expires >= HZ) {
+			mod_timer_pending(&dst->timeout, extra_jiffies);
+		}
+#else
+		extra_jiffies += current_jiffies;
+		dst->timeout = extra_jiffies;
+#endif
+	}
+}
+
 int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m)
 {
 	struct nf_conn *ct, *ct2;
@@ -1206,8 +1244,6 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	int ret = NF_DROP;
 	struct iphdr *iph;
 	void *l4;
-	unsigned long extra_jiffies;
-	unsigned long current_jiffies = jiffies;
 
 	iph = ip_hdr(skb);
 
@@ -1262,38 +1298,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	if (!ct || !ct2) {
 		return -EINVAL;
 	}
-	if (!nf_ct_is_confirmed(ct)) {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
-		extra_jiffies = ct->timeout.expires;
-#else
-		extra_jiffies = ct->timeout;
-#endif
-	} else {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
-		extra_jiffies = ct->timeout.expires - current_jiffies;
-#else
-		extra_jiffies = ct->timeout - current_jiffies;
-#endif
-	}
-
-	if (!nf_ct_is_confirmed(ct2)) {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
-		ct2->timeout.expires = extra_jiffies;
-#else
-		ct2->timeout = extra_jiffies;
-#endif
-	} else {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
-		extra_jiffies += current_jiffies;
-		if (extra_jiffies - ct2->timeout.expires >= HZ) {
-			mod_timer_pending(&ct2->timeout, extra_jiffies);
-		}
-#else
-		extra_jiffies += current_jiffies;
-		ct2->timeout = extra_jiffies;
-#endif
-	}
-
+	natcap_clone_timeout(ct2, ct);
 	ret = nf_conntrack_confirm(skb);
 	if (ret != NF_ACCEPT) {
 		return -EINVAL;
