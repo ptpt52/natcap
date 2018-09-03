@@ -99,6 +99,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    flow_total_rx_bytes=%llu\n"
 				"#    auth_http_redirect_url=%s\n"
 				"#    htp_confusion_host=%s\n"
+				"#    server_persist_lock=%u\n"
 				"#    macfilter=%s(%u)\n"
 				"#    ipfilter=%s(%u)\n"
 				"#\n"
@@ -123,6 +124,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
 				htp_confusion_host,
+				server_persist_lock,
 				macfilter_acl_str[macfilter], macfilter,
 				ipfilter_acl_str[ipfilter], ipfilter,
 				disabled, debug, server_persist_timeout,
@@ -325,6 +327,15 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			n = sscanf(data, "server_persist_timeout=%u", &d);
 			if (n == 1) {
 				server_persist_timeout = d;
+				goto done;
+			}
+		}
+	} else if (strncmp(data, "server_persist_lock=", 20) == 0) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == FORWARD_MODE) {
+			int d;
+			n = sscanf(data, "server_persist_lock=%u", &d);
+			if (n == 1) {
+				server_persist_lock = !!d;
 				goto done;
 			}
 		}

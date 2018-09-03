@@ -42,6 +42,7 @@
 #include "natcap_client.h"
 #include "natcap_knock.h"
 
+unsigned int server_persist_lock = 0;
 unsigned int server_persist_timeout = 0;
 module_param(server_persist_timeout, int, 0);
 MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
@@ -347,7 +348,7 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 
 	hash = server_index % count;
 
-	if (nsi->last_dir[hash] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[hash]) <= natcap_touch_timeout * HZ) {
+	if (server_persist_lock || nsi->last_dir[hash] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[hash]) <= natcap_touch_timeout * HZ) {
 		found = 1;
 	} else {
 		unsigned int oldhash = hash;
