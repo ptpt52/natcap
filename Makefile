@@ -6,6 +6,10 @@ natcap-y += natcap_main.o natcap_common.o natcap_client.o natcap_server.o natcap
 
 EXTRA_CFLAGS += -Wall -Werror
 
+ifdef NO_DEBUG
+EXTRA_CFLAGS += -Wno-unused -Os -DNO_DEBUG
+endif
+
 PWD ?= $(shell pwd)
 
 ifndef KERNELRELEASE

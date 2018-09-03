@@ -134,6 +134,19 @@ extern char htp_confusion_host[64];
 		} \
 	} while (0)
 
+#ifdef NO_DEBUG
+#undef NATCAP_FIXME
+#undef NATCAP_DEBUG
+#undef NATCAP_INFO
+#undef NATCAP_WARN
+#undef NATCAP_ERROR
+#define NATCAP_FIXME(fmt, ...)
+#define NATCAP_DEBUG(fmt, ...)
+#define NATCAP_INFO(fmt, ...)
+#define NATCAP_WARN(fmt, ...)
+#define NATCAP_ERROR(fmt, ...)
+#endif
+
 #define IP_TCPUDP_FMT	"%pI4:%u->%pI4:%u"
 #define IP_TCPUDP_ARG(i,t)	&(i)->saddr, ntohs(((struct tcphdr *)(t))->source), &(i)->daddr, ntohs(((struct tcphdr *)(t))->dest)
 #define TCP_ST_FMT	"%c%c%c%c%c%c%c%c"
