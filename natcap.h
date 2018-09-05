@@ -118,7 +118,7 @@ struct natcap_session {
 #define NS_NATCAP_AUTH (1 << NS_NATCAP_AUTH_BIT)
 #define NS_NATCAP_DROP_BIT 4
 #define NS_NATCAP_DROP (1 << NS_NATCAP_DROP_BIT)
-#define NS_NATCAP_NOLIMIT_BIT 4
+#define NS_NATCAP_NOLIMIT_BIT 5
 #define NS_NATCAP_NOLIMIT (1 << NS_NATCAP_NOLIMIT_BIT)
 	unsigned short status;
 	__be16 new_source;
