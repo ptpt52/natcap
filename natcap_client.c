@@ -1839,13 +1839,6 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		return ret;
 	}
 
-	if (in && strncmp(in->name, "natcap", 6) == 0) {
-		if (!(NS_NATCAP_NOLIMIT & ns->status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->status);
-	}
-	if (!(NS_NATCAP_NOLIMIT & ns->status) && natcap_tx_flow_ctrl(skb, ct) < 0) {
-		return NF_DROP;
-	}
-
 	skb = skb_copy(skb_orig, GFP_ATOMIC);
 	if (skb == NULL) {
 		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
@@ -2075,6 +2068,14 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 		consume_skb(skb);
 		return NF_ACCEPT;
+	}
+
+	if (in && strncmp(in->name, "natcap", 6) == 0) {
+		if (!(NS_NATCAP_NOLIMIT & master_ns->status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &master_ns->status);
+	}
+	if (!(NS_NATCAP_NOLIMIT & master_ns->status) && natcap_tx_flow_ctrl(skb, master) < 0) {
+		consume_skb(skb);
+		goto out;
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
