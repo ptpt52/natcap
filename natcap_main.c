@@ -86,10 +86,11 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n"
 				"#    u_hash=%u\n"
 				"#    server_seed=%u\n"
-				"#    disabled=%u\n"
 				"#    auth_enabled=%u\n"
 				"#    tx_speed_limit=%d B/s\n"
 				"#    rx_speed_limit=%d B/s\n"
+				"#    tx_pkts_threshold=%d\n"
+				"#    rx_pkts_threshold=%d\n"
 				"#    http_confusion=%u\n"
 				"#    encode_http_only=%u\n"
 				"#    sproxy=%u\n"
@@ -118,9 +119,11 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				TUPLE_ARG(natcap_server_info_current()),
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
-				server_seed, disabled, auth_enabled,
+				server_seed, auth_enabled,
 				natcap_tx_speed_get(),
 				natcap_rx_speed_get(),
+				tx_pkts_threshold,
+				rx_pkts_threshold,
 				http_confusion, encode_http_only, sproxy, ntohs(knock_port),
 				ntohs(natcap_redirect_port),natcap_touch_timeout,
 				flow_total_tx_bytes, flow_total_rx_bytes,
@@ -356,6 +359,24 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			n = sscanf(data, "rx_speed_limit=%d", &d);
 			if (n == 1) {
 				natcap_rx_speed_set(d);
+				goto done;
+			}
+		}
+	} else if (strncmp(data, "tx_pkts_threshold=", 18) == 0) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			int d;
+			n = sscanf(data, "tx_pkts_threshold=%u", &d);
+			if (n == 1) {
+				tx_pkts_threshold = d;
+				goto done;
+			}
+		}
+	} else if (strncmp(data, "rx_pkts_threshold=", 18) == 0) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			int d;
+			n = sscanf(data, "rx_pkts_threshold=%u", &d);
+			if (n == 1) {
+				rx_pkts_threshold = d;
 				goto done;
 			}
 		}

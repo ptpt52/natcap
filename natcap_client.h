@@ -72,6 +72,9 @@ struct natcap_token_ctrl {
 	spinlock_t lock;
 };
 
+extern int tx_pkts_threshold;
+extern int rx_pkts_threshold;
+
 extern void natcap_tx_speed_set(int speed);
 extern void natcap_rx_speed_set(int speed);
 

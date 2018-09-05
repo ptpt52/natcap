@@ -38,6 +38,7 @@
 #include <linux/version.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_helper.h>
+#include <net/netfilter/nf_conntrack_acct.h>
 #include "natcap_common.h"
 #include "natcap_client.h"
 #include "natcap_knock.h"
@@ -47,6 +48,9 @@ unsigned int server_persist_timeout = 0;
 module_param(server_persist_timeout, int, 0);
 MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
 
+/* threshold pkts to start speed limit */
+int tx_pkts_threshold = 128;
+int rx_pkts_threshold = 512;
 static int natcap_tx_speed = 0;
 static int natcap_rx_speed = 0;
 static struct natcap_token_ctrl tx_ntc;
@@ -156,10 +160,40 @@ out:
 
 static inline int natcap_tx_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct)
 {
+	struct nf_conn_acct *acct;
+
+	if (tx_ntc.tokens_per_jiffy == 0) {
+		return 0;
+	}
+	if (tx_pkts_threshold != 0) {
+		/*XXX we skip N pkts for no speed limit */
+		acct = nf_conn_acct_find(ct);
+		if (acct) {
+			struct nf_conn_counter *counter = acct->counter;
+			if (atomic64_read(&counter[IP_CT_DIR_ORIGINAL].packets) < tx_pkts_threshold) {
+				return 0;
+			}
+		}
+	}
 	return natcap_flow_ctrl(skb, ct, &tx_ntc);
 }
 static inline int natcap_rx_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct)
 {
+	struct nf_conn_acct *acct;
+
+	if (rx_ntc.tokens_per_jiffy == 0) {
+		return 0;
+	}
+	if (rx_pkts_threshold != 0) {
+		/*XXX we skip N pkts for no speed limit */
+		acct = nf_conn_acct_find(ct);
+		if (acct) {
+			struct nf_conn_counter *counter = acct->counter;
+			if (atomic64_read(&counter[IP_CT_DIR_ORIGINAL].packets) < rx_pkts_threshold) {
+				return 0;
+			}
+		}
+	}
 	return natcap_flow_ctrl(skb, ct, &rx_ntc);
 }
 
