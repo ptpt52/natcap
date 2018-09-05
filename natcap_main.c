@@ -89,6 +89,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    disabled=%u\n"
 				"#    auth_enabled=%u\n"
 				"#    tx_speed_limit=%d B/s\n"
+				"#    rx_speed_limit=%d B/s\n"
 				"#    http_confusion=%u\n"
 				"#    encode_http_only=%u\n"
 				"#    sproxy=%u\n"
@@ -119,6 +120,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				ntohl(default_u_hash),
 				server_seed, disabled, auth_enabled,
 				natcap_tx_speed_get(),
+				natcap_rx_speed_get(),
 				http_confusion, encode_http_only, sproxy, ntohs(knock_port),
 				ntohs(natcap_redirect_port),natcap_touch_timeout,
 				flow_total_tx_bytes, flow_total_rx_bytes,
@@ -345,6 +347,15 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			n = sscanf(data, "tx_speed_limit=%d", &d);
 			if (n == 1) {
 				natcap_tx_speed_set(d);
+				goto done;
+			}
+		}
+	} else if (strncmp(data, "rx_speed_limit=", 15) == 0) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			int d;
+			n = sscanf(data, "rx_speed_limit=%d", &d);
+			if (n == 1) {
+				natcap_rx_speed_set(d);
 				goto done;
 			}
 		}

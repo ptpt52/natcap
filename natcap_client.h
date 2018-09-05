@@ -73,7 +73,9 @@ struct natcap_token_ctrl {
 };
 
 extern void natcap_tx_speed_set(int speed);
+extern void natcap_rx_speed_set(int speed);
 
 extern int natcap_tx_speed_get(void);
+extern int natcap_rx_speed_get(void);
 
 #endif /* _NATCAP_CLIENT_H_ */

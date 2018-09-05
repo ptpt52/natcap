@@ -48,13 +48,15 @@ module_param(server_persist_timeout, int, 0);
 MODULE_PARM_DESC(server_persist_timeout, "Use diffrent server after timeout");
 
 static int natcap_tx_speed = 0;
+static int natcap_rx_speed = 0;
 static struct natcap_token_ctrl tx_ntc;
-static void natcap_tx_ntc_init(void)
+static struct natcap_token_ctrl rx_ntc;
+static void natcap_ntc_init(struct natcap_token_ctrl *ntc)
 {
-	spin_lock_init(&tx_ntc.lock);
-	tx_ntc.tokens = 0;
-	tx_ntc.tokens_per_jiffy = 0;
-	tx_ntc.jiffies = 0;
+	spin_lock_init(&ntc->lock);
+	ntc->tokens = 0;
+	ntc->tokens_per_jiffy = 0;
+	ntc->jiffies = 0;
 }
 
 void natcap_tx_speed_set(int speed)
@@ -66,13 +68,26 @@ void natcap_tx_speed_set(int speed)
 	tx_ntc.jiffies = jiffies;
 	spin_unlock_bh(&tx_ntc.lock);
 }
+void natcap_rx_speed_set(int speed)
+{
+	natcap_rx_speed = speed;
+	spin_lock_bh(&rx_ntc.lock);
+	rx_ntc.tokens = 0;
+	rx_ntc.tokens_per_jiffy = natcap_rx_speed / HZ;
+	rx_ntc.jiffies = jiffies;
+	spin_unlock_bh(&rx_ntc.lock);
+}
 
 int natcap_tx_speed_get(void)
 {
 	return natcap_tx_speed;
 }
+int natcap_rx_speed_get(void)
+{
+	return natcap_rx_speed;
+}
 
-static int natcap_tx_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct)
+static int natcap_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct, struct natcap_token_ctrl *ntc)
 {
 	unsigned long feed_jiffies = 0;
 	unsigned long current_jiffies;
@@ -80,10 +95,13 @@ static int natcap_tx_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct)
 	int len = skb->len;
 	struct iphdr *iph = ip_hdr(skb);
 	void *l4 = (void *)iph + iph->ihl * 4;
+
 	//speed up for UDP/TCP 53
-	if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53)) {
+	if ( ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53) ||
+			(ct->master && ct->master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53)) ) {
 		return 0;
 	}
+
 	switch (iph->protocol) {
 		case IPPROTO_TCP:
 			len -= iph->ihl * 4 + TCPH(l4)->doff * 4;
@@ -95,45 +113,54 @@ static int natcap_tx_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct)
 	if (len <= 0) {
 		return 0;
 	}
-	if (tx_ntc.tokens_per_jiffy == 0) {
+	if (ntc->tokens_per_jiffy == 0) {
 		return 0;
 	}
 
-	spin_lock_bh(&tx_ntc.lock);
-	if (tx_ntc.tokens > 0) {
-		tx_ntc.tokens -= len;
+	spin_lock_bh(&ntc->lock);
+	if (ntc->tokens > 0) {
+		ntc->tokens -= len;
 		ret = 0;
 		goto out;
 	}
 
 	current_jiffies = jiffies;
-	if (current_jiffies > tx_ntc.jiffies) {
-		feed_jiffies = current_jiffies - tx_ntc.jiffies;
+	if (current_jiffies > ntc->jiffies) {
+		feed_jiffies = current_jiffies - ntc->jiffies;
 	} else {
-		feed_jiffies = tx_ntc.jiffies - current_jiffies;
+		feed_jiffies = ntc->jiffies - current_jiffies;
 	}
 
-	ret = tx_ntc.tokens + (int)(tx_ntc.tokens_per_jiffy * feed_jiffies);
+	ret = ntc->tokens + (int)(ntc->tokens_per_jiffy * feed_jiffies);
 
 	if (feed_jiffies <= HZ) {
-		tx_ntc.tokens = ret;
+		ntc->tokens = ret;
 	} else {
 		if (ret <= 0) {
-			tx_ntc.tokens = ret;
+			ntc->tokens = ret;
 		} else {
-			tx_ntc.tokens = 0;
+			ntc->tokens = 0;
 		}
 	}
 
-	if (tx_ntc.tokens >= 0) {
-		tx_ntc.tokens -= len;
+	if (ntc->tokens >= 0) {
+		ntc->tokens -= len;
 		ret = 0;
 	}
-	tx_ntc.jiffies = current_jiffies;
+	ntc->jiffies = current_jiffies;
 
 out:
-	spin_unlock_bh(&tx_ntc.lock);
+	spin_unlock_bh(&ntc->lock);
 	return ret;
+}
+
+static inline int natcap_tx_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct)
+{
+	return natcap_flow_ctrl(skb, ct, &tx_ntc);
+}
+static inline int natcap_rx_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct)
+{
+	return natcap_flow_ctrl(skb, ct, &rx_ntc);
 }
 
 unsigned int cnipwhitelist_mode = 0;
@@ -999,6 +1026,10 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 	ns = natcap_session_get(ct);
 	if (NULL == ns) {
 		return NF_ACCEPT;
+	}
+
+	if (natcap_rx_flow_ctrl(skb, ct) < 0) {
+		return NF_DROP;
 	}
 
 	flow_total_rx_bytes += skb->len;
@@ -2986,7 +3017,8 @@ int natcap_client_init(void)
 
 	need_conntrack();
 
-	natcap_tx_ntc_init();
+	natcap_ntc_init(&tx_ntc);
+	natcap_ntc_init(&rx_ntc);
 
 	natcap_server_info_cleanup();
 	default_mac_addr_init();
