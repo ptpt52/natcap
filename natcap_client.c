@@ -735,6 +735,10 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			if (server.tcp_encode == UDP_ENCODE) {
 				short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->status);
 			}
+
+			if (in && strncmp(in->name, "natcap", 6) == 0) {
+				if (!(NS_NATCAP_NOLIMIT & ns->status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->status);
+			}
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, select server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		} else {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -775,6 +779,9 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 
 				set_bit(IPS_NATCAP_DUAL_BIT, &ct->status);
 
+				if (in && strncmp(in->name, "natcap", 6) == 0) {
+					if (!(NS_NATCAP_NOLIMIT & ns->status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->status);
+				}
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": TCP dual out to server=%pI4\n", DEBUG_TCP_ARG(iph,l4), &server.ip);
 			}
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
@@ -828,6 +835,9 @@ natcap_dual_out:
 
 				set_bit(IPS_NATCAP_DUAL_BIT, &ct->status);
 
+				if (in && strncmp(in->name, "natcap", 6) == 0) {
+					if (!(NS_NATCAP_NOLIMIT & ns->status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->status);
+				}
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": UDP dual out to server=%pI4\n", DEBUG_UDP_ARG(iph,l4), &server.ip);
 			}
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
@@ -867,6 +877,10 @@ natcap_dual_out:
 			}
 			if (server.udp_encode == TCP_ENCODE) {
 				short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->status);
+			}
+
+			if (in && strncmp(in->name, "natcap", 6) == 0) {
+				if (!(NS_NATCAP_NOLIMIT & ns->status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->status);
 			}
 			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
 		} else {
@@ -1462,9 +1476,6 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (in && strncmp(in->name, "natcap", 6) == 0) {
-		if (!(NS_NATCAP_NOLIMIT & ns->status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->status);
-	}
 	if (!(NS_NATCAP_NOLIMIT & ns->status) && natcap_tx_flow_ctrl(skb, ct) < 0) {
 		return NF_DROP;
 	}
@@ -2042,6 +2053,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				}
 				break;
 		}
+		if ((NS_NATCAP_NOLIMIT & ns->status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &master_ns->status);
+
 		nf_conntrack_get(&ct->ct_general);
 		master->master = ct;
 		if (!(IPS_NATCAP & master->status) && !test_and_set_bit(IPS_NATCAP_BIT, &master->status)) {
@@ -2104,9 +2117,6 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (in && strncmp(in->name, "natcap", 6) == 0) {
-		if (!(NS_NATCAP_NOLIMIT & master_ns->status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &master_ns->status);
-	}
 	if (!(NS_NATCAP_NOLIMIT & master_ns->status) && natcap_tx_flow_ctrl(skb, master) < 0) {
 		consume_skb(skb);
 		goto out;
