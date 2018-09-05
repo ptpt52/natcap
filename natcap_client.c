@@ -189,7 +189,7 @@ static inline int natcap_rx_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct)
 		acct = nf_conn_acct_find(ct);
 		if (acct) {
 			struct nf_conn_counter *counter = acct->counter;
-			if (atomic64_read(&counter[IP_CT_DIR_ORIGINAL].packets) < rx_pkts_threshold) {
+			if (atomic64_read(&counter[IP_CT_DIR_REPLY].packets) < rx_pkts_threshold) {
 				return 0;
 			}
 		}
