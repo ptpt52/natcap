@@ -1028,7 +1028,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (natcap_rx_flow_ctrl(skb, ct) < 0) {
+	if (!(NS_NATCAP_NOLIMIT & ns->status) && natcap_rx_flow_ctrl(skb, ct) < 0) {
 		return NF_DROP;
 	}
 
@@ -1428,7 +1428,10 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (natcap_tx_flow_ctrl(skb, ct) < 0) {
+	if (in && strncmp(in->name, "natcap", 6) == 0) {
+		if (!(NS_NATCAP_NOLIMIT & ns->status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->status);
+	}
+	if (!(NS_NATCAP_NOLIMIT & ns->status) && natcap_tx_flow_ctrl(skb, ct) < 0) {
 		return NF_DROP;
 	}
 
@@ -1836,7 +1839,10 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		return ret;
 	}
 
-	if (natcap_tx_flow_ctrl(skb, ct) < 0) {
+	if (in && strncmp(in->name, "natcap", 6) == 0) {
+		if (!(NS_NATCAP_NOLIMIT & ns->status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->status);
+	}
+	if (!(NS_NATCAP_NOLIMIT & ns->status) && natcap_tx_flow_ctrl(skb, ct) < 0) {
 		return NF_DROP;
 	}
 
