@@ -1093,7 +1093,7 @@ unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto
 	range.min.all = man_proto;
 	range.max.all = man_proto;
 	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 18, 0)
 	struct nf_nat_range range;
 	if (nf_nat_initialized(ct, NF_NAT_MANIP_DST)) {
 		return NF_ACCEPT;
@@ -1105,6 +1105,20 @@ unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto
 	range.max_addr.ip = addr;
 	range.min_proto.all = man_proto;
 	range.max_proto.all = man_proto;
+	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
+#else
+	struct nf_nat_range2 range;
+	if (nf_nat_initialized(ct, NF_NAT_MANIP_DST)) {
+		return NF_ACCEPT;
+	}
+	memset(&range.min_addr, 0, sizeof(range.min_addr));
+	memset(&range.max_addr, 0, sizeof(range.max_addr));
+	range.flags = NF_NAT_RANGE_MAP_IPS | NF_NAT_RANGE_PROTO_SPECIFIED;
+	range.min_addr.ip = addr;
+	range.max_addr.ip = addr;
+	range.min_proto.all = man_proto;
+	range.max_proto.all = man_proto;
+	memset(&range.base_proto, 0, sizeof(range.base_proto));
 	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
 #endif
 }
