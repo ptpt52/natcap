@@ -6,6 +6,7 @@ CLIENT_BIN = natcapd-client
 
 SERVER_CFLAGS = -std=gnu99
 CLIENT_CFLAGS = -std=gnu99 -DNATCAP_CLIENT_MODE
+CFLAGS += -Werror
 
 SRCS = natcapd.c
 
