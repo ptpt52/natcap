@@ -689,6 +689,7 @@ void usage()
 	printf("natcapd %s\n\n", "1.0");
 	printf("  Chen Minqiang <ptpt52@gmail.com>\n\n");
 	printf("  usage:\n\n");
+	printf("       [-s <server_host>]         Local IP address to bind\n");
 	printf("       [-l <local_port>]          Port number of your local server.\n");
 	printf("       [-t <timeout>]             Socket timeout in seconds.\n");
 	printf("       [-v]                       Verbose mode.\n");
@@ -707,8 +708,13 @@ int main(int argc, char **argv)
 
 	opterr = 0;
 
-	while ((c = getopt_long(argc, argv, "l:t:hv", NULL, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "s:l:t:hv", NULL, NULL)) != -1) {
 		switch (c) {
+			case 's':
+				if (server_num < MAX_REMOTE_NUM) {
+					server_host[server_num++] = optarg;
+				}
+				break;
 			case 'l':
 				server_port = optarg;
 				break;
@@ -782,10 +788,7 @@ int main(int argc, char **argv)
 		ev_io_init(&listen_ctx->io, accept_cb, listenfd, EV_READ);
 		ev_io_start(loop, &listen_ctx->io);
 
-		if (host && strcmp(host, ":") > 0)
-			printf("tcp server listening at [%s]:%s\n", host, server_port);
-		else
-			printf("tcp server listening at %s:%s\n", host ? host : "0.0.0.0", server_port);
+		printf("tcp server listening at %s:%s\n", host ? host : "0.0.0.0", server_port);
 	}
 
 
