@@ -21,6 +21,48 @@
 #ifndef _NATCAP_PEER_H_
 #define _NATCAP_PEER_H_
 
+#define __ALIGN_64BITS 8
 
+struct peer_server_node {
+	__be32 ip;
+#define MAX_PEER_SERVER_PORT 8
+	__be16 port_map[MAX_PEER_SERVER_PORT];
+	unsigned long last_active;
+};
+
+struct fakeuser_expect {
+	unsigned int pi;
+	unsigned int local_seq;
+	unsigned int remote_seq;
+};
+
+static inline struct fakeuser_expect *peer_fakeuser_expect(struct nf_conn *ct)
+{
+	return (void *)ct->ext + ct->ext->len;
+}
+
+struct peer_tuple {
+	unsigned int sip;
+	unsigned int dip;
+	unsigned short sport;
+	unsigned short dport;
+	unsigned long last_active;
+};
+
+struct user_expect {
+	unsigned long last_active;
+	unsigned int ip;
+	unsigned short map_port;
+#define MAX_PEER_TUPLE 8
+	struct peer_tuple tuple[MAX_PEER_TUPLE];
+};
+
+static inline struct user_expect *peer_user_expect(struct nf_conn *ct)
+{
+	return (void *)ct->ext + ct->ext->len;
+}
+
+int natcap_peer_init(void);
+void natcap_peer_exit(void);
 
 #endif /* _NATCAP_PEER_H_ */

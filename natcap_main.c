@@ -54,6 +54,7 @@
 #include "natcap_server.h"
 #include "natcap_forward.h"
 #include "natcap_knock.h"
+#include "natcap_peer.h"
 
 static int natcap_major = 0;
 static int natcap_minor = 0;
@@ -496,7 +497,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			kfree(tmp);
 		}
 	} else if (strncmp(data, "default_mac_addr=", 17) == 0) {
-		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == PEER_MODE) {
 			unsigned int a, b, c, d, e, f;
 			n = sscanf(data, "default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n", &a, &b, &c, &d, &e, &f);
 			if ( n == 6 &&
@@ -576,9 +577,25 @@ static int natcap_mode_init(void)
 	switch (mode) {
 		case CLIENT_MODE:
 			ret = natcap_client_init();
+			if (ret != 0) {
+				break;
+			}
+			ret = natcap_peer_init();
+			if (ret != 0) {
+				natcap_client_exit();
+				break;
+			}
 			break;
 		case SERVER_MODE:
 			ret = natcap_server_init();
+			if (ret != 0) {
+				break;
+			}
+			ret = natcap_peer_init();
+			if (ret != 0) {
+				natcap_server_exit();
+				break;
+			}
 			break;
 		case FORWARD_MODE:
 			ret = natcap_forward_init();
@@ -591,11 +608,20 @@ static int natcap_mode_init(void)
 			ret = natcap_server_init();
 			if (ret != 0) {
 				natcap_client_exit();
+				break;
+			}
+			ret = natcap_peer_init();
+			if (ret != 0) {
+				natcap_server_exit();
+				natcap_client_exit();
+				break;
 			}
 			break;
 		case KNOCK_MODE:
 			ret = natcap_knock_init();
 			break;
+		case PEER_MODE:
+			ret = natcap_peer_init();
 		default:
 			break;
 	}
@@ -606,21 +632,26 @@ static void natcap_mode_exit(void)
 {
 	switch (mode) {
 		case CLIENT_MODE:
+			natcap_peer_exit();
 			natcap_client_exit();
 			break;
 		case SERVER_MODE:
+			natcap_peer_exit();
 			natcap_server_exit();
 			break;
 		case FORWARD_MODE:
 			natcap_forward_exit();
 			break;
 		case MIXING_MODE:
+			natcap_peer_exit();
 			natcap_server_exit();
 			natcap_client_exit();
 			break;
 		case KNOCK_MODE:
 			natcap_knock_exit();
 			break;
+		case PEER_MODE:
+			natcap_peer_exit();
 		default:
 			break;
 	}

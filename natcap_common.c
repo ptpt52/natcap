@@ -89,6 +89,7 @@ const char *const mode_str[] = {
 	[FORWARD_MODE] = "FORWARD",
 	[MIXING_MODE] = "CLIENT+SERVER",
 	[KNOCK_MODE] = "KNOCK",
+	[PEER_MODE] = "PEER",
 };
 
 const char *const hooknames[] = {

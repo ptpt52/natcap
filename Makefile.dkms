@@ -22,6 +22,8 @@ src_install:
 		natcap_forward.h \
 		natcap_knock.c \
 		natcap_knock.h \
+		natcap_peer.c \
+		natcap_peer.h \
 		'$(DKMS_DEST)'
 	cp Makefile '$(DKMS_DEST)/Makefile'
 	sed 's/#MODULE_VERSION#/$(modver)/' dkms.conf > '$(DKMS_DEST)/dkms.conf'

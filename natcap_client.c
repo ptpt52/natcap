@@ -221,7 +221,7 @@ unsigned short dns_port = __constant_htons(53);
 
 u32 default_u_hash = 0;
 unsigned char default_mac_addr[ETH_ALEN];
-static void default_mac_addr_init(void)
+void default_mac_addr_init(void)
 {
 	struct net_device *dev;
 

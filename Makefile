@@ -2,7 +2,7 @@
 #EXTRA_CFLAGS = -Wall
 obj-m += natcap.o
 
-natcap-y += natcap_main.o natcap_common.o natcap_client.o natcap_server.o natcap_forward.o natcap_knock.o
+natcap-y += natcap_main.o natcap_common.o natcap_client.o natcap_server.o natcap_forward.o natcap_knock.o natcap_peer.o
 
 EXTRA_CFLAGS += -Wall -Werror
 

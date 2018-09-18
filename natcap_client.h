@@ -51,6 +51,7 @@ extern unsigned short dns_port;
 
 extern u32 default_u_hash;
 extern unsigned char default_mac_addr[ETH_ALEN];
+void default_mac_addr_init(void);
 
 void natcap_server_info_change(int change);
 void natcap_server_info_cleanup(void);
