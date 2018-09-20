@@ -2652,7 +2652,8 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": after natcap reply\n", DEBUG_TCP_ARG(iph,l4));
 		} else {
 			if (TCPH(l4)->rst) {
-				if (TCPH(l4)->source == __constant_htons(80) && IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
+				if ((TCPH(l4)->source == __constant_htons(80) || TCPH(l4)->source == __constant_htons(443)) &&
+						IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
 					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": bypass get reset add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_add_src_ip(state, in, out, skb, "gfwlist");
 				}
