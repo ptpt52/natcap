@@ -102,8 +102,31 @@ static __be16 alloc_peer_port(struct nf_conn *ct, const unsigned char *mac)
 	return 0;
 }
 
+__be32 peer_local_ip = __constant_htonl(0);
+__be16 peer_local_port = __constant_htons(80);
+
 #define MAX_PEER_SERVER 8
 struct peer_server_node peer_server[MAX_PEER_SERVER];
+struct peer_server_node *peer_server_node_in(__be32 ip, int new)
+{
+	int i;
+	for (i = 0; i < MAX_PEER_SERVER; i++) {
+		if (peer_server[i].ip == ip) {
+			return &peer_server[i];
+		}
+	}
+	if (new == 0)
+		return NULL;
+
+	for (i = 0; i < MAX_PEER_SERVER; i++) {
+		if (peer_server[i].ip == 0) {
+			peer_server[i].ip = ip;
+			return  &peer_server[i];
+		}
+	}
+
+	return NULL;
+}
 
 static struct sk_buff *peer_user_uskbs[NR_CPUS];
 #define PEER_USKB_SIZE (sizeof(struct iphdr) + sizeof(struct udphdr))
@@ -118,6 +141,7 @@ static inline struct sk_buff *uskb_of_this_cpu(int id)
 	return peer_user_uskbs[id];
 }
 
+#define NATCAP_PEER_USER_TIMEOUT_RELEASE 2
 #define NATCAP_PEER_USER_TIMEOUT 180
 
 void natcap_user_timeout_touch(struct nf_conn *ct, unsigned long timeout)
@@ -641,11 +665,8 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	int offset, header_len;
 	int size;
 	struct peer_server_node *ps = NULL;
-	int psi, pi;
+	int pi;
 	unsigned int mss;
-
-	//if (disabled)
-	//	return NF_ACCEPT;
 
 	//if (in)
 	//	net = dev_net(in);
@@ -656,30 +677,12 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	if (iph->protocol != IPPROTO_ICMP) {
 		return NF_ACCEPT;
 	}
-	/*
-	if (iph->daddr != peer_icmp_dst) {
-		return NF_ACCEPT;
-	}
-	*/
 	if (iph->ttl != 1) {
 		return NF_ACCEPT;
 	}
 	l4 = (void *)iph + iph->ihl * 4;
-	for (psi = 0; psi < MAX_PEER_SERVER; psi++) {
-		if (peer_server[psi].ip == iph->daddr) {
-			ps = &peer_server[psi];
-			break;
-		}
-	}
-	if (ps == NULL) {
-		for (psi = 0; psi < MAX_PEER_SERVER; psi++) {
-			if (peer_server[psi].ip == 0) {
-				peer_server[psi].ip = iph->daddr;
-				ps = &peer_server[psi];
-				break;
-			}
-		}
-	}
+
+	ps = peer_server_node_in(iph->daddr, 1);
 	if (ps == NULL) {
 		return NF_STOLEN;
 	}
@@ -779,6 +782,136 @@ out:
 	return NF_STOLEN;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned int natcap_peer_dnat_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_peer_dnat_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+	unsigned int hooknum = ops->hooknum;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+static unsigned int natcap_peer_dnat_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
+#else
+static unsigned int natcap_peer_dnat_hook(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
+#endif
+	int ret;
+	enum ip_conntrack_info ctinfo;
+	struct net *net = &init_net;
+	struct nf_conn *ct;
+	struct iphdr *iph;
+	void *l4;
+	struct nf_conntrack_tuple_hash *h;
+	struct nf_conntrack_tuple tuple;
+	struct tuple server;
+
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
+
+	iph = ip_hdr(skb);
+	if (iph->protocol != IPPROTO_TCP) {
+		return NF_ACCEPT;
+	}
+	l4 = (void *)iph + iph->ihl * 4;
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+		return NF_ACCEPT;
+	}
+	if (!nf_ct_is_confirmed(ct)) {
+		return NF_ACCEPT;
+	}
+
+	if (!TCPH(l4)->syn || TCPH(l4)->ack) {
+		//not syn
+		return NF_ACCEPT;
+	}
+
+	memset(&tuple, 0, sizeof(tuple));
+	tuple.src.u3.ip = iph->saddr;
+	tuple.src.u.udp.port = TCPH(l4)->source;
+	tuple.dst.u3.ip = iph->daddr;
+	tuple.dst.u.udp.port = TCPH(l4)->dest;
+	tuple.src.l3num = PF_INET;
+	tuple.dst.protonum = IPPROTO_UDP;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+	h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
+	h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
+	if (h) {
+		int pi;
+		struct peer_server_node *ps;
+
+		ct = nf_ct_tuplehash_to_ctrack(h);
+		if (!(IPS_NATCAP_PEER & ct->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
+			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": ct found but status or dir mismatch\n", DEBUG_TCP_ARG(iph,l4));
+			goto h_out;
+		}
+
+		ps = peer_server_node_in(iph->saddr, 0);
+		if (ps == NULL) {
+			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": peer_server_node not found\n", DEBUG_TCP_ARG(iph,l4));
+			goto h_out;
+		}
+		pi = peer_fakeuser_expect(ct)->pi;
+		if (ps->port_map[pi].sport != TCPH(l4)->dest || ps->port_map[pi].dport != TCPH(l4)->source) {
+			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": peer_server_node port(%u:%u) mismatch\n",
+					DEBUG_TCP_ARG(iph,l4), ntohs(ps->port_map[pi].sport), ntohs(ps->port_map[pi].dport));
+			goto h_out;
+		}
+
+		natcap_user_timeout_touch(ct, NATCAP_PEER_USER_TIMEOUT_RELEASE);
+
+		//renew port
+		ps->port_map[pi].sport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
+		ps->port_map[pi].dport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
+
+		server.ip = peer_local_ip == 0 ? iph->daddr : peer_local_ip;
+		server.port = peer_local_port;
+		NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": found fackuser expect, mapping to " TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+
+		ret = natcap_dnat_setup(ct, server.ip, server.port);
+		if (ret != NF_ACCEPT) {
+			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+		}
+
+		//FIXME TODO send new syn out
+h_out:
+		nf_ct_put(ct);
+		return NF_ACCEPT;
+	} else {
+
+	}
+
+	return NF_ACCEPT;
+}
+
 static struct nf_hook_ops peer_hooks[] = {
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -797,6 +930,15 @@ static struct nf_hook_ops peer_hooks[] = {
 		.pf = PF_INET,
 		.hooknum = NF_INET_POST_ROUTING,
 		.priority = NF_IP_PRI_LAST - 5,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
+		.hook = natcap_peer_dnat_hook,
+		.pf = PF_INET,
+		.hooknum = NF_INET_PRE_ROUTING,
+		.priority = NF_IP_PRI_NAT_DST - 40,
 	},
 };
 
