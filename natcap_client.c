@@ -576,7 +576,7 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-static unsigned natcap_client_dnat_hook(unsigned int hooknum,
+static unsigned int natcap_client_dnat_hook(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
@@ -966,7 +966,7 @@ natcaped_out:
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-static unsigned natcap_client_pre_ct_in_hook(unsigned int hooknum,
+static unsigned int natcap_client_pre_ct_in_hook(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
@@ -1143,7 +1143,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-static unsigned natcap_client_pre_in_hook(unsigned int hooknum,
+static unsigned int natcap_client_pre_in_hook(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
@@ -1373,7 +1373,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-static unsigned natcap_client_post_out_hook(unsigned int hooknum,
+static unsigned int natcap_client_post_out_hook(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
@@ -1796,7 +1796,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-static unsigned natcap_client_post_master_out_hook(unsigned int hooknum,
+static unsigned int natcap_client_post_master_out_hook(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
@@ -2492,7 +2492,7 @@ static inline int get_rdata(const unsigned char *src_ptr, int src_len, int src_p
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-static unsigned natcap_client_pre_master_in_hook(unsigned int hooknum,
+static unsigned int natcap_client_pre_master_in_hook(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,

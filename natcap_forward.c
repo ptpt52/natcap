@@ -461,7 +461,7 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-static unsigned natcap_forward_pre_in_hook(unsigned int hooknum,
+static unsigned int natcap_forward_pre_in_hook(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,

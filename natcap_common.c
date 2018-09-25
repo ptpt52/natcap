@@ -1324,7 +1324,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 struct cone_nat_session *cone_nat_array = NULL;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-static unsigned natcap_common_cone_in_hook(unsigned int hooknum,
+static unsigned int natcap_common_cone_in_hook(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
@@ -1419,7 +1419,7 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-static unsigned natcap_common_cone_out_hook(unsigned int hooknum,
+static unsigned int natcap_common_cone_out_hook(unsigned int hooknum,
 		struct sk_buff *skb,
 		const struct net_device *in,
 		const struct net_device *out,
