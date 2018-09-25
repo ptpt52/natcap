@@ -102,17 +102,6 @@ static __be16 alloc_peer_port(struct nf_conn *ct, const unsigned char *mac)
 	return 0;
 }
 
-/*XXX: 240.229.229.242
- * code: p    e    e    r
- *  hex: 0x70 0x65 0x65 0x72
- * +128: 0xF0 0xE5 0xE5 0xF2
- */
-__be32 peer_icmp_dst = htonl((240<<24)|(229<<16)|(229<<8)|(242<<0));
-
-//193.112.28.48
-//__be32 peer_server_ip = htonl((193<<24)|(112<<16)|(28<<8)|(48<<0));
-
-__be16 peer_server_port = __constant_htons(2222);
 #define MAX_PEER_SERVER 8
 struct peer_server_node peer_server[MAX_PEER_SERVER];
 
@@ -459,7 +448,7 @@ static inline void natcap_peer_reply_pong(const struct net_device *dev, struct s
 	tcpopt->header.encryption = 0;
 	tcpopt->peer.data.ip = niph->saddr;
 	memcpy(tcpopt->peer.data.mac_addr, default_mac_addr, ETH_ALEN);
-	//just set a mss wo do not care what it is
+	//just set a mss we do not care what it is
 	set_byte1((void *)tcpopt + add_len + 0, TCPOPT_MSS);
 	set_byte1((void *)tcpopt + add_len + 1, TCPOLEN_MSS);
 	set_byte2((void *)tcpopt + add_len + 2, ntohs(IPV4_MIN_MTU - (sizeof(struct iphdr) + sizeof(struct tcphdr))));
@@ -695,8 +684,9 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 		return NF_STOLEN;
 	}
 	pi = ntohs(ICMPH(l4)->un.echo.sequence) % MAX_PEER_SERVER_PORT;
-	if (ps->port_map[pi] == 0) {
-		ps->port_map[pi] = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
+	if (ps->port_map[pi].sport == 0) {
+		ps->port_map[pi].sport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
+		ps->port_map[pi].dport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
 	}
 
 	NATCAP_INFO("(PPO)" DEBUG_ICMP_FMT ": ping out\n", DEBUG_ICMP_ARG(iph,l4));
@@ -730,8 +720,8 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	iph->tot_len = htons(skb2->len);
 	iph->ttl = 255;
 
-	TCPH(l4)->source = ps->port_map[pi];
-	TCPH(l4)->dest = peer_server_port;
+	TCPH(l4)->source = ps->port_map[pi].sport;
+	TCPH(l4)->dest = ps->port_map[pi].dport;
 	TCPH(l4)->seq = htonl(jiffies);
 	TCPH(l4)->ack_seq = 0;
 	TCPH(l4)->res1 = 0;
