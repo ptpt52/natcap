@@ -681,6 +681,21 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
+		if (hooknum == NF_INET_PRE_ROUTING && !nf_ct_is_confirmed(ct)) {
+			if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
+				return NF_DROP;
+			}
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
+
+			if (natcap_tcp_decode_header(TCPH(l4)) != NULL) {
+				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": first packet is already encoded, bypass\n", DEBUG_TCP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
+		}
+
 		if (IP_SET_test_dst_ip(state, in, out, skb, "knocklist") > 0) {
 			natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, knock select target server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
@@ -794,6 +809,20 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
+
+		if (hooknum == NF_INET_PRE_ROUTING && !nf_ct_is_confirmed(ct)) {
+			if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
+					get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099)) {
+				iph = ip_hdr(skb);
+				l4 = (void *)iph + iph->ihl * 4;
+				NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": first packet is already encoded, bypass\n", DEBUG_UDP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
+		}
 
 		if (UDPH(l4)->dest == __constant_htons(53)) {
 natcap_dual_out:
@@ -986,7 +1015,7 @@ static unsigned int natcap_client_pre_ct_in_hook(const struct nf_hook_ops *ops,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
-	//const struct net_device *in = state->in;
+	const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #else
 static unsigned int natcap_client_pre_ct_in_hook(void *priv,
@@ -994,7 +1023,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
-	//const struct net_device *in = state->in;
+	const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #endif
 	int ret = 0;
@@ -1040,6 +1069,10 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 
 				opt = natcap_tcp_decode_header(TCPH(l4));
 				if (opt != NULL) {
+					if (!inet_is_local(in, iph->daddr)) {
+						set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+						return NF_ACCEPT;
+					}
 					if (opt->header.opcode == TCPOPT_NATCAP) {
 						struct tuple server;
 						if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_DST) {
@@ -1186,6 +1219,9 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 	void *l4;
 	struct net *net = &init_net;
 
+	if (mode == MIXING_MODE)
+		return NF_ACCEPT;
+
 	if (disabled)
 		return NF_ACCEPT;
 
@@ -1217,6 +1253,11 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xFFFF) ^ (ntohl(TCPH(l4)->ack_seq) & 0xFFFF)) ) {
 			unsigned int foreign_seq = ntohl(TCPH(l4)->seq) + (TCPH(l4)->syn ? 1 + ntohs(iph->tot_len) - iph->ihl * 4 - sizeof(struct tcphdr) : ntohs(iph->tot_len) - iph->ihl * 4 - sizeof(struct tcphdr));
+
+			if (!inet_is_local(in, iph->daddr)) {
+				set_bit(IPS_NATCAP_PRE_BIT, &master->status);
+				return NF_ACCEPT;
+			}
 
 			NATCAP_DEBUG("(CPI)" DEBUG_TCP_FMT ": got UDP-to-TCP packet\n", DEBUG_TCP_ARG(iph,l4));
 
@@ -1308,6 +1349,11 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xFFFF0099)) {
 		int offlen;
+
+		if (!inet_is_local(in, iph->daddr)) {
+			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
+			return NF_ACCEPT;
+		}
 
 		if (skb->ip_summed == CHECKSUM_NONE) {
 			if (skb_rcsum_verify(skb) != 0) {

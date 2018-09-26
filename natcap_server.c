@@ -874,7 +874,7 @@ static unsigned int natcap_server_pre_ct_test_hook(const struct nf_hook_ops *ops
 		const struct nf_hook_state *state)
 {
 	//unsigned int hooknum = state->hook;
-	//const struct net_device *in = state->in;
+	const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #else
 static unsigned int natcap_server_pre_ct_test_hook(void *priv,
@@ -882,7 +882,7 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 		const struct nf_hook_state *state)
 {
 	//unsigned int hooknum = state->hook;
-	//const struct net_device *in = state->in;
+	const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #endif
 	enum ip_conntrack_info ctinfo;
@@ -902,6 +902,9 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+		return NF_ACCEPT;
+	}
 	if (nf_ct_is_confirmed(ct)) {
 		return NF_ACCEPT;
 	}
@@ -909,9 +912,6 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if ((IPS_NATCAP_BYPASS & ct->status)) {
-		return NF_ACCEPT;
-	}
-	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
 
@@ -935,6 +935,10 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 			return NF_ACCEPT;
 		}
 		set_bit(IPS_NATCAP_SERVER_BIT, &ct->status);
+
+		if (!inet_is_local(in, iph->daddr)) {
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+		}
 		return NF_ACCEPT;
 	} else if (iph->protocol == IPPROTO_UDP) {
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
@@ -945,6 +949,9 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
 				get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099)) {
 			set_bit(IPS_NATCAP_SERVER_BIT, &ct->status);
+			if (!inet_is_local(in, iph->daddr)) {
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			}
 			return NF_ACCEPT;
 		}
 	}
@@ -1505,9 +1512,6 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 	void *l4;
 	struct net *net = &init_net;
 
-	if (mode == MIXING_MODE)
-		return NF_ACCEPT;
-
 	if (disabled)
 		return NF_ACCEPT;
 
@@ -1539,6 +1543,11 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xFFFF) ^ (ntohl(TCPH(l4)->ack_seq) & 0xFFFF)) ) {
 			unsigned int foreign_seq = ntohl(TCPH(l4)->seq) + (TCPH(l4)->syn ? 1 + ntohs(iph->tot_len) - iph->ihl * 4 - sizeof(struct tcphdr) : ntohs(iph->tot_len) - iph->ihl * 4 - sizeof(struct tcphdr));
+
+			if (!inet_is_local(in, iph->daddr)) {
+				set_bit(IPS_NATCAP_PRE_BIT, &master->status);
+				return NF_ACCEPT;
+			}
 
 			NATCAP_DEBUG("(SPI)" DEBUG_TCP_FMT ": got UDP-to-TCP packet\n", DEBUG_TCP_ARG(iph,l4));
 
@@ -1630,6 +1639,11 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xFFFF0099)) {
 		int offlen;
+
+		if (!inet_is_local(in, iph->daddr)) {
+			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
+			return NF_ACCEPT;
+		}
 
 		if (skb->ip_summed == CHECKSUM_NONE) {
 			if (skb_rcsum_verify(skb) != 0) {

@@ -486,7 +486,7 @@ static inline void natcap_peer_reply_pong(const struct net_device *dev, struct s
 	tcpopt->header.opcode = TCPOPT_PEER;
 	tcpopt->header.opsize = add_len;
 	tcpopt->header.encryption = 0;
-	tcpopt->peer.data.ip = niph->saddr;
+	set_byte4((void *)&tcpopt->peer.data.ip, niph->saddr);
 	memcpy(tcpopt->peer.data.mac_addr, default_mac_addr, ETH_ALEN);
 
 	//just set a mss we do not care what it is
@@ -630,7 +630,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
-		client_ip = tcpopt->peer.data.ip;
+		client_ip = get_byte4((const void *)&tcpopt->peer.data.ip);
 		memcpy(client_mac, tcpopt->peer.data.mac_addr, ETH_ALEN);
 
 		ret = peer_user_expect_in(iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, client_mac);
@@ -763,7 +763,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	tcpopt->header.opcode = TCPOPT_PEER;
 	tcpopt->header.opsize = add_len;
 	tcpopt->header.encryption = 0;
-	tcpopt->peer.data.ip = niph->saddr;
+	set_byte4((void *)&tcpopt->peer.data.ip, niph->saddr);
 	memcpy(tcpopt->peer.data.mac_addr, default_mac_addr, ETH_ALEN);
 
 	//MUST set mss
