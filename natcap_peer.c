@@ -938,6 +938,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 		if (ret != NF_ACCEPT) {
 			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		}
+		xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 
 		do {
 			struct sk_buff *nskb;
@@ -956,6 +957,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 h_out:
 		nf_ct_put(ct);
 		return NF_ACCEPT;
+
 	} else {
 		struct nf_conn *user;
 		unsigned int port = ntohs(TCPH(l4)->dest);
@@ -1010,8 +1012,11 @@ h_out:
 			if (ret != NF_ACCEPT) {
 				NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 			}
+			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 
 			if (!(IPS_NATCAP_PEER & user->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &user->status)) {	
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": found user expect, do DNAT to " TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 			}
 		}
