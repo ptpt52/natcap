@@ -68,6 +68,34 @@ static inline struct user_expect *peer_user_expect(struct nf_conn *ct)
 	return (void *)ct->ext + ct->ext->len;
 }
 
+static inline struct natcap_TCPOPT *natcap_peer_decode_header(struct tcphdr *tcph)
+{
+	struct natcap_TCPOPT *opt;
+
+	opt = (struct natcap_TCPOPT *)((void *)tcph + sizeof(struct tcphdr));
+	if (
+			!(
+				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int)) &&
+				 opt->header.opcode == TCPOPT_PEER &&
+				 opt->header.type == NATCAP_TCPOPT_TYPE_PEER &&
+				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int))) ||
+				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer_synack), sizeof(unsigned int)) &&
+				 opt->header.opcode == TCPOPT_PEER &&
+				 opt->header.type == NATCAP_TCPOPT_TYPE_PEER_SYNACK &&
+				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer_synack), sizeof(unsigned int))) ||
+				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)) &&
+				 opt->header.opcode == TCPOPT_PEER &&
+				 opt->header.type == NATCAP_TCPOPT_TYPE_PEER_SYN &&
+				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)))
+			 )
+	   )
+	{
+		return NULL;
+	}
+
+	return opt;
+}
+
 int natcap_peer_init(void);
 void natcap_peer_exit(void);
 

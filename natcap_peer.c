@@ -258,6 +258,7 @@ struct nf_conn *peer_client_expect_in(__be32 saddr, __be32 daddr, __be16 sport, 
 	}
 
 	skb_nfct_reset(uskb);
+	natcap_user_timeout_touch(user, NATCAP_PEER_USER_TIMEOUT);
 
 	if (seq) {
 		*seq = htonl(peer_fakeuser_expect(user)->local_seq);
@@ -542,7 +543,6 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 	void *l4;
 	struct net *net = &init_net;
 	struct natcap_TCPOPT *tcpopt;
-	int size;
 
 	if (in)
 		net = dev_net(in);
@@ -562,14 +562,14 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
 
-	size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
-	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + size)) {
+	if (!pskb_may_pull(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
 		return NF_ACCEPT;
 	}
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
-	tcpopt = (struct natcap_TCPOPT *)(l4 + sizeof(struct tcphdr));
-	if (tcpopt->header.opcode != TCPOPT_PEER) {
+
+	tcpopt = natcap_peer_decode_header(TCPH(l4));
+	if (tcpopt == NULL) {
 		return NF_ACCEPT;
 	}
 
@@ -581,11 +581,6 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		//got syn ack
 		struct nf_conntrack_tuple tuple;
 		struct nf_conntrack_tuple_hash *h;
-
-		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
-		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + size)) {
-			return NF_ACCEPT;
-		}
 
 		memset(&tuple, 0, sizeof(tuple));
 		tuple.src.u3.ip = iph->saddr;
@@ -601,57 +596,54 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
 #endif
 		if (h) {
-			struct nf_conn *ct = nf_ct_tuplehash_to_ctrack(h);
-			struct nf_conn *user;
+			struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
 
-			if (!(IPS_NATCAP_PEER & ct->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
-				nf_ct_put(ct);
-				return NF_ACCEPT;
+			if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
+				goto h_out;
 			}
 
 			if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_SYNACK) {
-				user = peer_client_expect_in(iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, 0, NULL);
-				if (ct == user) {
-					struct peer_server_node *ps;
-					int pmi;
-					__be16 map_port;
+				struct peer_server_node *ps;
+				int pmi;
+				__be16 map_port;
 
-					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": get pong in\n", DEBUG_TCP_ARG(iph,l4));
-					//TODO send ack back?
-					peer_fakeuser_expect(user)->remote_seq = ntohl(TCPH(l4)->seq);
+				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": get pong in\n", DEBUG_TCP_ARG(iph,l4));
+				//TODO send ack back?
+				peer_fakeuser_expect(user)->remote_seq = ntohl(TCPH(l4)->seq);
 
-					ps = peer_server_node_in(iph->saddr, 0);
-					if (ps == NULL) {
-						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer_server_node not found\n", DEBUG_TCP_ARG(iph,l4));
-						goto h_out;
-					}
-					pmi = peer_fakeuser_expect(user)->pmi;
-					if (ps->port_map[pmi].sport != TCPH(l4)->dest || ps->port_map[pmi].dport != TCPH(l4)->source) {
-						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer_server_node port(%u:%u) mismatch\n",
-								DEBUG_TCP_ARG(iph,l4), ntohs(ps->port_map[pmi].sport), ntohs(ps->port_map[pmi].dport));
-						goto h_out;
-					}
-
-					map_port = get_byte2((const void *)&tcpopt->peer_synack.data.port);
-					if (map_port != ps->map_port) {
-						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": update map_port from %u to %u\n",
-								DEBUG_TCP_ARG(iph,l4), ntohs(ps->map_port), ntohs(map_port));
-						ps->map_port = map_port;
-					}
-
-					nf_ct_put(ct);
-					consume_skb(skb);
-					return NF_STOLEN;
+				ps = peer_server_node_in(iph->saddr, 0);
+				if (ps == NULL) {
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer_server_node not found\n", DEBUG_TCP_ARG(iph,l4));
+					goto h_out;
 				}
+				pmi = peer_fakeuser_expect(user)->pmi;
+				if (ps->port_map[pmi].sport != TCPH(l4)->dest || ps->port_map[pmi].dport != TCPH(l4)->source) {
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer_server_node port(%u:%u) mismatch\n",
+							DEBUG_TCP_ARG(iph,l4), ntohs(ps->port_map[pmi].sport), ntohs(ps->port_map[pmi].dport));
+					goto h_out;
+				}
+
+				map_port = get_byte2((const void *)&tcpopt->peer_synack.data.port);
+				if (map_port != ps->map_port) {
+					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": update map_port from %u to %u\n",
+							DEBUG_TCP_ARG(iph,l4), ntohs(ps->map_port), ntohs(map_port));
+					ps->map_port = map_port;
+				}
+
+				nf_ct_put(user);
+				consume_skb(skb);
+				return NF_STOLEN;
 			} else if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_SYN) {
 				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": get fake syn in\n", DEBUG_TCP_ARG(iph,l4));
 				TCPH(l4)->ack = 0;
 				skb_rcsum_tcpudp(skb);
 			}
 h_out:
-			nf_ct_put(ct);
+			nf_ct_put(user);
+			return NF_ACCEPT;
+		} else {
+			//XXX not expect found bypass
 		}
-		return NF_ACCEPT;
 
 	} else if (TCPH(l4)->syn && !TCPH(l4)->ack) {
 		//got syn
@@ -659,11 +651,7 @@ h_out:
 		__be32 client_ip;
 		unsigned char client_mac[ETH_ALEN];
 
-		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
-		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + size)) {
-			goto syn_out;
-		}
-
+		//TODO
 		client_ip = get_byte4((const void *)&tcpopt->peer.data.ip);
 		memcpy(client_mac, tcpopt->peer.data.mac_addr, ETH_ALEN);
 
@@ -673,7 +661,6 @@ h_out:
 			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": send pong out\n", DEBUG_TCP_ARG(iph,l4));
 			natcap_peer_reply_pong(in, skb, peer_user_expect(user)->map_port);
 		}
-syn_out:
 		consume_skb(skb);
 		return NF_STOLEN;
 
@@ -684,7 +671,7 @@ syn_out:
 
 static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const struct net_device *dev, struct peer_server_node *ops, int opmi)
 {
-	struct nf_conn *ct;
+	struct nf_conn *user;
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
 	struct iphdr *niph, *oiph;
@@ -801,8 +788,8 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	set_byte1((void *)tcpopt + add_len + 1, TCPOLEN_MSS);
 	set_byte2((void *)tcpopt + add_len + 2, ntohs(ps->mss));
 
-	ct = peer_client_expect_in(niph->saddr, niph->daddr, TCPH(l4)->source, TCPH(l4)->dest, pmi, &TCPH(l4)->seq);
-	if (ct == NULL) {
+	user = peer_client_expect_in(niph->saddr, niph->daddr, TCPH(l4)->source, TCPH(l4)->dest, pmi, &TCPH(l4)->seq);
+	if (user == NULL) {
 		consume_skb(nskb);
 		return NULL;
 	}
