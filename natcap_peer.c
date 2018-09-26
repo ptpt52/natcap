@@ -962,7 +962,6 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 		}
 		xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 
-#if 0
 		do {
 			struct sk_buff *nskb;
 
@@ -977,7 +976,6 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 				NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": sending new syn failed\n", DEBUG_TCP_ARG(iph,l4));
 			}
 		} while (0);
-#endif
 h_out:
 		nf_ct_put(user);
 		return NF_ACCEPT;
