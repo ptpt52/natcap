@@ -30,13 +30,14 @@ struct port_tuple {
 
 struct peer_server_node {
 	__be32 ip;
+	__be16 map_port;
 	unsigned short mss;
 #define MAX_PEER_SERVER_PORT 8
 	struct port_tuple port_map[MAX_PEER_SERVER_PORT];
 };
 
 struct fakeuser_expect {
-	unsigned int pi;
+	unsigned int pmi;
 	unsigned int local_seq;
 	unsigned int remote_seq;
 };

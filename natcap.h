@@ -67,6 +67,10 @@ struct natcap_TCPOPT_peer {
 	u8 mac_addr[ETH_ALEN];
 };
 
+struct natcap_TCPOPT_peer_synack {
+	u16 port;
+};
+
 #define NATCAP_TCPOPT_SYN (1<<7)
 #define NATCAP_TCPOPT_TARGET (1<<6)
 #define NATCAP_TCPOPT_SPROXY (1<<5)
@@ -96,6 +100,10 @@ struct natcap_TCPOPT {
 #define NATCAP_TCPOPT_TYPE_PEER_SYN 7
 			struct natcap_TCPOPT_peer data;
 		} peer;
+		struct {
+#define NATCAP_TCPOPT_TYPE_PEER_SYNACK 8
+			struct natcap_TCPOPT_peer_synack data;
+		} peer_synack;
 	};
 #define NATCAP_TCPOPT_TYPE_CONFUSION 4
 	char pad[4];
