@@ -575,6 +575,10 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
+	if (!inet_is_local(in, iph->daddr)) {
+		return NF_ACCEPT;
+	}
+
 	if (TCPH(l4)->syn && TCPH(l4)->ack) {
 		//got syn ack
 		struct nf_conntrack_tuple tuple;
@@ -909,6 +913,10 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 
 	if (!TCPH(l4)->syn || TCPH(l4)->ack) {
 		//not syn
+		return NF_ACCEPT;
+	}
+
+	if (!inet_is_local(in, iph->daddr)) {
 		return NF_ACCEPT;
 	}
 

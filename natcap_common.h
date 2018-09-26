@@ -37,6 +37,7 @@
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_core.h>
+#include <linux/inetdevice.h>
 #include "natcap.h"
 
 enum {
@@ -519,7 +520,6 @@ static inline void skb_nfct_reset(struct sk_buff *skb)
 #endif
 }
 
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
 static inline int nf_register_hooks(struct nf_hook_ops *reg, unsigned int n)
 {
@@ -531,5 +531,21 @@ static inline void nf_unregister_hooks(struct nf_hook_ops *reg, unsigned int n)
 	nf_unregister_net_hooks(&init_net, reg, n);
 }
 #endif
+
+static inline int inet_is_local(const struct net_device *dev, __be32 ip)
+{
+	struct in_device *in_dev;
+
+	rcu_read_lock();
+	in_dev = __in_dev_get_rcu(dev);
+	if (!in_dev)
+		return 0;
+	for_primary_ifa(in_dev) {
+		if (ifa->ifa_local == ip)
+			return 1;
+	} endfor_ifa(in_dev);
+
+	return 0;
+}
 
 #endif /* _NATCAP_COMMON_H_ */
