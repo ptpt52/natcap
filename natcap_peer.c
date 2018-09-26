@@ -882,7 +882,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
-	if (!nf_ct_is_confirmed(ct)) {
+	if (nf_ct_is_confirmed(ct)) {
 		return NF_ACCEPT;
 	}
 
@@ -1014,7 +1014,7 @@ h_out:
 			}
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 
-			if (!(IPS_NATCAP_PEER & user->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &user->status)) {	
+			if (!(IPS_NATCAP_PEER & ct->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &ct->status)) {
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": found user expect, do DNAT to " TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
@@ -1084,7 +1084,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
-	if (!nf_ct_is_confirmed(ct)) {
+	if (nf_ct_is_confirmed(ct)) {
 		return NF_ACCEPT;
 	}
 	if (!(IPS_NATCAP_PEER & ct->status)) {
@@ -1098,6 +1098,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 
 	ns = natcap_session_get(ct);
 	if (ns == NULL) {
+		NATCAP_WARN("(PS)" DEBUG_TCP_FMT ": ns not found\n", DEBUG_TCP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
 
