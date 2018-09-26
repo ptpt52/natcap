@@ -93,6 +93,7 @@ struct natcap_TCPOPT {
 		} user;
 		struct {
 #define NATCAP_TCPOPT_TYPE_PEER 6
+#define NATCAP_TCPOPT_TYPE_PEER_SYN 7
 			struct natcap_TCPOPT_peer data;
 		} peer;
 	};

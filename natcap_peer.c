@@ -571,7 +571,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
 	tcpopt = (struct natcap_TCPOPT *)(l4 + sizeof(struct tcphdr));
-	if (tcpopt->header.type != NATCAP_TCPOPT_TYPE_PEER || tcpopt->header.opcode != TCPOPT_PEER) {
+	if (tcpopt->header.opcode != TCPOPT_PEER) {
 		return NF_ACCEPT;
 	}
 
@@ -606,8 +606,12 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			struct nf_conn *ct = nf_ct_tuplehash_to_ctrack(h);
 			struct nf_conn *user;
 
-			if ((IPS_NATCAP_PEER & ct->status) && NF_CT_DIRECTION(h) == IP_CT_DIR_REPLY) {
-				//
+			if (!(IPS_NATCAP_PEER & ct->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
+				nf_ct_put(ct);
+				return NF_ACCEPT;
+			}
+
+			if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER) {
 				user = peer_client_expect_in(iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, 0, NULL);
 				if (ct == user) {
 					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": get pong in\n", DEBUG_TCP_ARG(iph,l4));
@@ -617,9 +621,15 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					consume_skb(skb);
 					return NF_STOLEN;
 				}
+			} else if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_SYN) {
+				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": get fake syn in\n", DEBUG_TCP_ARG(iph,l4));
+				TCPH(l4)->ack = 0;
+				skb_rcsum_tcpudp(skb);
 			}
 			nf_ct_put(ct);
 		}
+		return NF_ACCEPT;
+
 	} else if (TCPH(l4)->syn && !TCPH(l4)->ack) {
 		//got syn
 		__be32 client_ip;
@@ -627,7 +637,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
 		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + size)) {
-			return NF_ACCEPT;
+			goto syn_out;
 		}
 
 		client_ip = get_byte4((const void *)&tcpopt->peer.data.ip);
@@ -639,14 +649,10 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": send pong out\n", DEBUG_TCP_ARG(iph,l4));
 			natcap_peer_reply_pong(in, skb);
 		}
-
+syn_out:
 		consume_skb(skb);
 		return NF_STOLEN;
-	} else if (TCPH(l4)->ack) {
-		NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": get fake syn in\n", DEBUG_TCP_ARG(iph,l4));
-		TCPH(l4)->syn = 1;
-		TCPH(l4)->ack = 0;
-		skb_rcsum_tcpudp(skb);
+
 	}
 
 	return NF_ACCEPT;
@@ -1167,12 +1173,11 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 		tcpopt = (void *)l4 + sizeof(struct tcphdr);
 
 		tcpopt = (struct natcap_TCPOPT *)((void *)l4 + sizeof(struct tcphdr));
-		tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
+		tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER_SYN;
 		tcpopt->header.opcode = TCPOPT_PEER;
 		tcpopt->header.opsize = add_len;
 		tcpopt->header.encryption = 0;
 
-		TCPH(l4)->syn = 0;
 		TCPH(l4)->ack = 1;
 		TCPH(l4)->doff = (TCPH(l4)->doff * 4 + add_len) / 4;
 		iph->tot_len = htons(ntohs(iph->tot_len) + add_len);
