@@ -167,7 +167,7 @@ void natcap_user_timeout_touch(struct nf_conn *ct, unsigned long timeout)
 #endif
 }
 
-struct nf_conn *peer_client_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, int pmi, __be32 *seq)
+struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, int pmi, __be32 *seq)
 {
 	struct nf_conn *user;
 	struct nf_ct_ext *new = NULL;
@@ -788,7 +788,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	set_byte1((void *)tcpopt + add_len + 1, TCPOLEN_MSS);
 	set_byte2((void *)tcpopt + add_len + 2, ntohs(ps->mss));
 
-	user = peer_client_expect_in(niph->saddr, niph->daddr, TCPH(l4)->source, TCPH(l4)->dest, pmi, &TCPH(l4)->seq);
+	user = peer_fakeuser_expect_in(niph->saddr, niph->daddr, TCPH(l4)->source, TCPH(l4)->dest, pmi, &TCPH(l4)->seq);
 	if (user == NULL) {
 		consume_skb(nskb);
 		return NULL;
