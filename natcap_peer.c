@@ -357,18 +357,30 @@ int peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, 
 	ue = peer_user_expect(user);
 	ue->last_active = last_jiffies;
 
+	if (user != peer_port_map[ntohs(ue->map_port)]) {
+		ue->map_port = alloc_peer_port(user, client_mac);
+		NATCAP_INFO("user [%02X:%02X:%02X:%02X:%02X:%02X] ct[%pI4:%u->%pI4:%u] @map_port=%u reuse update mapping\n",
+				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+				&saddr, ntohs(sport), &daddr, ntohs(dport), ntohs(ue->map_port));
+	}
+
 	for (i = 0; i < MAX_PEER_TUPLE; i++) {
 		if (ue->tuple[i].sip == saddr && ue->tuple[i].dip == daddr && ue->tuple[i].sport == sport && ue->tuple[i].dport) {
 			pt = &ue->tuple[i];
 			pt->last_active = last_jiffies;
+			break;
 		}
 	}
 	if (pt == NULL) {
 		unsigned long maxdiff = 0;
 		for (i = 0; i < MAX_PEER_TUPLE; i++) {
-			if (maxdiff < (last_jiffies - ue->tuple[i].last_active)) {
-				maxdiff = last_jiffies - ue->tuple[i].last_active;
+			if (maxdiff < ulongdiff(last_jiffies, ue->tuple[i].last_active)) {
+				maxdiff = ulongdiff(last_jiffies, ue->tuple[i].last_active);
 				pt = &ue->tuple[i];
+			}
+			if (ue->tuple[i].sip == 0) {
+				pt = &ue->tuple[i];
+				break;
 			}
 		}
 		if (pt) {
@@ -381,13 +393,6 @@ int peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, 
 			pt->dport = dport;
 			pt->last_active = last_jiffies;
 		}
-	}
-
-	if (user != peer_port_map[ntohs(ue->map_port)]) {
-		ue->map_port = alloc_peer_port(user, client_mac);
-		NATCAP_INFO("user [%02X:%02X:%02X:%02X:%02X:%02X] ct[%pI4:%u->%pI4:%u] @map_port=%u reuse update mapping\n",
-				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-				&saddr, ntohs(sport), &daddr, ntohs(dport), ntohs(ue->map_port));
 	}
 
 	skb_nfct_reset(uskb);
@@ -952,7 +957,64 @@ h_out:
 		nf_ct_put(ct);
 		return NF_ACCEPT;
 	} else {
+		struct nf_conn *user;
+		unsigned int port = ntohs(TCPH(l4)->dest);
+		user = peer_port_map[port];
 
+		if (user) {
+			int i;
+			int hash;
+			struct peer_tuple *pt = NULL;
+			struct natcap_session *ns;
+			struct user_expect *ue = peer_user_expect(user);
+			if (ntohs(ue->map_port) != port) {
+				NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": map_port=%u dest=%u mismatch\n", DEBUG_TCP_ARG(iph,l4), ntohs(ue->map_port), port);
+				return NF_ACCEPT;
+			}
+
+			ns = natcap_session_in(ct);
+			if (!ns) {
+				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+				return NF_ACCEPT;
+			}
+
+			hash = jiffies % MAX_PEER_TUPLE;
+			for (i = hash; i < MAX_PEER_TUPLE; i++) {
+				if (ue->tuple[i].sip != 0) {
+					pt = &ue->tuple[i];
+					break;
+				}
+			}
+			for (i = 0; i < hash && pt == NULL; i++) {
+				if (ue->tuple[i].sip != 0) {
+					pt = &ue->tuple[i];
+					break;
+				}
+			}
+			if (pt == NULL) {
+				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping\n", DEBUG_TCP_ARG(iph,l4));
+				return NF_ACCEPT;
+			}
+
+			server.ip = pt->sip;
+			server.port = pt->sport;
+			ns->peer_sip = pt->dip;
+			ns->peer_sport = pt->dport;
+
+			//clear pt
+			pt->sip = 0;
+
+			NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": found user expect, mapping to " TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+
+			ret = natcap_dnat_setup(ct, server.ip, server.port);
+			if (ret != NF_ACCEPT) {
+				NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+			}
+
+			if (!(IPS_NATCAP_PEER & user->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &user->status)) {	
+				NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": found user expect, do DNAT to " TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+			}
+		}
 	}
 
 	return NF_ACCEPT;

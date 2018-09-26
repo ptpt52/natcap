@@ -47,17 +47,17 @@ static inline struct fakeuser_expect *peer_fakeuser_expect(struct nf_conn *ct)
 }
 
 struct peer_tuple {
-	unsigned int sip;
-	unsigned int dip;
-	unsigned short sport;
-	unsigned short dport;
+	__be32 sip;
+	__be32 dip;
+	__be16 sport;
+	__be16 dport;
 	unsigned long last_active;
 };
 
 struct user_expect {
 	unsigned long last_active;
-	unsigned int ip;
-	unsigned short map_port;
+	__be32 ip;
+	__be16 map_port;
 #define MAX_PEER_TUPLE 8
 	struct peer_tuple tuple[MAX_PEER_TUPLE];
 };

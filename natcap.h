@@ -135,8 +135,14 @@ struct natcap_session {
 	struct tuple tup;
 	int tcp_seq_offset;
 	int tcp_ack_offset;
-	unsigned int foreign_seq;
-	unsigned int current_seq;
+	union {
+		unsigned int foreign_seq;
+		__be32 peer_sip;
+	};
+	union {
+		unsigned int current_seq;
+		__be16 peer_sport;
+	};
 };
 
 #define NATCAP_MAGIC 0x43415099
@@ -267,6 +273,13 @@ static inline int short_test_and_set_bit(int nr, unsigned short *addr)
 	old = *p;
 	*p |= mask;
 	return (old & mask) != 0;
+}
+
+static inline unsigned long ulongdiff(unsigned long a, unsigned long b)
+{
+	if (a > b)
+		return a - b;
+	return b - a;
 }
 
 #endif /* _NATCAP_H_ */
