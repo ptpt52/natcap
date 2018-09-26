@@ -1022,7 +1022,7 @@ h_out:
 
 		if (user) {
 			int i;
-			int hash;
+			unsigned long mindiff = NATCAP_PEER_USER_TIMEOUT * HZ;
 			struct peer_tuple *pt = NULL;
 			struct natcap_session *ns;
 			struct user_expect *ue = peer_user_expect(user);
@@ -1037,17 +1037,10 @@ h_out:
 				return NF_ACCEPT;
 			}
 
-			hash = jiffies % MAX_PEER_TUPLE;
-			for (i = hash; i < MAX_PEER_TUPLE; i++) {
-				if (ue->tuple[i].sip != 0) {
+			for (i = 0; i < MAX_PEER_TUPLE; i++) {
+				if (ue->tuple[i].sip != 0 && mindiff > ulongdiff(jiffies, ue->tuple[i].last_active)) {
 					pt = &ue->tuple[i];
-					break;
-				}
-			}
-			for (i = 0; i < hash && pt == NULL; i++) {
-				if (ue->tuple[i].sip != 0) {
-					pt = &ue->tuple[i];
-					break;
+					mindiff = ulongdiff(jiffies, ue->tuple[i].last_active);
 				}
 			}
 			if (pt == NULL) {
