@@ -968,7 +968,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 
 		server.ip = peer_local_ip == 0 ? iph->daddr : peer_local_ip;
 		server.port = peer_local_port;
-		NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": found fackuser expect, mapping to " TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+		NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": found fakeuser expect, mapping to " TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 
 		ret = natcap_dnat_setup(ct, server.ip, server.port);
 		if (ret != NF_ACCEPT) {
