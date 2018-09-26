@@ -116,11 +116,20 @@ __be16 peer_local_port = __constant_htons(443);
 
 #define MAX_PEER_SERVER 8
 struct peer_server_node peer_server[MAX_PEER_SERVER];
-struct peer_server_node *peer_server_node_in(__be32 ip, int new)
+struct peer_server_node *peer_server_node_in(__be32 ip, int max_port_idx, int new)
 {
 	int i;
+
+	if (max_port_idx >= MAX_PEER_SERVER_PORT)
+		max_port_idx = MAX_PEER_SERVER_PORT - 1;
+	if (max_port_idx < 0)
+		max_port_idx = 0;
+
 	for (i = 0; i < MAX_PEER_SERVER; i++) {
 		if (peer_server[i].ip == ip) {
+			if (new == 1 && peer_server[i].max_port_idx != max_port_idx) {
+				peer_server[i].max_port_idx = max_port_idx;
+			}
 			return &peer_server[i];
 		}
 	}
@@ -132,6 +141,7 @@ struct peer_server_node *peer_server_node_in(__be32 ip, int new)
 			peer_server[i].ip = ip;
 			peer_server[i].mss = 0;
 			peer_server[i].map_port = 0;
+			peer_server[i].max_port_idx = max_port_idx;
 			return  &peer_server[i];
 		}
 	}
@@ -611,7 +621,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				//TODO send ack back?
 				peer_fakeuser_expect(user)->remote_seq = ntohl(TCPH(l4)->seq);
 
-				ps = peer_server_node_in(iph->saddr, 0);
+				ps = peer_server_node_in(iph->saddr, 0, 0);
 				if (ps == NULL) {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer_server_node not found\n", DEBUG_TCP_ARG(iph,l4));
 					goto h_out;
@@ -690,7 +700,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 		return NULL;
 	}
 
-	ps = (ops != NULL) ? ops : peer_server_node_in(oiph->daddr, 1);
+	ps = (ops != NULL) ? ops : peer_server_node_in(oiph->daddr, ntohs(oiph->tot_len) - oiph->ihl * 4 - sizeof(struct icmphdr), 1);
 	if (ps == NULL) {
 		return NULL;
 	}
@@ -707,7 +717,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 		mss = mss - (sizeof(struct iphdr) + sizeof(struct tcphdr));
 		ps->mss = mss;
 	}
-	pmi = (ops != NULL) ? opmi : ntohs(ICMPH(l4)->un.echo.sequence) % MAX_PEER_SERVER_PORT;
+	pmi = (ops != NULL) ? opmi : ntohs(ICMPH(l4)->un.echo.sequence) % (ps->max_port_idx + 1);
 	if (ps->port_map[pmi].sport == 0) {
 		ps->port_map[pmi].sport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
 		ps->port_map[pmi].dport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
@@ -961,7 +971,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 			goto h_out;
 		}
 
-		ps = peer_server_node_in(iph->saddr, 0);
+		ps = peer_server_node_in(iph->saddr, 0, 0);
 		if (ps == NULL) {
 			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": peer_server_node not found\n", DEBUG_TCP_ARG(iph,l4));
 			goto h_out;

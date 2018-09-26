@@ -32,6 +32,7 @@ struct peer_server_node {
 	__be32 ip;
 	__be16 map_port;
 	unsigned short mss;
+	unsigned int max_port_idx;
 #define MAX_PEER_SERVER_PORT 8
 	struct port_tuple port_map[MAX_PEER_SERVER_PORT];
 };
