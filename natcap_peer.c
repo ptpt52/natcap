@@ -44,6 +44,15 @@
 #include "natcap_peer.h"
 #include "natcap_client.h"
 
+static inline __be32 gen_seq_number(void)
+{
+	__be32 s;
+	do {
+		s = prandom_u32();
+	} while (s == 0);
+	return s;
+}
+
 #define MAX_PEER_PORT_MAP 65536
 static struct nf_conn **peer_port_map;
 
@@ -103,7 +112,7 @@ static __be16 alloc_peer_port(struct nf_conn *ct, const unsigned char *mac)
 }
 
 __be32 peer_local_ip = __constant_htonl(0);
-__be16 peer_local_port = __constant_htons(80);
+__be16 peer_local_port = __constant_htons(443);
 
 #define MAX_PEER_SERVER 8
 struct peer_server_node peer_server[MAX_PEER_SERVER];
@@ -456,7 +465,7 @@ static inline void natcap_peer_reply_pong(const struct net_device *dev, struct s
 	memset(ntcph, 0, sizeof(sizeof(struct tcphdr) + add_len + TCPOLEN_MSS));
 	ntcph->source = otcph->dest;
 	ntcph->dest = otcph->source;
-	ntcph->seq = jiffies;
+	ntcph->seq = gen_seq_number();
 	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4 + 1);
 	ntcph->res1 = 0;
 	ntcph->doff = (sizeof(struct tcphdr) + add_len + TCPOLEN_MSS) / 4;
@@ -555,7 +564,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
 
-	size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
+	size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
 	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + size)) {
 		return NF_ACCEPT;
 	}
@@ -570,6 +579,11 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		//got syn ack
 		struct nf_conntrack_tuple tuple;
 		struct nf_conntrack_tuple_hash *h;
+
+		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
+		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + size)) {
+			return NF_ACCEPT;
+		}
 
 		memset(&tuple, 0, sizeof(tuple));
 		tuple.src.u3.ip = iph->saddr;
@@ -606,6 +620,11 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		//got syn
 		__be32 client_ip;
 		unsigned char client_mac[ETH_ALEN];
+
+		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
+		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + size)) {
+			return NF_ACCEPT;
+		}
 
 		client_ip = tcpopt->peer.data.ip;
 		memcpy(client_mac, tcpopt->peer.data.mac_addr, ETH_ALEN);
@@ -719,7 +738,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	memset(l4, 0, sizeof(sizeof(struct tcphdr) + add_len + TCPOLEN_MSS));
 	TCPH(l4)->source = ps->port_map[pi].sport;
 	TCPH(l4)->dest = ps->port_map[pi].dport;
-	TCPH(l4)->seq = htonl(jiffies);
+	TCPH(l4)->seq = gen_seq_number();
 	TCPH(l4)->ack_seq = 0;
 	TCPH(l4)->res1 = 0;
 	TCPH(l4)->doff = (sizeof(struct tcphdr) + add_len + TCPOLEN_MSS) / 4;
@@ -1121,7 +1140,12 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 	do {
 		struct natcap_TCPOPT *tcpopt;
 		int offlen;
-		int add_len = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
+		int add_len = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
+
+		if (add_len + TCPH(l4)->doff * 4 > 60) {
+			NATCAP_WARN("(PS)" DEBUG_TCP_FMT ": add_len=%u doff=%u over 60\n", DEBUG_TCP_ARG(iph,l4), add_len, TCPH(l4)->doff * 4);
+			break;
+		}
 
 		if (skb_tailroom(skb) < add_len && pskb_expand_head(skb, 0, add_len, GFP_ATOMIC)) {
 			NATCAP_ERROR("(PS)" DEBUG_TCP_FMT ": pskb_expand_head failed add_len=%u\n", DEBUG_TCP_ARG(iph,l4), add_len);
@@ -1141,8 +1165,6 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 		tcpopt->header.opcode = TCPOPT_PEER;
 		tcpopt->header.opsize = add_len;
 		tcpopt->header.encryption = 0;
-		tcpopt->peer.data.ip = iph->saddr;
-		memcpy(tcpopt->peer.data.mac_addr, default_mac_addr, ETH_ALEN);
 
 		TCPH(l4)->syn = 0;
 		TCPH(l4)->ack = 1;
