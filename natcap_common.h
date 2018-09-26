@@ -390,6 +390,7 @@ extern int ip_set_test_src_mac(const struct net_device *in, const struct net_dev
 #endif
 
 extern unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto);
+extern unsigned int natcap_snat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto);
 
 extern int natcap_session_init(struct nf_conn *ct, gfp_t gfp);
 extern struct natcap_session *natcap_session_get(struct nf_conn *ct);

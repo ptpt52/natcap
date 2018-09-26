@@ -1066,11 +1066,11 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 	return ret;
 }
 
-unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto)
+static unsigned int __natcap_nat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto, int type)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)
 	struct nf_nat_range range;
-	if (nf_nat_initialized(ct, IP_NAT_MANIP_DST)) {
+	if (nf_nat_initialized(ct, type == 0 ? IP_NAT_MANIP_DST : IP_NAT_MANIP_SRC)) {
 		return NF_ACCEPT;
 	}
 	memset(&range.min_ip, 0, sizeof(range.min_ip));
@@ -1080,10 +1080,10 @@ unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto
 	range.max_ip = addr;
 	range.min.all = man_proto;
 	range.max.all = man_proto;
-	return nf_nat_setup_info(ct, &range, IP_NAT_MANIP_DST);
+	return nf_nat_setup_info(ct, &range, type == 0 ? IP_NAT_MANIP_DST : IP_NAT_MANIP_SRC);
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
 	struct nf_nat_ipv4_range range;
-	if (nf_nat_initialized(ct, NF_NAT_MANIP_DST)) {
+	if (nf_nat_initialized(ct, type == 0 ? NF_NAT_MANIP_DST : NF_NAT_MANIP_SRC)) {
 		return NF_ACCEPT;
 	}
 	memset(&range.min_ip, 0, sizeof(range.min_ip));
@@ -1093,10 +1093,10 @@ unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto
 	range.max_ip = addr;
 	range.min.all = man_proto;
 	range.max.all = man_proto;
-	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
+	return nf_nat_setup_info(ct, &range, type == 0 ? NF_NAT_MANIP_DST : NF_NAT_MANIP_SRC);
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 18, 0)
 	struct nf_nat_range range;
-	if (nf_nat_initialized(ct, NF_NAT_MANIP_DST)) {
+	if (nf_nat_initialized(ct, type == 0 ? NF_NAT_MANIP_DST : NF_NAT_MANIP_SRC)) {
 		return NF_ACCEPT;
 	}
 	memset(&range.min_addr, 0, sizeof(range.min_addr));
@@ -1106,10 +1106,10 @@ unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto
 	range.max_addr.ip = addr;
 	range.min_proto.all = man_proto;
 	range.max_proto.all = man_proto;
-	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
+	return nf_nat_setup_info(ct, &range, type == 0 ? NF_NAT_MANIP_DST : NF_NAT_MANIP_SRC);
 #else
 	struct nf_nat_range2 range;
-	if (nf_nat_initialized(ct, NF_NAT_MANIP_DST)) {
+	if (nf_nat_initialized(ct, type == 0 ? NF_NAT_MANIP_DST : NF_NAT_MANIP_SRC)) {
 		return NF_ACCEPT;
 	}
 	memset(&range.min_addr, 0, sizeof(range.min_addr));
@@ -1120,8 +1120,18 @@ unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto
 	range.min_proto.all = man_proto;
 	range.max_proto.all = man_proto;
 	memset(&range.base_proto, 0, sizeof(range.base_proto));
-	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
+	return nf_nat_setup_info(ct, &range, type == 0 ? NF_NAT_MANIP_DST : NF_NAT_MANIP_SRC);
 #endif
+}
+
+unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto)
+{
+	return __natcap_nat_setup(ct, addr, man_proto, 0);
+}
+
+unsigned int natcap_snat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto)
+{
+	return __natcap_nat_setup(ct, addr, man_proto, 1);
 }
 
 #define __ALIGN_64BITS 8

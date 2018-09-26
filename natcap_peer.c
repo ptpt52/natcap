@@ -1025,6 +1025,95 @@ h_out:
 	return NF_ACCEPT;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned int natcap_peer_snat_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_peer_snat_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+	unsigned int hooknum = ops->hooknum;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+static unsigned int natcap_peer_snat_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
+#else
+static unsigned int natcap_peer_snat_hook(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
+#endif
+	int ret;
+	enum ip_conntrack_info ctinfo;
+	struct net *net = &init_net;
+	struct nf_conn *ct;
+	struct iphdr *iph;
+	void *l4;
+	struct natcap_session *ns;
+	struct tuple server;
+
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
+
+	iph = ip_hdr(skb);
+	if (iph->protocol != IPPROTO_TCP) {
+		return NF_ACCEPT;
+	}
+	l4 = (void *)iph + iph->ihl * 4;
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+		return NF_ACCEPT;
+	}
+	if (!nf_ct_is_confirmed(ct)) {
+		return NF_ACCEPT;
+	}
+	if (!(IPS_NATCAP_PEER & ct->status)) {
+		return NF_ACCEPT;
+	}
+
+	if (!TCPH(l4)->syn || TCPH(l4)->ack) {
+		//not syn
+		return NF_ACCEPT;
+	}
+
+	ns = natcap_session_get(ct);
+	if (ns == NULL) {
+		return NF_ACCEPT;
+	}
+
+	server.ip = ns->peer_sip;
+	server.port = ns->peer_sport;
+
+	NATCAP_INFO("(PS)" DEBUG_TCP_FMT ": found user expect, doing SNAT to " TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+
+	ret = natcap_snat_setup(ct, ns->peer_sip, ns->peer_sport);
+	if (ret != NF_ACCEPT) {
+		NATCAP_ERROR("(PS)" DEBUG_TCP_FMT ": natcap_snat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+	}
+
+	return NF_ACCEPT;
+}
+
 static struct nf_hook_ops peer_hooks[] = {
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -1052,6 +1141,15 @@ static struct nf_hook_ops peer_hooks[] = {
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
 		.priority = NF_IP_PRI_NAT_DST - 40,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
+		.hook = natcap_peer_snat_hook,
+		.pf = PF_INET,
+		.hooknum = NF_INET_POST_ROUTING,
+		.priority = NF_IP_PRI_NAT_SRC - 10,
 	},
 };
 
