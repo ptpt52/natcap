@@ -30,9 +30,9 @@ struct port_tuple {
 
 struct peer_server_node {
 	__be32 ip;
+	unsigned short mss;
 #define MAX_PEER_SERVER_PORT 8
 	struct port_tuple port_map[MAX_PEER_SERVER_PORT];
-	unsigned long last_active;
 };
 
 struct fakeuser_expect {
