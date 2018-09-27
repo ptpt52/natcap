@@ -478,7 +478,7 @@ static inline void natcap_peer_reply_pong(const struct net_device *dev, struct s
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 255;
 	niph->protocol = IPPROTO_TCP;
-	niph->id = __constant_htons(0xDEAD);
+	niph->id = __constant_htons(jiffies);
 	niph->frag_off = 0x0;
 
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
@@ -771,7 +771,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 255;
 	niph->protocol = IPPROTO_TCP;
-	niph->id = (ops != NULL) ? __constant_htons(0xDEAD) : oiph->id;
+	niph->id = (ops != NULL) ? __constant_htons(jiffies) : oiph->id;
 	niph->frag_off = 0x0;
 
 	l4 = (void *)niph + niph->ihl * 4;
