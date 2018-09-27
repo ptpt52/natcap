@@ -99,6 +99,7 @@ struct natcap_TCPOPT {
 #define NATCAP_TCPOPT_TYPE_PEER_SYN 6
 #define NATCAP_TCPOPT_TYPE_PEER_ACK 8
 #define NATCAP_TCPOPT_TYPE_PEER_FSYN 9
+#define NATCAP_TCPOPT_TYPE_PEER_FACK 10
 			struct natcap_TCPOPT_peer data;
 		} peer;
 		struct {
