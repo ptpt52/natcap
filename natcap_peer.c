@@ -278,7 +278,7 @@ struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport
 	return user;
 }
 
-struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, const unsigned char *client_mac)
+struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, const unsigned char *client_mac, struct peer_tuple **ppt)
 {
 	int i;
 	int ret;
@@ -418,11 +418,14 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 			pt->last_active = last_jiffies;
 		}
 	}
+	if (ppt && pt) {
+		*ppt = pt;
+	}
 
 	return user;
 }
 
-static inline void natcap_peer_reply_pong(const struct net_device *dev, struct sk_buff *oskb, __be16 map_port)
+static inline void natcap_peer_reply_pong(const struct net_device *dev, struct sk_buff *oskb, __be16 map_port, struct peer_tuple *pt)
 {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
@@ -454,6 +457,12 @@ static inline void natcap_peer_reply_pong(const struct net_device *dev, struct s
 		nskb->tail += offset;
 	}
 
+	if (pt) {
+		if (pt->local_seq == 0) {
+			pt->local_seq = ntohl(gen_seq_number());
+		}
+	}
+
 	neth = eth_hdr(nskb);
 	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
 	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
@@ -476,7 +485,7 @@ static inline void natcap_peer_reply_pong(const struct net_device *dev, struct s
 	memset(ntcph, 0, sizeof(sizeof(struct tcphdr) + add_len + TCPOLEN_MSS));
 	ntcph->source = otcph->dest;
 	ntcph->dest = otcph->source;
-	ntcph->seq = gen_seq_number();
+	ntcph->seq = pt ? htonl(pt->local_seq) : gen_seq_number();
 	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4 + 1);
 	ntcph->res1 = 0;
 	ntcph->doff = (sizeof(struct tcphdr) + add_len + TCPOLEN_MSS) / 4;
@@ -619,7 +628,6 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": get pong in\n", DEBUG_TCP_ARG(iph,l4));
 				//TODO send ack back?
-				peer_fakeuser_expect(user)->remote_seq = ntohl(TCPH(l4)->seq);
 
 				ps = peer_server_node_in(iph->saddr, 0, 0);
 				if (ps == NULL) {
@@ -657,6 +665,7 @@ h_out:
 
 	} else if (TCPH(l4)->syn && !TCPH(l4)->ack) {
 		//got syn
+		struct peer_tuple *pt = NULL;
 		struct nf_conn *user;
 		__be32 client_ip;
 		unsigned char client_mac[ETH_ALEN];
@@ -665,11 +674,11 @@ h_out:
 		client_ip = get_byte4((const void *)&tcpopt->peer.data.ip);
 		memcpy(client_mac, tcpopt->peer.data.mac_addr, ETH_ALEN);
 
-		user = peer_user_expect_in(iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, client_mac);
+		user = peer_user_expect_in(iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, client_mac, &pt);
 		if (user != NULL) {
 			//XXX send syn ack back
 			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": send pong out\n", DEBUG_TCP_ARG(iph,l4));
-			natcap_peer_reply_pong(in, skb, peer_user_expect(user)->map_port);
+			natcap_peer_reply_pong(in, skb, peer_user_expect(user)->map_port, pt);
 		}
 		consume_skb(skb);
 		return NF_STOLEN;
