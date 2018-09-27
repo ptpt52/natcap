@@ -42,6 +42,7 @@
 #include "natcap_common.h"
 #include "natcap_client.h"
 #include "natcap_knock.h"
+#include "natcap_peer.h"
 
 unsigned int server_persist_lock = 0;
 unsigned int server_persist_timeout = 0;
@@ -688,7 +689,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 
-			if (natcap_tcp_decode_header(TCPH(l4)) != NULL) {
+			if (natcap_tcp_decode_header(TCPH(l4)) != NULL || natcap_peer_decode_header(TCPH(l4)) != NULL) {
 				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": first packet is already encoded, bypass\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
