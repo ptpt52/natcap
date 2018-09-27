@@ -26,6 +26,10 @@
 struct port_tuple {
 	__be16 sport;
 	__be16 dport;
+	unsigned int local_seq;
+	unsigned int remote_seq;
+	unsigned int connected;
+	unsigned long last_active;
 };
 
 struct peer_server_node {
@@ -39,7 +43,6 @@ struct peer_server_node {
 
 struct fakeuser_expect {
 	unsigned int pmi;
-	unsigned int local_seq;
 };
 
 static inline struct fakeuser_expect *peer_fakeuser_expect(struct nf_conn *ct)
@@ -53,6 +56,8 @@ struct peer_tuple {
 	__be16 sport;
 	__be16 dport;
 	unsigned int local_seq;
+	unsigned int remote_seq;
+	unsigned int connected;
 	unsigned long last_active;
 };
 
