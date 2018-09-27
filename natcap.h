@@ -142,17 +142,23 @@ struct natcap_session {
 #define NS_NATCAP_NOLIMIT_BIT 5
 #define NS_NATCAP_NOLIMIT (1 << NS_NATCAP_NOLIMIT_BIT)
 	unsigned short status;
-	__be16 new_source;
+	union {
+		__be16 new_source;
+		__be16 peer_sport;
+	};
 	struct tuple tup;
 	int tcp_seq_offset;
-	int tcp_ack_offset;
+	union {
+		int tcp_ack_offset;
+		unsigned int local_seq;
+	};
 	union {
 		unsigned int foreign_seq;
-		__be32 peer_sip;
+		unsigned int remote_seq;
 	};
 	union {
 		unsigned int current_seq;
-		__be16 peer_sport;
+		__be32 peer_sip;
 	};
 };
 

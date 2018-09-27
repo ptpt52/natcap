@@ -816,6 +816,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			} else if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_FSYN) {
 				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got fsyn in\n", DEBUG_TCP_ARG(iph,l4));
 				TCPH(l4)->ack = 0;
+				TCPH(l4)->ack_seq = 0;
 				skb_rcsum_tcpudp(skb);
 			}
 h_out:
@@ -867,6 +868,7 @@ h_out:
 		if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_FACK) {
 			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got fack in\n", DEBUG_TCP_ARG(iph,l4));
 			TCPH(l4)->syn = 1;
+			TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
 			skb_rcsum_tcpudp(skb);
 			return NF_ACCEPT;
 		}
@@ -1020,6 +1022,9 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
+	if ((IPS_NATCAP_PEER & ct->status)) {
+		return NF_ACCEPT;
+	}
 	if (nf_ct_is_confirmed(ct)) {
 		return NF_ACCEPT;
 	}
@@ -1050,6 +1055,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 		int pmi;
 		struct peer_server_node *ps;
 		struct nf_conn *user;
+		struct natcap_session *ns;
 
 		user = nf_ct_tuplehash_to_ctrack(h);
 		if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
@@ -1068,6 +1074,14 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 					DEBUG_TCP_ARG(iph,l4), ntohs(ps->port_map[pmi].sport), ntohs(ps->port_map[pmi].dport));
 			goto h_out;
 		}
+
+		ns = natcap_session_in(ct);
+		if (!ns) {
+			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+			goto h_out;
+		}
+
+		ns->local_seq = ps->port_map[pmi].local_seq;
 
 		natcap_user_timeout_touch(user, NATCAP_PEER_USER_TIMEOUT_RELEASE);
 		//reset this session
@@ -1092,6 +1106,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 			NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": found fakeuser expect, do DNAT to " TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		}
 
+		//create a new session
 		do {
 			struct sk_buff *nskb;
 
@@ -1109,7 +1124,6 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 h_out:
 		nf_ct_put(user);
 		return NF_ACCEPT;
-
 	} else {
 		struct nf_conn *user;
 		unsigned int port = ntohs(TCPH(l4)->dest);
@@ -1147,6 +1161,9 @@ h_out:
 			server.port = pt->sport;
 			ns->peer_sip = pt->dip;
 			ns->peer_sport = pt->dport;
+
+			ns->tcp_seq_offset = pt->local_seq - ntohl(TCPH(l4)->seq);
+			ns->remote_seq = pt->remote_seq;
 
 			//clear this pt
 			pt->sip = 0;
@@ -1235,7 +1252,19 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 	if (!(IPS_NATCAP_PEER & ct->status)) {
 		return NF_ACCEPT;
 	}
+	ns = natcap_session_get(ct);
+	if (ns == NULL) {
+		NATCAP_WARN("(PS)" DEBUG_TCP_FMT ": ns not found\n", DEBUG_TCP_ARG(iph,l4));
+		return NF_ACCEPT;
+	}
+
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+		if (ns->local_seq == 0) {
+			TCPH(l4)->ack_seq = htonl(ntohl(TCPH(l4)->ack_seq) - ns->tcp_seq_offset);
+			skb_rcsum_tcpudp(skb);
+			return NF_ACCEPT;
+		}
+
 		if (TCPH(l4)->syn && TCPH(l4)->ack) {
 			//encode
 			struct natcap_TCPOPT *tcpopt;
@@ -1266,28 +1295,73 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			tcpopt->header.opsize = add_len;
 			tcpopt->header.encryption = 0;
 
+			ns->tcp_seq_offset = ns->local_seq - ntohl(TCPH(l4)->seq);
+
+			TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) + ns->tcp_seq_offset + 1);
 			TCPH(l4)->syn = 0;
 			TCPH(l4)->doff = (TCPH(l4)->doff * 4 + add_len) / 4;
 			iph->tot_len = htons(ntohs(iph->tot_len) + add_len);
 			skb->len += add_len;
 			skb->tail += add_len;
-
+			skb_rcsum_tcpudp(skb);
+		} else {
+			TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) + ns->tcp_seq_offset);
 			skb_rcsum_tcpudp(skb);
 		}
 		return NF_ACCEPT;
+
+	} else {
+		if (ns->local_seq != 0) {
+			if (TCPH(l4)->syn && !TCPH(l4)->ack) {
+				return NF_ACCEPT;
+			}
+			TCPH(l4)->ack_seq = htonl(ntohl(TCPH(l4)->ack_seq) - ns->tcp_seq_offset);
+			skb_rcsum_tcpudp(skb);
+			return NF_ACCEPT;
+		}
+
+		if (TCPH(l4)->syn && !TCPH(l4)->ack) {
+			//fake as synack
+			struct natcap_TCPOPT *tcpopt;
+			int offlen;
+			int add_len = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
+
+			if (add_len + TCPH(l4)->doff * 4 > 60) {
+				NATCAP_WARN("(PS)" DEBUG_TCP_FMT ": add_len=%u doff=%u over 60\n", DEBUG_TCP_ARG(iph,l4), add_len, TCPH(l4)->doff * 4);
+				return NF_DROP;
+			}
+			if (skb_tailroom(skb) < add_len && pskb_expand_head(skb, 0, add_len, GFP_ATOMIC)) {
+				NATCAP_ERROR("(PS)" DEBUG_TCP_FMT ": pskb_expand_head failed add_len=%u\n", DEBUG_TCP_ARG(iph,l4), add_len);
+				return NF_DROP;
+			}
+			iph = ip_hdr(skb);
+			l4 = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+
+			offlen = skb_tail_pointer(skb) - (unsigned char *)l4 - sizeof(struct tcphdr);
+			BUG_ON(offlen < 0);
+			memmove((void *)l4 + sizeof(struct tcphdr) + add_len, (void *)l4 + sizeof(struct tcphdr), offlen);
+
+			tcpopt = (struct natcap_TCPOPT *)((void *)l4 + sizeof(struct tcphdr));
+			tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER_FSYN;
+			tcpopt->header.opcode = TCPOPT_PEER;
+			tcpopt->header.opsize = add_len;
+			tcpopt->header.encryption = 0;
+
+			TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) + ns->tcp_seq_offset);
+			TCPH(l4)->ack_seq = htonl(ns->remote_seq + 1);
+			TCPH(l4)->ack = 1;
+			TCPH(l4)->doff = (TCPH(l4)->doff * 4 + add_len) / 4;
+			iph->tot_len = htons(ntohs(iph->tot_len) + add_len);
+			skb->len += add_len;
+			skb->tail += add_len;
+			skb_rcsum_tcpudp(skb);
+		} else {
+			TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) + ns->tcp_seq_offset);
+			skb_rcsum_tcpudp(skb);
+		}
 	}
+
 	if (nf_ct_is_confirmed(ct)) {
-		return NF_ACCEPT;
-	}
-
-	if (!TCPH(l4)->syn || TCPH(l4)->ack) {
-		//not syn
-		return NF_ACCEPT;
-	}
-
-	ns = natcap_session_get(ct);
-	if (ns == NULL) {
-		NATCAP_WARN("(PS)" DEBUG_TCP_FMT ": ns not found\n", DEBUG_TCP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
 
@@ -1300,45 +1374,6 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 	if (ret != NF_ACCEPT) {
 		NATCAP_ERROR("(PS)" DEBUG_TCP_FMT ": natcap_snat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 	}
-
-	//encode
-	do {
-		struct natcap_TCPOPT *tcpopt;
-		int offlen;
-		int add_len = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
-
-		if (add_len + TCPH(l4)->doff * 4 > 60) {
-			NATCAP_WARN("(PS)" DEBUG_TCP_FMT ": add_len=%u doff=%u over 60\n", DEBUG_TCP_ARG(iph,l4), add_len, TCPH(l4)->doff * 4);
-			break;
-		}
-
-		if (skb_tailroom(skb) < add_len && pskb_expand_head(skb, 0, add_len, GFP_ATOMIC)) {
-			NATCAP_ERROR("(PS)" DEBUG_TCP_FMT ": pskb_expand_head failed add_len=%u\n", DEBUG_TCP_ARG(iph,l4), add_len);
-			break;
-		}
-		iph = ip_hdr(skb);
-		l4 = (struct tcphdr *)((void *)iph + iph->ihl * 4);
-
-		offlen = skb_tail_pointer(skb) - (unsigned char *)l4 - sizeof(struct tcphdr);
-		BUG_ON(offlen < 0);
-		memmove((void *)l4 + sizeof(struct tcphdr) + add_len, (void *)l4 + sizeof(struct tcphdr), offlen);
-
-		tcpopt = (void *)l4 + sizeof(struct tcphdr);
-
-		tcpopt = (struct natcap_TCPOPT *)((void *)l4 + sizeof(struct tcphdr));
-		tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER_FSYN;
-		tcpopt->header.opcode = TCPOPT_PEER;
-		tcpopt->header.opsize = add_len;
-		tcpopt->header.encryption = 0;
-
-		TCPH(l4)->ack = 1;
-		TCPH(l4)->doff = (TCPH(l4)->doff * 4 + add_len) / 4;
-		iph->tot_len = htons(ntohs(iph->tot_len) + add_len);
-		skb->len += add_len;
-		skb->tail += add_len;
-
-		skb_rcsum_tcpudp(skb);
-	} while (0);
 
 	return NF_ACCEPT;
 }
