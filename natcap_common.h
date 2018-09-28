@@ -151,7 +151,7 @@ extern char htp_confusion_host[64];
 
 #define IP_TCPUDP_FMT	"%pI4:%u->%pI4:%u"
 #define IP_TCPUDP_ARG(i,t)	&(i)->saddr, ntohs(((struct tcphdr *)(t))->source), &(i)->daddr, ntohs(((struct tcphdr *)(t))->dest)
-#define TCP_ST_FMT	"%c%c%c%c%c%c%c%c"
+#define TCP_ST_FMT	"%c%c%c%c%c%c%c%c|S=%u|A=%u|"
 #define TCP_ST_ARG(t) \
 	((struct tcphdr *)(t))->cwr ? 'C' : '.', \
 	((struct tcphdr *)(t))->ece ? 'E' : '.', \
@@ -160,7 +160,10 @@ extern char htp_confusion_host[64];
 	((struct tcphdr *)(t))->psh ? 'P' : '.', \
 	((struct tcphdr *)(t))->rst ? 'R' : '.', \
 	((struct tcphdr *)(t))->syn ? 'S' : '.', \
-	((struct tcphdr *)(t))->fin ? 'F' : '.'
+	((struct tcphdr *)(t))->fin ? 'F' : '.', \
+	ntohl(((struct tcphdr *)(t))->seq), \
+	ntohl(((struct tcphdr *)(t))->ack_seq)
+
 #define UDP_ST_FMT "UL:%u,UC:%04X"
 #define UDP_ST_ARG(u) ntohs(((struct udphdr *)(u))->len), ntohs(((struct udphdr *)(u))->check)
 #define ICMP_ST_FMT "T:%u,C:%u,ID:%u:SEQ:%u"
