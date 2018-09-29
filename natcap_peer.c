@@ -870,8 +870,37 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		if (h) {
 			struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
 			if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
+				if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_FSYN) {
+					//may be re-trans pkt
+					tuple.dst.protonum = IPPROTO_TCP;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+					h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
+					h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
+					if (h) {
+						struct nf_conn *ct = nf_ct_tuplehash_to_ctrack(h);
+						if ((IPS_NATCAP_PEER & user->status) && NF_CT_DIRECTION(h) == IP_CT_DIR_REPLY) {
+							nf_ct_put(ct);
+							goto fsyn_out;
+						}
+						nf_ct_put(ct);
+					}
+				}
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got unexpected ping in, drop\n", DEBUG_TCP_ARG(iph,l4));
 				goto h_out;
+			}
+
+			if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_FSYN) {
+fsyn_out:
+				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got fsyn in\n", DEBUG_TCP_ARG(iph,l4));
+				TCPH(l4)->syn = 1;
+				TCPH(l4)->ack = 0;
+				TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
+				TCPH(l4)->ack_seq = 0;
+				skb_rcsum_tcpudp(skb);
+				nf_ct_put(user);
+				return NF_ACCEPT;
 			}
 
 			if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_SYNACK) {
@@ -925,15 +954,8 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": sending ack failed\n", DEBUG_TCP_ARG(iph,l4));
 					}
 				}
-			} else if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_FSYN) {
-				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got fsyn in\n", DEBUG_TCP_ARG(iph,l4));
-				TCPH(l4)->syn = 1;
-				TCPH(l4)->ack = 0;
-				TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
-				TCPH(l4)->ack_seq = 0;
-				skb_rcsum_tcpudp(skb);
-				return NF_ACCEPT;
 			}
+
 h_out:
 			consume_skb(skb);
 			nf_ct_put(user);
