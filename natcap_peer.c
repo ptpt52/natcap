@@ -332,7 +332,7 @@ struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport
 	skb_nfct_reset(uskb);
 	natcap_user_timeout_touch(user, NATCAP_PEER_USER_TIMEOUT);
 
-	NATCAP_INFO("fakeuser create user[%pI4:%u->%pI4:%u] pmi=%d upmi=%d\n", &saddr, ntohs(sport), &daddr, ntohs(dport), pmi, peer_fakeuser_expect(user)->pmi);
+	NATCAP_DEBUG("fakeuser create user[%pI4:%u->%pI4:%u] pmi=%d upmi=%d\n", &saddr, ntohs(sport), &daddr, ntohs(dport), pmi, peer_fakeuser_expect(user)->pmi);
 
 	return user;
 }
@@ -446,7 +446,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	ue->last_active = last_jiffies;
 
 	if (user != peer_port_map[ntohs(ue->map_port)]) {
-		//XXX this can only happen when alloc_peer_port get 0
+		//XXX this can only happen when alloc_peer_port get 0 or old user got timeout.
 		//    so we re-alloc it
 		spin_lock_bh(&ue->lock);
 		//re-check-in-lock
@@ -848,11 +848,13 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if ((TCPH(l4)->syn && TCPH(l4)->ack) || tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_SYNACK) {
+	if ((TCPH(l4)->syn && TCPH(l4)->ack) ||
+			tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_SYNACK ||
+			tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_FSYN) {
 		//got syn ack
+		//first. lookup fakeuser_expect
 		struct nf_conntrack_tuple tuple;
 		struct nf_conntrack_tuple_hash *h;
-
 		memset(&tuple, 0, sizeof(tuple));
 		tuple.src.u3.ip = iph->saddr;
 		tuple.src.u.udp.port = TCPH(l4)->source;
@@ -860,7 +862,6 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		tuple.dst.u.udp.port = TCPH(l4)->dest;
 		tuple.src.l3num = PF_INET;
 		tuple.dst.protonum = IPPROTO_UDP;
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
 		h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
 #else
@@ -868,7 +869,6 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 #endif
 		if (h) {
 			struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
-
 			if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got unexpected ping in, drop\n", DEBUG_TCP_ARG(iph,l4));
 				goto h_out;
@@ -925,6 +925,14 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": sending ack failed\n", DEBUG_TCP_ARG(iph,l4));
 					}
 				}
+			} else if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_FSYN) {
+				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got fsyn in\n", DEBUG_TCP_ARG(iph,l4));
+				TCPH(l4)->syn = 1;
+				TCPH(l4)->ack = 0;
+				TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
+				TCPH(l4)->ack_seq = 0;
+				skb_rcsum_tcpudp(skb);
+				return NF_ACCEPT;
 			}
 h_out:
 			consume_skb(skb);
@@ -991,22 +999,31 @@ syn_out:
 		__be32 client_ip;
 		unsigned char client_mac[ETH_ALEN];
 
-		if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_FSYN) {
-			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got fsyn in\n", DEBUG_TCP_ARG(iph,l4));
-			TCPH(l4)->syn = 1;
-			TCPH(l4)->ack = 0;
-			TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
-			TCPH(l4)->ack_seq = 0;
-			skb_rcsum_tcpudp(skb);
-			return NF_ACCEPT;
-		}
-
 		if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_FACK) {
-			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got fack in\n", DEBUG_TCP_ARG(iph,l4));
-			TCPH(l4)->syn = 1;
-			TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
-			skb_rcsum_tcpudp(skb);
-			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": fack in good\n", DEBUG_TCP_ARG(iph,l4));
+			struct nf_conntrack_tuple tuple;
+			struct nf_conntrack_tuple_hash *h;
+			memset(&tuple, 0, sizeof(tuple));
+			tuple.src.u3.ip = iph->saddr;
+			tuple.src.u.udp.port = TCPH(l4)->source;
+			tuple.dst.u3.ip = iph->daddr;
+			tuple.dst.u.udp.port = TCPH(l4)->dest;
+			tuple.src.l3num = PF_INET;
+			tuple.dst.protonum = IPPROTO_TCP;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+			h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
+			h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
+			if (h) {
+				struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
+				if ((IPS_NATCAP_PEER & user->status) && NF_CT_DIRECTION(h) == IP_CT_DIR_REPLY) {
+					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got fack in\n", DEBUG_TCP_ARG(iph,l4));
+					TCPH(l4)->syn = 1;
+					TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
+					skb_rcsum_tcpudp(skb);
+				}
+				nf_ct_put(user);
+			}
 			return NF_ACCEPT;
 		}
 
@@ -1125,7 +1142,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	}
 	l4 = (void *)iph + iph->ihl * 4;
 
-	NATCAP_INFO("(PPO)" DEBUG_ICMP_FMT ": ping out\n", DEBUG_ICMP_ARG(iph,l4));
+	NATCAP_DEBUG("(PPO)" DEBUG_ICMP_FMT ": ping out\n", DEBUG_ICMP_ARG(iph,l4));
 	nskb = natcap_peer_ping_init(skb, NULL, NULL, 0);
 	if (nskb != NULL) {
 		iph = ip_hdr(nskb);
