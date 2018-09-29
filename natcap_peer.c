@@ -870,12 +870,12 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		if (h) {
 			struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
 			if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
-				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got unexpected ping in, bypass\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got unexpected pong in, bypass\n", DEBUG_TCP_ARG(iph,l4));
 				goto h_out;
 			}
 
 			if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_FSYN) {
-				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got fsyn in\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(ack->syn) FSYN in, pass up\n", DEBUG_TCP_ARG(iph,l4));
 				TCPH(l4)->syn = 1;
 				TCPH(l4)->ack = 0;
 				TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
@@ -917,8 +917,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				ps->last_active = ps->port_map[pmi].last_active = jiffies;
 				if (!TCPH(l4)->syn) {
 					spin_unlock_bh(&ps->lock);
-					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ack, pong in\n", DEBUG_TCP_ARG(iph,l4));
-
+					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(ack) ACK in. keepalive\n", DEBUG_TCP_ARG(iph,l4));
 				} else {
 					struct sk_buff *nskb;
 					ps->port_map[pmi].connected = 1;
@@ -930,10 +929,10 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					if (nskb) {
 						iph = ip_hdr(nskb);
 						l4 = (void *)iph + iph->ihl * 4;
-						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got synack, sending ack back\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(synack) SYNACK, sending ping(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
 						dev_queue_xmit(nskb);
 					} else {
-						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": sending ack failed\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": got pong(synack) SYNACK, sending ping(ack) ACK out failed\n", DEBUG_TCP_ARG(iph,l4));
 					}
 				}
 			}
@@ -957,9 +956,8 @@ h_out:
 			return NF_ACCEPT;
 		}
 
-		NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got syn in\n", DEBUG_TCP_ARG(iph,l4));
 		if (ntohl(TCPH(l4)->seq) == 0) {
-			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got syn in, but seq is 0, drop\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, but seq is 0, drop\n", DEBUG_TCP_ARG(iph,l4));
 			goto syn_out;
 		}
 
@@ -976,7 +974,6 @@ h_out:
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, but session has been used\n", DEBUG_TCP_ARG(iph,l4));
 				goto syn_out;
 			}
-
 			if (pt->remote_seq != ntohl(TCPH(l4)->seq)) {
 				if (pt->remote_seq == 0) {
 					pt->remote_seq = ntohl(TCPH(l4)->seq);
@@ -987,8 +984,12 @@ h_out:
 					goto syn_out;
 				}
 			}
-			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, create new session, sending synack back\n", DEBUG_TCP_ARG(iph,l4));
-			natcap_peer_reply_pong(in, skb, peer_user_expect(user)->map_port, pt);
+			if (!pt->connected) {
+				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, create new session, sending pong(synack) SYNACK back\n", DEBUG_TCP_ARG(iph,l4));
+				natcap_peer_reply_pong(in, skb, peer_user_expect(user)->map_port, pt);
+			} else {
+				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, dup packet, sending pong(ack) ACK back\n", DEBUG_TCP_ARG(iph,l4));
+			}
 			spin_unlock_bh(&peer_user_expect(user)->lock);
 		}
 
@@ -1021,11 +1022,28 @@ syn_out:
 			if (h) {
 				struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
 				if ((IPS_NATCAP_PEER & user->status) && NF_CT_DIRECTION(h) == IP_CT_DIR_REPLY) {
-					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got fack in\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack->synack) FACK in, pass up\n", DEBUG_TCP_ARG(iph,l4));
 					TCPH(l4)->syn = 1;
 					TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
 					skb_rcsum_tcpudp(skb);
 				}
+
+				do {
+					int ret;
+					int dir;
+					enum ip_conntrack_info ctinfo;
+					struct nf_conn *ct;
+					ret = nf_conntrack_in(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
+					ct = nf_ct_get(skb, &ctinfo);
+					dir = CTINFO2DIR(ctinfo);
+					if (!ct) {
+						ct = user;
+						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": S%u[end=%u maxend=%u maxwin=%u] R%u[end=%u maxend=%u maxwin=%u]\n", DEBUG_TCP_ARG(iph,l4),
+								dir, ct->proto.tcp.seen[dir].td_end, ct->proto.tcp.seen[dir].td_maxend, ct->proto.tcp.seen[dir].td_maxwin,
+								!dir, ct->proto.tcp.seen[!dir].td_end, ct->proto.tcp.seen[!dir].td_maxend, ct->proto.tcp.seen[!dir].td_maxwin);
+					}
+				} while (0);
+
 				nf_ct_put(user);
 			}
 			return NF_ACCEPT;
@@ -1035,7 +1053,8 @@ syn_out:
 			return NF_ACCEPT;
 		}
 		if (ntohl(TCPH(l4)->seq) - 1 == 0) {
-			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) in, but seq is 1, drop\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, but seq is 1, drop\n", DEBUG_TCP_ARG(iph,l4),
+					tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_SYN ? "SYN" : "ACK");
 			goto ack_out;
 		}
 
@@ -1060,18 +1079,20 @@ syn_out:
 						goto ack_out;
 					}
 					if (!pt->connected) {
-						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) in, 3-way handshake complete\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, 3-way handshake complete\n", DEBUG_TCP_ARG(iph,l4));
 						pt->connected = 1;
+					} else {
+						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, dup packet\n", DEBUG_TCP_ARG(iph,l4));
 					}
 					break;
 				case NATCAP_TCPOPT_TYPE_PEER_SYN:
 					if (pt->remote_seq == ntohl(TCPH(l4)->seq) - 1) {
-						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, ok\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, keepalive, sending pong(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
 					} else if (pt->remote_seq == 0 || pt->local_seq == 0) {
 						//This means server down and reload
 						pt->remote_seq = ntohl(TCPH(l4)->seq) - 1;
 						pt->local_seq = ntohl(TCPH(l4)->ack_seq) - 1;
-						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, assume connection ok\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, assume, sending pong(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
 					} else {
 						//TODO bad ping what to do?
 						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got bad ping(ack) SYN in, pt->remote_seq=%u, drop\n", DEBUG_TCP_ARG(iph,l4), pt->remote_seq);
@@ -1153,7 +1174,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	if (nskb != NULL) {
 		iph = ip_hdr(nskb);
 		l4 = (void *)iph + iph->ihl * 4;
-		NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": new sending syn out\n", DEBUG_TCP_ARG(iph,l4));
+		NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": %s\n", DEBUG_TCP_ARG(iph,l4), TCPH(l4)->syn ? "send ping(syn) SYN out" : "send ping(ack) ACK out");
 		NF_OKFN(nskb);
 	}
 
@@ -1306,11 +1327,11 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 			if (nskb) {
 				struct iphdr *iph = ip_hdr(nskb);
 				void *l4 = (void *)iph + iph->ihl * 4;
-				NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": auto sending new syn out\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": auto send ping(syn) SYN out\n", DEBUG_TCP_ARG(iph,l4));
 				dev_queue_xmit(nskb);
 				break;
 			}
-			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": auto sending new syn failed\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": auto send ping(syn) SYN out failed\n", DEBUG_TCP_ARG(iph,l4));
 		} while (0);
 
 h_bypass:
@@ -1356,7 +1377,7 @@ h_out:
 			}
 
 			for (i = 0; i < MAX_PEER_TUPLE; i++) {
-				if (ue->tuple[i].sip != 0 && mindiff > ulongdiff(jiffies, ue->tuple[i].last_active)) {
+				if (ue->tuple[i].connected && ue->tuple[i].sip != 0 && mindiff > ulongdiff(jiffies, ue->tuple[i].last_active)) {
 					pt = &ue->tuple[i];
 					mindiff = ulongdiff(jiffies, ue->tuple[i].last_active);
 				}
