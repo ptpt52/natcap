@@ -65,6 +65,7 @@ struct peer_tuple {
 };
 
 struct user_expect {
+	spinlock_t lock;
 	unsigned long last_active;
 	__be32 ip;
 	__be16 map_port;
