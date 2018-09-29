@@ -1319,8 +1319,8 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 			struct sk_buff *nskb;
 			nskb = natcap_peer_ping_init(skb, in, ps, pmi);
 			if (nskb) {
-				iph = ip_hdr(nskb);
-				l4 = (void *)iph + iph->ihl * 4;
+				struct iphdr *iph = ip_hdr(nskb);
+				void *l4 = (void *)iph + iph->ihl * 4;
 				NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": auto sending new syn out\n", DEBUG_TCP_ARG(iph,l4));
 				dev_queue_xmit(nskb);
 				break;
