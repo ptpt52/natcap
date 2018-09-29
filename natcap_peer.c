@@ -498,6 +498,7 @@ static inline void natcap_peer_reply_pong(const struct net_device *dev, struct s
 		ntcph->seq = gen_seq_number();
 	}
 	tcp_flag_word(ntcph) = (pt && pt->connected) ? TCP_FLAG_ACK : (TCP_FLAG_ACK | TCP_FLAG_SYN);
+	ntcph->res1 = 0;
 	ntcph->doff = (sizeof(struct tcphdr) + add_len + TCPOLEN_MSS) / 4;
 	ntcph->window = __constant_htons(65535);
 	ntcph->check = 0;
@@ -624,6 +625,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	ntcph->seq = htonl(ps->port_map[pmi].local_seq);
 	ntcph->ack_seq = 0;
 	tcp_flag_word(ntcph) = TCP_FLAG_SYN;
+	ntcph->res1 = 0;
 	ntcph->doff = (sizeof(struct tcphdr) + add_len + tcpolen_mss) / 4;
 	ntcph->window = __constant_htons(65535);
 	ntcph->check = 0;

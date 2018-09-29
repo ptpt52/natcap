@@ -300,16 +300,9 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	}
 	ntcph->seq = otcph->ack_seq;
 	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4 + 1);
+	tcp_flag_word(ntcph) = TCP_FLAG_RST;
 	ntcph->res1 = 0;
 	ntcph->doff = 5;
-	ntcph->syn = 0;
-	ntcph->rst = 1;
-	ntcph->psh = 0;
-	ntcph->ack = 0;
-	ntcph->fin = 0;
-	ntcph->urg = 0;
-	ntcph->ece = 0;
-	ntcph->cwr = 0;
 	ntcph->window = __constant_htons(0);
 	ntcph->check = 0;
 	ntcph->urg_ptr = 0;
@@ -405,16 +398,9 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	}
 	ntcph->seq = otcph->ack_seq;
 	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4 + 1);
+	tcp_flag_word(ntcph) = TCP_FLAG_SYN | TCP_FLAG_ACK;
 	ntcph->res1 = 0;
 	ntcph->doff = 5;
-	ntcph->syn = 0;
-	ntcph->rst = 1;
-	ntcph->psh = 0;
-	ntcph->ack = 1;
-	ntcph->fin = 0;
-	ntcph->urg = 0;
-	ntcph->ece = 0;
-	ntcph->cwr = 0;
 	ntcph->window = __constant_htons(0);
 	ntcph->check = 0;
 	ntcph->urg_ptr = 0;
@@ -513,16 +499,9 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	memcpy(data, payload, payload_len);
 	ntcph->seq = otcph->ack_seq;
 	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4);
+	tcp_flag_word(ntcph) = TCP_FLAG_PSH | TCP_FLAG_ACK | TCP_FLAG_FIN;
 	ntcph->res1 = 0;
 	ntcph->doff = 5;
-	ntcph->syn = 0;
-	ntcph->rst = 0;
-	ntcph->psh = 1;
-	ntcph->ack = 1;
-	ntcph->fin = 1;
-	ntcph->urg = 0;
-	ntcph->ece = 0;
-	ntcph->cwr = 0;
 	ntcph->window = __constant_htons(65535);
 	ntcph->check = 0;
 	ntcph->urg_ptr = 0;
@@ -621,16 +600,9 @@ static inline int natcap_auth_tcp_to_rst(struct sk_buff *skb)
 		return -1;
 	}
 
+	tcp_flag_word(tcph) = TCP_FLAG_RST;
 	tcph->res1 = 0;
 	tcph->doff = 5;
-	tcph->syn = 0;
-	tcph->rst = 1;
-	tcph->psh = 0;
-	tcph->ack = 0;
-	tcph->fin = 0;
-	tcph->urg = 0;
-	tcph->ece = 0;
-	tcph->cwr = 0;
 	tcph->window = __constant_htons(0);
 	tcph->check = 0;
 	tcph->urg_ptr = 0;
@@ -739,16 +711,9 @@ static inline void natcap_confusion_tcp_reply_ack(const struct net_device *dev, 
 	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
 	ntcph->seq = otcph->ack_seq;
 	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4);
+	tcp_flag_word(ntcph) = TCP_FLAG_ACK;
 	ntcph->res1 = 0;
 	ntcph->doff = (sizeof(struct tcphdr) + size) / 4;
-	ntcph->syn = 0;
-	ntcph->rst = 0;
-	ntcph->psh = 0;
-	ntcph->ack = 1;
-	ntcph->fin = 0;
-	ntcph->urg = 0;
-	ntcph->ece = 0;
-	ntcph->cwr = 0;
 	ntcph->window = __constant_htons(65535);
 	ntcph->check = 0;
 	ntcph->urg_ptr = 0;

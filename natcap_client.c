@@ -552,16 +552,9 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	}
 	ntcph->seq = otcph->ack_seq;
 	ntcph->ack_seq = htonl(ntohl(otcph->seq) + 1);
+	tcp_flag_word(ntcph) = TCP_FLAG_RST | TCP_FLAG_ACK;
 	ntcph->res1 = 0;
 	ntcph->doff = 5;
-	ntcph->syn = 0;
-	ntcph->rst = 1;
-	ntcph->psh = 0;
-	ntcph->ack = 1;
-	ntcph->fin = 0;
-	ntcph->urg = 0;
-	ntcph->ece = 0;
-	ntcph->cwr = 0;
 	ntcph->window = 0;
 	ntcph->check = 0;
 	ntcph->urg_ptr = 0;
