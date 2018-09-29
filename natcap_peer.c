@@ -227,7 +227,7 @@ static inline struct sk_buff *uskb_of_this_cpu(int id)
 	return peer_user_uskbs[id];
 }
 
-#define NATCAP_PEER_USER_TIMEOUT_RELEASE 2
+#define NATCAP_PEER_EXPECT_TIMEOUT 30
 #define NATCAP_PEER_USER_TIMEOUT 180
 
 void natcap_user_timeout_touch(struct nf_conn *ct, unsigned long timeout)
@@ -870,29 +870,11 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		if (h) {
 			struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
 			if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
-				if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_FSYN) {
-					//may be re-trans pkt
-					tuple.dst.protonum = IPPROTO_TCP;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
-					h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
-#else
-					h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
-#endif
-					if (h) {
-						struct nf_conn *ct = nf_ct_tuplehash_to_ctrack(h);
-						if ((IPS_NATCAP_PEER & user->status) && NF_CT_DIRECTION(h) == IP_CT_DIR_REPLY) {
-							nf_ct_put(ct);
-							goto fsyn_out;
-						}
-						nf_ct_put(ct);
-					}
-				}
-				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got unexpected ping in, drop\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got unexpected ping in, bypass\n", DEBUG_TCP_ARG(iph,l4));
 				goto h_out;
 			}
 
 			if (tcpopt->header.type == NATCAP_TCPOPT_TYPE_PEER_FSYN) {
-fsyn_out:
 				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got fsyn in\n", DEBUG_TCP_ARG(iph,l4));
 				TCPH(l4)->syn = 1;
 				TCPH(l4)->ack = 0;
@@ -1277,10 +1259,13 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 		struct natcap_session *ns;
 
 		user = nf_ct_tuplehash_to_ctrack(h);
-		if (!test_and_clear_bit(IPS_NATCAP_PEER_BIT, &user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
+		if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
 			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": user found but status or dir mismatch\n", DEBUG_TCP_ARG(iph,l4));
 			goto h_out;
 		}
+		//XXX fire. renew this user for fast timeout
+		natcap_user_timeout_touch(user, NATCAP_PEER_EXPECT_TIMEOUT);
+
 		pmi = peer_fakeuser_expect(user)->pmi;
 
 		ns = natcap_session_in(ct);
@@ -1292,14 +1277,14 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 
 		ps = peer_server_node_in(iph->saddr, 0, 0);
 		if (ps == NULL) {
-			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": peer_server_node not found\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": peer_server_node not found, just bypass\n", DEBUG_TCP_ARG(iph,l4));
 			goto h_bypass;
 		}
 
 		spin_lock_bh(&ps->lock);
 		if (ps->port_map[pmi].sport != TCPH(l4)->dest || ps->port_map[pmi].dport != TCPH(l4)->source ||
 				ps->port_map[pmi].local_seq != peer_fakeuser_expect(user)->local_seq) {
-			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": mismatch pmi port(%u:%u) input port(%u:%u) local_seq=%u,%u, just ignore\n",
+			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": mismatch pmi port(%u:%u) input port(%u:%u) local_seq=%u,%u, just bypass\n",
 					DEBUG_TCP_ARG(iph,l4), ntohs(ps->port_map[pmi].sport), ntohs(ps->port_map[pmi].dport),
 					ntohs(TCPH(l4)->dest), ntohs(TCPH(l4)->source),
 					ps->port_map[pmi].local_seq, peer_fakeuser_expect(user)->local_seq);
@@ -1329,9 +1314,6 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 		} while (0);
 
 h_bypass:
-		//renew this user for fast timeout
-		natcap_user_timeout_touch(user, NATCAP_PEER_USER_TIMEOUT_RELEASE);
-
 		server.ip = peer_local_ip == 0 ? iph->daddr : peer_local_ip;
 		server.port = peer_local_port;
 
