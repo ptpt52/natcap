@@ -123,6 +123,9 @@ struct peer_server_node peer_server[MAX_PEER_SERVER];
 struct peer_server_node *peer_server_node_in(__be32 ip, int max_port_idx, int new)
 {
 	int i;
+	unsigned long maxdiff = 0;
+	unsigned long last_jiffies = jiffies;
+	struct peer_server_node *ps = NULL;
 
 	if (max_port_idx >= MAX_PEER_SERVER_PORT)
 		max_port_idx = MAX_PEER_SERVER_PORT - 1;
@@ -131,10 +134,17 @@ struct peer_server_node *peer_server_node_in(__be32 ip, int max_port_idx, int ne
 
 	for (i = 0; i < MAX_PEER_SERVER; i++) {
 		if (peer_server[i].ip == ip) {
-			if (new == 1 && peer_server[i].max_port_idx != max_port_idx) {
-				peer_server[i].max_port_idx = max_port_idx;
+			spin_lock_bh(&peer_server[i].lock);
+			//re-check-in-lock
+			if (peer_server[i].ip == ip) {
+				if (new == 1 && peer_server[i].max_port_idx != max_port_idx) {
+					peer_server[i].max_port_idx = max_port_idx;
+				}
+				spin_unlock_bh(&peer_server[i].lock);
+				return &peer_server[i];
 			}
-			return &peer_server[i];
+			spin_unlock_bh(&peer_server[i].lock);
+			break;
 		}
 	}
 	if (new == 0)
@@ -142,15 +152,36 @@ struct peer_server_node *peer_server_node_in(__be32 ip, int max_port_idx, int ne
 
 	for (i = 0; i < MAX_PEER_SERVER; i++) {
 		if (peer_server[i].ip == 0) {
-			peer_server[i].ip = ip;
-			peer_server[i].mss = 0;
-			peer_server[i].map_port = 0;
-			peer_server[i].max_port_idx = max_port_idx;
-			return  &peer_server[i];
+			spin_lock_bh(&peer_server[i].lock);
+			if (peer_server[i].ip == 0) {
+				ps = &peer_server[i];
+				goto init_out;
+			}
+			spin_unlock_bh(&peer_server[i].lock);
+		}
+		if (maxdiff < ulongdiff(peer_server[i].last_active, last_jiffies)) {
+			maxdiff = ulongdiff(peer_server[i].last_active, last_jiffies);
+			ps = &peer_server[i];
 		}
 	}
 
-	return NULL;
+	if (ps) {
+		spin_lock_bh(&ps->lock);
+init_out:
+		if (ps->ip != 0) {
+			NATCAP_WARN(DEBUG_FMT_PREFIX "drop the old server %pI4 map_port=%u replace new=%pI4\n",
+					DEBUG_ARG_PREFIX, &ps->ip, ps->map_port, &ip);
+		}
+		ps->ip = ip;
+		ps->mss = 0;
+		ps->map_port = 0;
+		ps->max_port_idx = max_port_idx;
+		ps->last_active = last_jiffies;
+
+		spin_unlock_bh(&ps->lock);
+	}
+
+	return ps;
 }
 
 static struct sk_buff *peer_user_uskbs[NR_CPUS];
@@ -259,6 +290,7 @@ struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport
 		memset((void *)new + newoff, 0, sizeof(struct fakeuser_expect));
 
 		peer_fakeuser_expect(user)->pmi = pmi;
+		peer_fakeuser_expect(user)->local_seq = 0;
 	}
 
 	ret = nf_conntrack_confirm(uskb);
@@ -537,6 +569,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	int add_len;
 	int pmi;
 	int tcpolen_mss = TCPOLEN_MSS;
+	__be32 local_seq;
 	struct peer_server_node *ps = NULL;
 
 	oiph = ip_hdr(oskb);
@@ -551,6 +584,9 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	if (ps == NULL) {
 		return NULL;
 	}
+
+	spin_lock_bh(&ps->lock);
+
 	if (ops == NULL && ps->mss == 0) {
 		unsigned int mss;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0)
@@ -582,12 +618,14 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
 	if (!nskb) {
 		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		spin_unlock_bh(&ps->lock);
 		return NULL;
 	}
 	if (offset <= 0) {
 		if (pskb_trim(nskb, nskb->len + offset)) {
 			NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_trim fail: len=%d, offset=%d\n", DEBUG_ARG_PREFIX, nskb->len, offset);
 			consume_skb(nskb);
+			spin_unlock_bh(&ps->lock);
 			return NULL;
 		}
 	} else {
@@ -655,11 +693,19 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 		set_byte2((void *)tcpopt + add_len + 2, ntohs(ps->mss));
 	}
 
+	local_seq = ps->port_map[pmi].local_seq;
+
+	spin_unlock_bh(&ps->lock);
+
+	//lookup or create an user
+	//no lock, 1 or more user use same pmi may happen
 	user = peer_fakeuser_expect_in(niph->saddr, niph->daddr, ntcph->source, ntcph->dest, pmi);
 	if (user == NULL) {
 		consume_skb(nskb);
 		return NULL;
 	}
+	if (peer_fakeuser_expect(user)->local_seq == 0)
+		peer_fakeuser_expect(user)->local_seq = local_seq;
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
@@ -781,10 +827,15 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer_server_node not found\n", DEBUG_TCP_ARG(iph,l4));
 					goto h_out;
 				}
+
 				pmi = peer_fakeuser_expect(user)->pmi;
-				if (ps->port_map[pmi].sport != TCPH(l4)->dest || ps->port_map[pmi].dport != TCPH(l4)->source) {
+
+				spin_lock_bh(&ps->lock);
+				if (ps->port_map[pmi].sport != TCPH(l4)->dest || ps->port_map[pmi].dport != TCPH(l4)->source ||
+						ps->port_map[pmi].local_seq != ntohl(TCPH(l4)->ack_seq) - 1) {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer_server_node port(%u:%u) mismatch\n",
 							DEBUG_TCP_ARG(iph,l4), ntohs(ps->port_map[pmi].sport), ntohs(ps->port_map[pmi].dport));
+					spin_unlock_bh(&ps->lock);
 					goto h_out;
 				}
 
@@ -795,19 +846,23 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					ps->map_port = map_port;
 				}
 
-				ps->port_map[pmi].last_active = jiffies;
+				ps->last_active = ps->port_map[pmi].last_active = jiffies;
 				if (!TCPH(l4)->syn) {
+					spin_unlock_bh(&ps->lock);
 					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ack, pong in\n", DEBUG_TCP_ARG(iph,l4));
+
 				} else {
 					struct sk_buff *nskb;
-
 					ps->port_map[pmi].connected = 1;
 					ps->port_map[pmi].remote_seq = ntohl(TCPH(l4)->seq);
+
+					spin_unlock_bh(&ps->lock);
+
 					nskb = natcap_peer_ping_init(skb, in, ps, pmi);
 					if (nskb) {
 						iph = ip_hdr(nskb);
 						l4 = (void *)iph + iph->ihl * 4;
-						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": connected, sending ack out\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got synack, sending ack back\n", DEBUG_TCP_ARG(iph,l4));
 						dev_queue_xmit(nskb);
 					} else {
 						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": sending ack failed\n", DEBUG_TCP_ARG(iph,l4));
@@ -1084,34 +1139,55 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": user found but status or dir mismatch\n", DEBUG_TCP_ARG(iph,l4));
 			goto h_out;
 		}
-
-		ps = peer_server_node_in(iph->saddr, 0, 0);
-		if (ps == NULL) {
-			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": peer_server_node not found\n", DEBUG_TCP_ARG(iph,l4));
-			goto h_out;
-		}
 		pmi = peer_fakeuser_expect(user)->pmi;
-		if (ps->port_map[pmi].sport != TCPH(l4)->dest || ps->port_map[pmi].dport != TCPH(l4)->source) {
-			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": peer_server_node port(%u:%u) mismatch\n",
-					DEBUG_TCP_ARG(iph,l4), ntohs(ps->port_map[pmi].sport), ntohs(ps->port_map[pmi].dport));
-			goto h_out;
-		}
 
 		ns = natcap_session_in(ct);
 		if (!ns) {
 			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
 			goto h_out;
 		}
+		ns->local_seq = peer_fakeuser_expect(user)->local_seq; //can't be 0
 
-		ns->local_seq = ps->port_map[pmi].local_seq;
+		ps = peer_server_node_in(iph->saddr, 0, 0);
+		if (ps == NULL) {
+			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": peer_server_node not found\n", DEBUG_TCP_ARG(iph,l4));
+			goto h_bypass;
+		}
 
-		natcap_user_timeout_touch(user, NATCAP_PEER_USER_TIMEOUT_RELEASE);
+		spin_lock_bh(&ps->lock);
+		if (ps->port_map[pmi].sport != TCPH(l4)->dest || ps->port_map[pmi].dport != TCPH(l4)->source ||
+				ps->port_map[pmi].local_seq != peer_fakeuser_expect(user)->local_seq) {
+			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": mismatch pmi port(%u:%u) input port(%u:%u) local_seq=%u,%u, just ignore\n",
+					DEBUG_TCP_ARG(iph,l4), ntohs(ps->port_map[pmi].sport), ntohs(ps->port_map[pmi].dport),
+					ntohs(TCPH(l4)->dest), ntohs(TCPH(l4)->source),
+					ps->port_map[pmi].local_seq, peer_fakeuser_expect(user)->local_seq);
+			goto h_bypass;
+		}
 		//reset this session
 		ps->port_map[pmi].sport = 0;
 		ps->port_map[pmi].dport = 0;
 		ps->port_map[pmi].local_seq = 0;
 		ps->port_map[pmi].remote_seq = 0;
 		ps->port_map[pmi].connected = 0;
+		spin_unlock_bh(&ps->lock);
+
+		//create a new session
+		do {
+			struct sk_buff *nskb;
+			nskb = natcap_peer_ping_init(skb, in, ps, pmi);
+			if (nskb) {
+				iph = ip_hdr(nskb);
+				l4 = (void *)iph + iph->ihl * 4;
+				NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": auto sending new syn out\n", DEBUG_TCP_ARG(iph,l4));
+				dev_queue_xmit(nskb);
+				break;
+			}
+			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": auto sending new syn failed\n", DEBUG_TCP_ARG(iph,l4));
+		} while (0);
+
+h_bypass:
+		//renew this user for fast timeout
+		natcap_user_timeout_touch(user, NATCAP_PEER_USER_TIMEOUT_RELEASE);
 
 		server.ip = peer_local_ip == 0 ? iph->daddr : peer_local_ip;
 		server.port = peer_local_port;
@@ -1129,21 +1205,6 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 			NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": found fakeuser expect, do DNAT to " TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		}
 
-		//create a new session
-		do {
-			struct sk_buff *nskb;
-
-			nskb = natcap_peer_ping_init(skb, in, ps, pmi);
-			if (nskb) {
-				iph = ip_hdr(nskb);
-				l4 = (void *)iph + iph->ihl * 4;
-				NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": sending new syn out\n", DEBUG_TCP_ARG(iph,l4));
-
-				dev_queue_xmit(nskb);
-				break;
-			}
-			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": sending new syn failed\n", DEBUG_TCP_ARG(iph,l4));
-		} while (0);
 h_out:
 		nf_ct_put(user);
 		return NF_ACCEPT;
@@ -1648,6 +1709,9 @@ int natcap_peer_init(void)
 
 	need_conntrack();
 	memset(peer_server, 0, sizeof(peer_server));
+	for (i = 0; i < MAX_PEER_SERVER; i++) {
+		spin_lock_init(&peer_server[i].lock);
+	}
 
 	for (i = 0; i < NR_CPUS; i++) {
 		peer_user_uskbs[i] = NULL;
