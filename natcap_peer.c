@@ -700,7 +700,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	//lookup or create an user
 	//no lock, 1 or more user use same pmi may happen
 	user = peer_fakeuser_expect_in(niph->saddr, niph->daddr, ntcph->source, ntcph->dest, pmi);
-	if (user == NULL) {
+	if (user == NULL || !(IPS_NATCAP_PEER & user->status)) {
 		consume_skb(nskb);
 		return NULL;
 	}
@@ -814,6 +814,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
 
 			if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got unexpected ping in, drop\n", DEBUG_TCP_ARG(iph,l4));
 				goto h_out;
 			}
 
@@ -868,14 +869,11 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": sending ack failed\n", DEBUG_TCP_ARG(iph,l4));
 					}
 				}
-
-				nf_ct_put(user);
-				consume_skb(skb);
-				return NF_STOLEN;
 			}
 h_out:
+			consume_skb(skb);
 			nf_ct_put(user);
-			return NF_ACCEPT;
+			return NF_STOLEN;
 		} else {
 			//XXX no expect found bypass
 		}
@@ -1135,7 +1133,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 		struct natcap_session *ns;
 
 		user = nf_ct_tuplehash_to_ctrack(h);
-		if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
+		if (!test_and_clear_bit(IPS_NATCAP_PEER_BIT, &user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
 			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": user found but status or dir mismatch\n", DEBUG_TCP_ARG(iph,l4));
 			goto h_out;
 		}
@@ -1161,6 +1159,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 					DEBUG_TCP_ARG(iph,l4), ntohs(ps->port_map[pmi].sport), ntohs(ps->port_map[pmi].dport),
 					ntohs(TCPH(l4)->dest), ntohs(TCPH(l4)->source),
 					ps->port_map[pmi].local_seq, peer_fakeuser_expect(user)->local_seq);
+			spin_unlock_bh(&ps->lock);
 			goto h_bypass;
 		}
 		//reset this session
