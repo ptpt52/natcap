@@ -1063,9 +1063,11 @@ syn_out:
 				case NATCAP_TCPOPT_TYPE_PEER_SYN:
 					if (pt->remote_seq == ntohl(TCPH(l4)->seq) - 1) {
 						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, ok\n", DEBUG_TCP_ARG(iph,l4));
-					} else if (pt->remote_seq == 0) {
+					} else if (pt->remote_seq == 0 || pt->local_seq == 0) {
+						//This means server down and reload
 						pt->remote_seq = ntohl(TCPH(l4)->seq) - 1;
-						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, assume ok\n", DEBUG_TCP_ARG(iph,l4));
+						pt->local_seq = ntohl(TCPH(l4)->ack_seq) - 1;
+						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, assume connection ok\n", DEBUG_TCP_ARG(iph,l4));
 					} else {
 						//TODO bad ping what to do?
 						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got bad ping(ack) SYN in, pt->remote_seq=%u, drop\n", DEBUG_TCP_ARG(iph,l4), pt->remote_seq);
