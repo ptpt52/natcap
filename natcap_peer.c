@@ -144,8 +144,8 @@ static __be16 alloc_peer_port(struct nf_conn *ct, const unsigned char *mac)
 	return 0;
 }
 
-//__be32 peer_local_ip = __constant_htonl(0);
-__be32 peer_local_ip = __constant_htonl((192<<24)|(168<<16)|(16<<8)|(1<<0));
+__be32 peer_local_ip = __constant_htonl(0);
+//__be32 peer_local_ip = __constant_htonl((192<<24)|(168<<16)|(16<<8)|(1<<0));
 __be16 peer_local_port = __constant_htons(443);
 
 #define MAX_PEER_SERVER 8
@@ -227,7 +227,7 @@ static inline struct sk_buff *uskb_of_this_cpu(int id)
 	return peer_user_uskbs[id];
 }
 
-#define NATCAP_PEER_EXPECT_TIMEOUT 30
+#define NATCAP_PEER_EXPECT_TIMEOUT 5
 #define NATCAP_PEER_USER_TIMEOUT 180
 
 void natcap_user_timeout_touch(struct nf_conn *ct, unsigned long timeout)
@@ -880,6 +880,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				TCPH(l4)->ack = 0;
 				TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
 				TCPH(l4)->ack_seq = 0;
+				skb->ip_summed = CHECKSUM_UNNECESSARY;
 				skb_rcsum_tcpudp(skb);
 				nf_ct_put(user);
 				return NF_ACCEPT;
@@ -1025,9 +1026,10 @@ syn_out:
 					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack->synack) FACK in, pass up\n", DEBUG_TCP_ARG(iph,l4));
 					TCPH(l4)->syn = 1;
 					TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
+					skb->ip_summed = CHECKSUM_UNNECESSARY;
 					skb_rcsum_tcpudp(skb);
 				}
-
+#if 1 //XXX for DEBUG
 				do {
 					int ret;
 					int dir;
@@ -1043,7 +1045,7 @@ syn_out:
 								!dir, ct->proto.tcp.seen[!dir].td_end, ct->proto.tcp.seen[!dir].td_maxend, ct->proto.tcp.seen[!dir].td_maxwin);
 					}
 				} while (0);
-
+#endif
 				nf_ct_put(user);
 			}
 			return NF_ACCEPT;
@@ -1284,7 +1286,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": user found but status or dir mismatch\n", DEBUG_TCP_ARG(iph,l4));
 			goto h_out;
 		}
-		//XXX fire. renew this user for fast timeout
+		//XXX fire expect. renew this user for fast timeout
 		natcap_user_timeout_touch(user, NATCAP_PEER_EXPECT_TIMEOUT);
 
 		pmi = peer_fakeuser_expect(user)->pmi;
@@ -1295,6 +1297,9 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 			goto h_out;
 		}
 		ns->local_seq = peer_fakeuser_expect(user)->local_seq; //can't be 0
+		if (!nfct_seqadj(ct) && !nfct_seqadj_ext_add(ct)) {
+			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": seqadj_ext add failed\n", DEBUG_TCP_ARG(iph,l4));
+		}
 
 		ps = peer_server_node_in(iph->saddr, 0, 0);
 		if (ps == NULL) {
@@ -1410,6 +1415,9 @@ h_out:
 
 			ns->tcp_seq_offset = pt->local_seq - ntohl(TCPH(l4)->seq);
 			ns->remote_seq = pt->remote_seq;
+			if (!nfct_seqadj(ct) && !nfct_seqadj_ext_add(ct)) {
+				NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": seqadj_ext add failed\n", DEBUG_TCP_ARG(iph,l4));
+			}
 
 			//clear this pt
 			pt->sip = 0;
@@ -1651,7 +1659,6 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 	struct iphdr *iph;
 	void *l4;
 	struct natcap_session *ns;
-	__be32 newseq;
 	struct tuple server;
 
 	if (in)
@@ -1682,20 +1689,10 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 	if (dir != IP_CT_DIR_ORIGINAL) {
 		if (ns->local_seq == 0) {
 			//on server side
-			tcp_in_window_recheck(ct, &ct->proto.tcp, dir, skb, iph->ihl * 4, TCPH(l4), 0, 0 - ns->tcp_seq_offset);
-			newseq = htonl(ntohl(TCPH(l4)->ack_seq) - ns->tcp_seq_offset);
-			inet_proto_csum_replace4(&TCPH(l4)->check, skb, TCPH(l4)->ack_seq, newseq, true);
-			TCPH(l4)->ack_seq = newseq;
 			return NF_ACCEPT;
 		}
 
-		if (!(TCPH(l4)->syn && TCPH(l4)->ack)) {
-			//not synack
-			tcp_in_window_recheck(ct, &ct->proto.tcp, dir, skb, iph->ihl * 4, TCPH(l4), ns->tcp_seq_offset, 0);
-			newseq = htonl(ntohl(TCPH(l4)->seq) + ns->tcp_seq_offset);
-			inet_proto_csum_replace4(&TCPH(l4)->check, skb, TCPH(l4)->seq, newseq, true);
-			TCPH(l4)->seq = newseq;
-		} else {
+		if ((TCPH(l4)->syn && TCPH(l4)->ack)) {
 			//encode synack
 			struct natcap_TCPOPT *tcpopt;
 			int offlen;
@@ -1725,16 +1722,20 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			tcpopt->header.opsize = add_len;
 			tcpopt->header.encryption = 0;
 
-			ns->tcp_seq_offset = ns->local_seq - ntohl(TCPH(l4)->seq);
+			if (ns->tcp_seq_offset == 0) {
+				ns->tcp_seq_offset = ns->local_seq - ntohl(TCPH(l4)->seq);
+			}
+			if (nf_ct_seq_offset(ct, dir, ntohl(TCPH(l4)->seq + 1)) != ns->tcp_seq_offset) {
+				nf_ct_seqadj_init(ct, ctinfo, ns->tcp_seq_offset);
+			}
 
-			tcp_in_window_recheck(ct, &ct->proto.tcp, dir, skb, iph->ihl * 4, TCPH(l4), ns->tcp_seq_offset, 0);
-
-			TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) + ns->tcp_seq_offset + 1);
+			TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) + 1);
 			TCPH(l4)->syn = 0;
 			TCPH(l4)->doff = (TCPH(l4)->doff * 4 + add_len) / 4;
 			iph->tot_len = htons(ntohs(iph->tot_len) + add_len);
 			skb->len += add_len;
 			skb->tail += add_len;
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
 		}
 		return NF_ACCEPT;
@@ -1742,23 +1743,10 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 	} else {
 		if (ns->local_seq != 0) {
 			//on client
-			if (!TCPH(l4)->syn || TCPH(l4)->ack) {
-				//not syn
-				tcp_in_window_recheck(ct, &ct->proto.tcp, dir, skb, iph->ihl * 4, TCPH(l4), 0, 0 - ns->tcp_seq_offset);
-				newseq = htonl(ntohl(TCPH(l4)->ack_seq) - ns->tcp_seq_offset);
-				inet_proto_csum_replace4(&TCPH(l4)->check, skb, TCPH(l4)->ack_seq, newseq, true);
-				TCPH(l4)->ack_seq = newseq;
-			}
 			return NF_ACCEPT;
 		}
 
-		if (!TCPH(l4)->syn || TCPH(l4)->ack) {
-			//not syn
-			tcp_in_window_recheck(ct, &ct->proto.tcp, dir, skb, iph->ihl * 4, TCPH(l4), ns->tcp_seq_offset, 0);
-			newseq = htonl(ntohl(TCPH(l4)->seq) + ns->tcp_seq_offset);
-			inet_proto_csum_replace4(&TCPH(l4)->check, skb, TCPH(l4)->seq, newseq, true);
-			TCPH(l4)->seq = newseq;
-		} else {
+		if (TCPH(l4)->syn && !TCPH(l4)->ack) {
 			//encode syn
 			struct natcap_TCPOPT *tcpopt;
 			int offlen;
@@ -1785,9 +1773,11 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			tcpopt->header.opsize = add_len;
 			tcpopt->header.encryption = 0;
 
-			tcp_in_window_recheck(ct, &ct->proto.tcp, dir, skb, iph->ihl * 4, TCPH(l4), ns->tcp_seq_offset, 0);
+			if (nf_ct_seq_offset(ct, dir, ntohl(TCPH(l4)->seq) + 1) != ns->tcp_seq_offset) {
+				nf_ct_seqadj_init(ct, ctinfo, ns->tcp_seq_offset);
+			}
 
-			TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) + ns->tcp_seq_offset + 1);
+			TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) + 1);
 			TCPH(l4)->ack_seq = htonl(ns->remote_seq + 1);
 			TCPH(l4)->syn = 0;
 			TCPH(l4)->ack = 1;
@@ -1795,10 +1785,12 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			iph->tot_len = htons(ntohs(iph->tot_len) + add_len);
 			skb->len += add_len;
 			skb->tail += add_len;
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
 		}
 	} // end dir IP_CT_DIR_ORIGINAL
 
+	//for server side
 	if (nf_ct_is_confirmed(ct)) {
 		return NF_ACCEPT;
 	}
