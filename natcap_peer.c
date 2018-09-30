@@ -1029,23 +1029,6 @@ syn_out:
 					skb->ip_summed = CHECKSUM_UNNECESSARY;
 					skb_rcsum_tcpudp(skb);
 				}
-#if 1 //XXX for DEBUG
-				do {
-					int ret;
-					int dir;
-					enum ip_conntrack_info ctinfo;
-					struct nf_conn *ct;
-					ret = nf_conntrack_in(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
-					ct = nf_ct_get(skb, &ctinfo);
-					dir = CTINFO2DIR(ctinfo);
-					if (!ct) {
-						ct = user;
-						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": S%u[end=%u maxend=%u maxwin=%u] R%u[end=%u maxend=%u maxwin=%u]\n", DEBUG_TCP_ARG(iph,l4),
-								dir, ct->proto.tcp.seen[dir].td_end, ct->proto.tcp.seen[dir].td_maxend, ct->proto.tcp.seen[dir].td_maxwin,
-								!dir, ct->proto.tcp.seen[!dir].td_end, ct->proto.tcp.seen[!dir].td_maxend, ct->proto.tcp.seen[!dir].td_maxwin);
-					}
-				} while (0);
-#endif
 				nf_ct_put(user);
 			}
 			return NF_ACCEPT;
