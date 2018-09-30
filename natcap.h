@@ -26,6 +26,9 @@
 
 #ifdef __KERNEL__
 #include <linux/ctype.h>
+#include <linux/types.h>
+#include <linux/socket.h>
+#include <asm/byteorder.h>
 #include <asm/types.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_core.h>
@@ -36,15 +39,30 @@
 #define NATCAP_CLIENT_MODE (1<<0)
 #define NATCAP_NEED_ENC    (1<<1)
 
+/* subtype: 7bits 0~127 */
+#define SUBTYPE_NATCAP          0
+#define SUBTYPE_PEER_SYN        64
+#define SUBTYPE_PEER_SYNACK     65
+#define SUBTYPE_PEER_ACK        66
+#define SUBTYPE_PEER_FSYN       67
+#define SUBTYPE_PEER_FACK       68
+
 struct natcap_TCPOPT_header {
 	u8 opcode;
 #define TCPOPT_PEER 0x9A
 #define TCPOPT_NATCAP 0x99
 	u8 opsize;
 	u8 type;
-	u8 encryption;
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+	u8 encryption:1,
+	   subtype:7;
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	u8 subtype:7,
+	   encryption:1;
+#else
+#error	"Adjust your <asm/byteorder.h> defines"
+#endif
 };
-
 struct natcap_TCPOPT_data {
 	u32 u_hash;
 	u8 mac_addr[ETH_ALEN];
@@ -63,12 +81,15 @@ struct natcap_TCPOPT_user {
 };
 
 struct natcap_TCPOPT_peer {
-	u32 ip;
-	u8 mac_addr[ETH_ALEN];
-};
-
-struct natcap_TCPOPT_peer_synack {
-	u16 port;
+	u16 icmp_id;
+	u16 icmp_sequence;
+	union {
+		struct {
+			u32 ip;
+			u8 mac_addr[ETH_ALEN];
+		} user;
+		u16 map_port;
+	};
 };
 
 #define NATCAP_TCPOPT_SYN (1<<7)
@@ -96,16 +117,9 @@ struct natcap_TCPOPT {
 			struct natcap_TCPOPT_user data;
 		} user;
 		struct {
-#define NATCAP_TCPOPT_TYPE_PEER_SYN 6
-#define NATCAP_TCPOPT_TYPE_PEER_ACK 8
-#define NATCAP_TCPOPT_TYPE_PEER_FSYN 9
-#define NATCAP_TCPOPT_TYPE_PEER_FACK 10
+#define NATCAP_TCPOPT_TYPE_PEER 6
 			struct natcap_TCPOPT_peer data;
 		} peer;
-		struct {
-#define NATCAP_TCPOPT_TYPE_PEER_SYNACK 7
-			struct natcap_TCPOPT_peer_synack data;
-		} peer_synack;
 	};
 #define NATCAP_TCPOPT_TYPE_CONFUSION 4
 	char pad[4];
@@ -144,21 +158,21 @@ struct natcap_session {
 	unsigned short status;
 	union {
 		__be16 new_source;
-		__be16 peer_sport;
+		__be16 peer_sport; //for peer
 	};
 	struct tuple tup;
-	int tcp_seq_offset;
+	int tcp_seq_offset; //for natcap and peer
 	union {
 		int tcp_ack_offset;
-		unsigned int local_seq;
+		unsigned int local_seq; //for peer
 	};
 	union {
 		unsigned int foreign_seq;
-		unsigned int remote_seq;
+		unsigned int remote_seq; //for peer
 	};
 	union {
 		unsigned int current_seq;
-		__be32 peer_sip;
+		__be32 peer_sip; //for peer
 	};
 };
 
