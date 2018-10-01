@@ -124,6 +124,7 @@ struct natcap_TCPOPT {
 		} peer;
 	};
 #define NATCAP_TCPOPT_TYPE_CONFUSION 4
+	char extra_pad[4]; /* sometimes on encode/decode need 4bytes extra space */
 #define NATCAP_TCPOPT_TYPE_ADD 5
 };
 
