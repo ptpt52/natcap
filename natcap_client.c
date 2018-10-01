@@ -490,8 +490,8 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	struct iphdr *niph, *oiph;
 	struct tcphdr *otcph, *ntcph;
 	struct natcap_session *ns;
-	int offset, header_len;
-	int add_len = 0;
+	int offset, add_len;
+	int header_len = 0;
 	u8 protocol = IPPROTO_TCP;
 
 	oeth = (struct ethhdr *)skb_mac_header(oskb);
@@ -500,27 +500,20 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 
 	ns = natcap_session_get(ct);
 	if (ns && (NS_NATCAP_TCPUDPENC & ns->status)) {
-		add_len = 8;
+		header_len = 8;
 		protocol = IPPROTO_UDP;
 	}
 
-	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + add_len - oskb->len;
-	header_len = offset < 0 ? 0 : offset;
-	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len - (skb_headlen(oskb) + skb_tailroom(oskb));
+	add_len = offset < 0 ? 0 : offset;
+	offset += skb_tailroom(oskb);
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
 		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
 		return -1;
 	}
-	if (offset <= 0) {
-		if (pskb_trim(nskb, nskb->len + offset)) {
-			NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_trim fail: len=%d, offset=%d\n", DEBUG_ARG_PREFIX, nskb->len, offset);
-			consume_skb(nskb);
-			return -1;
-		}
-	} else {
-		nskb->len += offset;
-		nskb->tail += offset;
-	}
+	nskb->tail += offset;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len;
 
 	neth = eth_hdr(nskb);
 	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
@@ -1576,14 +1569,15 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 		if (ns->tcp_seq_offset && TCPH(l4)->ack && !(NS_NATCAP_TCPUDPENC & ns->status) && (IPS_NATCAP_ENC & ct->status)) {
 			if ((IPS_SEEN_REPLY & ct->status) && !(NS_NATCAP_CONFUSION & ns->status) && !short_test_and_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->status)) {
-				//TODO send confuse pkt
+				//TODO use seqadj
 				struct natcap_TCPOPT *tcpopt;
-				int offset, header_len;
+				int offset, add_len;
 				int size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
 
-				offset = iph->ihl * 4 + sizeof(struct tcphdr) + size + ns->tcp_seq_offset - skb->len;
-				header_len = offset < 0 ? 0 : offset;
-				skb_htp = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
+				offset = iph->ihl * 4 + sizeof(struct tcphdr) + size + ns->tcp_seq_offset - (skb_headlen(skb) + skb_tailroom(skb));
+				add_len = offset < 0 ? 0 : offset;
+				offset += skb_tailroom(skb);
+				skb_htp = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 				if (!skb_htp) {
 					NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
 					if (skb2) {
@@ -1591,19 +1585,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 					}
 					return NF_DROP;
 				}
-				if (offset <= 0) {
-					if (pskb_trim(skb_htp, skb_htp->len + offset)) {
-						NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_trim fail: len=%d, offset=%d\n", DEBUG_ARG_PREFIX, skb_htp->len, offset);
-						if (skb2) {
-							consume_skb(skb2);
-						}
-						consume_skb(skb_htp);
-						return NF_DROP;
-					}
-				} else {
-					skb_htp->len += offset;
-					skb_htp->tail += offset;
-				}
+				skb_htp->tail += offset;
+				skb_htp->len = iph->ihl * 4 + sizeof(struct tcphdr) + size + ns->tcp_seq_offset;
 
 				iph = ip_hdr(skb_htp);
 				l4 = (void *)iph + iph->ihl * 4;
@@ -1751,25 +1734,18 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		if (!(IPS_NATCAP_CFM & ct->status)) {
 			if (skb->len > 1280) {
 				struct sk_buff *nskb;
-				int offset, header_len;
+				int offset, add_len;
 
-				offset = sizeof(struct iphdr) + sizeof(struct udphdr) + 12 - skb->len;
-				header_len = offset < 0 ? 0 : offset;
-				nskb = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
+				offset = iph->ihl * 4 + sizeof(struct udphdr) + 12 - (skb_headlen(skb) + skb_tailroom(skb));
+				add_len = offset < 0 ? 0 : offset;
+				offset += skb_tailroom(skb);
+				nskb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 				if (!nskb) {
 					NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
 					return NF_ACCEPT;
 				}
-				if (offset <= 0) {
-					if (pskb_trim(nskb, nskb->len + offset)) {
-						NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_trim fail: len=%d, offset=%d\n", DEBUG_ARG_PREFIX, nskb->len, offset);
-						consume_skb(nskb);
-						return NF_DROP;
-					}
-				} else {
-					nskb->len += offset;
-					nskb->tail += offset;
-				}
+				nskb->tail += offset;
+				nskb->len = sizeof(struct iphdr) + sizeof(struct udphdr) + 12;
 
 				iph = ip_hdr(nskb);
 				l4 = (void *)iph + iph->ihl * 4;
@@ -2221,14 +2197,15 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 		if (master_ns->tcp_seq_offset && TCPH(l4)->ack && !(NS_NATCAP_TCPUDPENC & master_ns->status) && (IPS_NATCAP_ENC & ct->status)) {
 			if ((IPS_SEEN_REPLY & master->status) && !(NS_NATCAP_CONFUSION & master_ns->status) && !short_test_and_set_bit(NS_NATCAP_CONFUSION_BIT, &master_ns->status)) {
-				//TODO send confuse pkt
+				//TODO use seqadj
 				struct natcap_TCPOPT *tcpopt;
-				int offset, header_len;
+				int offset, add_len;
 				int size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
 
-				offset = iph->ihl * 4 + sizeof(struct tcphdr) + size + ns->tcp_seq_offset - skb->len;
-				header_len = offset < 0 ? 0 : offset;
-				skb_htp = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
+				offset = iph->ihl * 4 + sizeof(struct tcphdr) + size + ns->tcp_seq_offset - (skb_headlen(skb) + skb_tailroom(skb));
+				add_len = offset < 0 ? 0 : offset;
+				offset += skb_tailroom(skb);
+				skb_htp = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 				if (!skb_htp) {
 					NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
 					if (skb2) {
@@ -2236,19 +2213,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 					}
 					return NF_DROP;
 				}
-				if (offset <= 0) {
-					if (pskb_trim(skb_htp, skb_htp->len + offset)) {
-						NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_trim fail: len=%d, offset=%d\n", DEBUG_ARG_PREFIX, skb_htp->len, offset);
-						if (skb2) {
-							consume_skb(skb2);
-						}
-						consume_skb(skb_htp);
-						return NF_DROP;
-					}
-				} else {
-					skb_htp->len += offset;
-					skb_htp->tail += offset;
-				}
+				skb_htp->tail += offset;
+				skb_htp->len += iph->ihl * 4 + sizeof(struct tcphdr) + size + ns->tcp_seq_offset;;
 
 				iph = ip_hdr(skb_htp);
 				l4 = (void *)iph + iph->ihl * 4;
@@ -2379,27 +2345,19 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		if (!(IPS_NATCAP_CFM & master->status)) {
 			if (skb->len > 1280) {
 				struct sk_buff *nskb;
-				int offset, header_len;
+				int offset, add_len;
 
-				offset = sizeof(struct iphdr) + sizeof(struct udphdr) + 12 - skb->len;
-				header_len = offset < 0 ? 0 : offset;
-				nskb = skb_copy_expand(skb, skb_headroom(skb), header_len, GFP_ATOMIC);
+				offset = iph->ihl * 4 + sizeof(struct udphdr) + 12 - (skb_headlen(skb) + skb_tailroom(skb));
+				add_len = offset < 0 ? 0 : offset;
+				offset += skb_tailroom(skb);
+				nskb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 				if (!nskb) {
 					NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
 					consume_skb(skb);
 					return NF_ACCEPT;
 				}
-				if (offset <= 0) {
-					if (pskb_trim(nskb, nskb->len + offset)) {
-						NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_trim fail: len=%d, offset=%d\n", DEBUG_ARG_PREFIX, nskb->len, offset);
-						consume_skb(nskb);
-						consume_skb(skb);
-						return NF_ACCEPT;
-					}
-				} else {
-					nskb->len += offset;
-					nskb->tail += offset;
-				}
+				nskb->tail += offset;
+				nskb->len = iph->ihl * 4 + sizeof(struct udphdr) + 12;
 
 				iph = ip_hdr(nskb);
 				l4 = (void *)iph + iph->ihl * 4;
