@@ -909,13 +909,6 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				int pmi;
 				__be16 map_port;
 
-				do {
-					__be16 id = get_byte2((const void *)&tcpopt->peer.data.icmp_id);
-					__be16 sequence = get_byte2((const void *)&tcpopt->peer.data.icmp_sequence);
-					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(%s) SYNACK in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4),
-							TCPH(l4)->syn ? "synack" : "ack", ntohs(id), ntohs(sequence));
-				} while (0);
-
 				ps = peer_server_node_in(iph->saddr, 0, 0);
 				if (ps == NULL) {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer_server_node not found\n", DEBUG_TCP_ARG(iph,l4));
@@ -953,14 +946,39 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 					nskb = natcap_peer_ping_init(skb, in, ps, pmi);
 					if (nskb) {
-						iph = ip_hdr(nskb);
-						l4 = (void *)iph + iph->ihl * 4;
+						struct iphdr *iph = ip_hdr(nskb);
+						void *l4 = (void *)iph + iph->ihl * 4;
 						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(synack) SYNACK, sending ping(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
 						dev_queue_xmit(nskb);
 					} else {
 						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": got pong(synack) SYNACK, sending ping(ack) ACK out failed\n", DEBUG_TCP_ARG(iph,l4));
 					}
 				}
+
+				nf_ct_put(user);
+
+				do {
+					__be16 id = get_byte2((const void *)&tcpopt->peer.data.icmp_id);
+					__be16 sequence = get_byte2((const void *)&tcpopt->peer.data.icmp_sequence);
+					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(%s) SYNACK in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4),
+							TCPH(l4)->syn ? "synack" : "ack", ntohs(id), ntohs(sequence));
+
+					iph->protocol = IPPROTO_ICMP;
+					iph->check = 0;
+					iph->tot_len =
+						skb->len = ntohs(iph->ihl * 4 + sizeof(struct icmphdr));
+
+					ICMPH(l4)->type = ICMP_ECHOREPLY;
+					ICMPH(l4)->type = 0;
+					ICMPH(l4)->un.echo.id = id;
+					ICMPH(l4)->un.echo.sequence = sequence;
+					ICMPH(l4)->checksum = 0;
+
+					ip_fast_csum(iph, iph->ihl);
+					ICMPH(l4)->checksum = csum_fold(skb_checksum(skb, iph->ihl * 4, skb->len - iph->ihl * 4, 0));
+					skb->ip_summed = CHECKSUM_UNNECESSARY;
+				} while (0);
+				return NF_ACCEPT;
 			}
 
 h_out:
