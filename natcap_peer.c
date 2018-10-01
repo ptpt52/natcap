@@ -977,6 +977,8 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					ip_fast_csum(iph, iph->ihl);
 					ICMPH(l4)->checksum = csum_fold(skb_checksum(skb, iph->ihl * 4, skb->len - iph->ihl * 4, 0));
 					skb->ip_summed = CHECKSUM_UNNECESSARY;
+					//set xmark to pass up
+					xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 				} while (0);
 				return NF_ACCEPT;
 			}
