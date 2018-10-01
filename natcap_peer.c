@@ -56,6 +56,8 @@ static inline __be32 gen_seq_number(void)
 	return s;
 }
 
+#define ICMP_PAYLOAD_LIMIT 1024
+
 #define MAX_PEER_PORT_MAP 65536
 static struct nf_conn **peer_port_map;
 DEFINE_SPINLOCK(peer_port_map_lock);
@@ -150,25 +152,25 @@ __be16 peer_local_port = __constant_htons(443);
 
 #define MAX_PEER_SERVER 8
 struct peer_server_node peer_server[MAX_PEER_SERVER];
-struct peer_server_node *peer_server_node_in(__be32 ip, int max_port_idx, int new)
+struct peer_server_node *peer_server_node_in(__be32 ip, int conn, int new)
 {
 	int i;
 	unsigned long maxdiff = 0;
 	unsigned long last_jiffies = jiffies;
 	struct peer_server_node *ps = NULL;
 
-	if (max_port_idx >= MAX_PEER_SERVER_PORT)
-		max_port_idx = MAX_PEER_SERVER_PORT - 1;
-	if (max_port_idx < 0)
-		max_port_idx = 0;
+	if (conn >= MAX_PEER_CONN)
+		conn = MAX_PEER_CONN;
+	if (conn <= 0)
+		conn = 1;
 
 	for (i = 0; i < MAX_PEER_SERVER; i++) {
 		if (peer_server[i].ip == ip) {
 			spin_lock_bh(&peer_server[i].lock);
 			//re-check-in-lock
 			if (peer_server[i].ip == ip) {
-				if (new == 1 && peer_server[i].max_port_idx != max_port_idx) {
-					peer_server[i].max_port_idx = max_port_idx;
+				if (new == 1 && peer_server[i].conn != conn) {
+					peer_server[i].conn = conn;
 				}
 				spin_unlock_bh(&peer_server[i].lock);
 				return &peer_server[i];
@@ -205,7 +207,7 @@ init_out:
 		ps->ip = ip;
 		ps->mss = 0;
 		ps->map_port = 0;
-		ps->max_port_idx = max_port_idx;
+		ps->conn = conn;
 		ps->last_active = last_jiffies;
 
 		spin_unlock_bh(&ps->lock);
@@ -526,6 +528,10 @@ static inline void natcap_peer_reply_pong(const struct net_device *dev, struct s
 	oeth = (struct ethhdr *)skb_mac_header(oskb);
 	oiph = ip_hdr(oskb);
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
+	tcpopt = (struct natcap_TCPOPT *)((void *)otcph + sizeof(struct tcphdr));
+	if (tcpopt->peer.data.icmp_payload_len != 0) {
+		add_len += 16;
+	}
 
 	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + add_len + TCPOLEN_MSS - oskb->len;
 	header_len = offset < 0 ? 0 : offset;
@@ -645,7 +651,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 		return NULL;
 	}
 
-	ps = (ops != NULL) ? ops : peer_server_node_in(oiph->daddr, ntohs(oiph->tot_len) - oiph->ihl * 4 - sizeof(struct icmphdr), 1);
+	ps = (ops != NULL) ? ops : peer_server_node_in(oiph->daddr, oskb->len - oiph->ihl * 4 - sizeof(struct icmphdr), 1);
 	if (ps == NULL) {
 		return NULL;
 	}
@@ -665,7 +671,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 		mss = mss - (sizeof(struct iphdr) + sizeof(struct tcphdr));
 		ps->mss = mss;
 	}
-	pmi = (ops != NULL) ? opmi : ntohs(ICMPH(otcph)->un.echo.sequence) % (ps->max_port_idx + 1);
+	pmi = (ops != NULL) ? opmi : ntohs(ICMPH(otcph)->un.echo.sequence) % ps->conn;
 	if (ps->port_map[pmi].sport == 0) {
 		ps->port_map[pmi].sport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
 		ps->port_map[pmi].dport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
@@ -678,6 +684,9 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	}
 
 	add_len = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
+	if (ops == NULL) {
+		add_len += 16; //for timestamp
+	}
 	offset = oiph->ihl * 4 + sizeof(struct tcphdr) + add_len + tcpolen_mss - oskb->len;
 	header_len = offset < 0 ? 0 : offset;
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), header_len, GFP_ATOMIC);
@@ -741,11 +750,18 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	tcpopt->header.encryption = 0;
 	tcpopt->header.subtype = SUBTYPE_PEER_SYN;
 	if (ops != NULL) {
-		set_byte2((void *)&tcpopt->peer.data.icmp_id, 0);
+		set_byte2((void *)&tcpopt->peer.data.icmp_id, 0); //__constant_htons(0)
 		set_byte2((void *)&tcpopt->peer.data.icmp_sequence, 0);
+		set_byte2((void *)&tcpopt->peer.data.icmp_payload_len, 0);
 	} else {
+		u16 payload_len = oskb->len - oiph->ihl * 4 - sizeof(struct icmphdr);
 		set_byte2((void *)&tcpopt->peer.data.icmp_id, ICMPH(otcph)->un.echo.id);
 		set_byte2((void *)&tcpopt->peer.data.icmp_sequence, ICMPH(otcph)->un.echo.sequence);
+		set_byte2((void *)&tcpopt->peer.data.icmp_payload_len, htons(payload_len));
+		if (payload_len > 16)
+			payload_len = 16;
+		memcpy((void *)tcpopt->peer.data.timeval, (const void *)otcph + sizeof(struct icmphdr), payload_len);
+		memset((void *)tcpopt->peer.data.timeval + payload_len, 0, 16 - payload_len);
 	}
 	set_byte4((void *)&tcpopt->peer.data.user.ip, niph->saddr);
 	memcpy(tcpopt->peer.data.user.mac_addr, default_mac_addr, ETH_ALEN);
@@ -958,21 +974,52 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				nf_ct_put(user);
 
 				do {
+					int offset, add_len;
+					u8 timeval[16] = { };
 					__be16 id = get_byte2((const void *)&tcpopt->peer.data.icmp_id);
 					__be16 sequence = get_byte2((const void *)&tcpopt->peer.data.icmp_sequence);
+					u16 payload_len = get_byte2((const void *)&tcpopt->peer.data.icmp_payload_len);
+
+					payload_len = ntohs(payload_len);
+
 					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(%s) SYNACK in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4),
 							TCPH(l4)->syn ? "synack" : "ack", ntohs(id), ntohs(sequence));
+
+					if (payload_len > 0 &&
+							tcpopt->header.opsize >= \
+							16 + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int)) &&
+							skb->len >= iph->ihl * 4 + sizeof(struct tcphdr) + \
+							16 + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int))) {
+						memcpy(timeval, tcpopt->peer.data.timeval, 16);
+					}
+					if (payload_len > ICMP_PAYLOAD_LIMIT)
+						payload_len = ICMP_PAYLOAD_LIMIT;
+
+					offset = iph->ihl * 4 + sizeof(struct icmphdr) + payload_len - skb->len;
+					add_len = offset < 0 ? 0 : offset;
+					if (skb_tailroom(skb) < add_len && pskb_expand_head(skb, 0, add_len, GFP_ATOMIC)) {
+						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": pskb_expand_head failed add_len=%u\n", DEBUG_TCP_ARG(iph,l4), add_len);
+						goto h_out;
+					}
+					iph = ip_hdr(skb);
+					l4 = (void *)iph + iph->ihl * 4;
 
 					iph->protocol = IPPROTO_ICMP;
 					iph->check = 0;
 					iph->tot_len =
-						skb->len = ntohs(iph->ihl * 4 + sizeof(struct icmphdr));
+						skb->len = ntohs(iph->ihl * 4 + sizeof(struct icmphdr) + payload_len);
 
 					ICMPH(l4)->type = ICMP_ECHOREPLY;
-					ICMPH(l4)->type = 0;
+					ICMPH(l4)->code = 0;
 					ICMPH(l4)->un.echo.id = id;
 					ICMPH(l4)->un.echo.sequence = sequence;
 					ICMPH(l4)->checksum = 0;
+					if (payload_len >= 16) {
+						memcpy(l4 + sizeof(struct icmphdr), timeval, 16);
+						memset(l4 + sizeof(struct icmphdr) + 16, 0, payload_len - 16);
+					} else if (payload_len > 0) {
+						memcpy(l4 + sizeof(struct icmphdr), timeval, payload_len);
+					}
 
 					ip_fast_csum(iph, iph->ihl);
 					ICMPH(l4)->checksum = csum_fold(skb_checksum(skb, iph->ihl * 4, skb->len - iph->ihl * 4, 0));
@@ -1205,13 +1252,16 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	void *l4;
 
 	iph = ip_hdr(skb);
+	l4 = (void *)iph + iph->ihl * 4;
 	if (iph->protocol != IPPROTO_ICMP) {
 		return NF_ACCEPT;
 	}
 	if (iph->ttl != 1) {
 		return NF_ACCEPT;
 	}
-	l4 = (void *)iph + iph->ihl * 4;
+	if (skb->len > iph->ihl * 4 + sizeof(struct icmphdr) + ICMP_PAYLOAD_LIMIT) {
+		return NF_ACCEPT;
+	}
 
 	NATCAP_DEBUG("(PPO)" DEBUG_ICMP_FMT ": ping out\n", DEBUG_ICMP_ARG(iph,l4));
 	nskb = natcap_peer_ping_init(skb, NULL, NULL, 0);

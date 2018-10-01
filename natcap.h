@@ -90,6 +90,8 @@ struct natcap_TCPOPT_peer {
 		} user;
 		u16 map_port;
 	};
+	u16 icmp_payload_len;
+	u8 timeval[0];
 };
 
 #define NATCAP_TCPOPT_SYN (1<<7)
@@ -122,7 +124,6 @@ struct natcap_TCPOPT {
 		} peer;
 	};
 #define NATCAP_TCPOPT_TYPE_CONFUSION 4
-	char pad[4];
 #define NATCAP_TCPOPT_TYPE_ADD 5
 };
 
