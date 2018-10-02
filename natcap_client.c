@@ -1530,17 +1530,19 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			status |= NATCAP_NEED_ENC;
 		}
 
-		ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+		ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt,
+				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
+				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 		if (ret != 0) {
 			/* skb cannot setup encode, means that tcp option space has no enough left
 			 * so we dup a skb and mark it with NATCAP_TCPOPT_SYN as a pioneer to 'kick the door'
+			 * just strim the tcp options
 			 */
 			if (skb_is_gso(skb) || (!TCPH(l4)->syn || TCPH(l4)->ack)) {
 				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				return NF_DROP;
 			}
 
-			//TODO FIXME here.
 			skb2 = skb_copy(skb, GFP_ATOMIC);
 			if (skb2 == NULL) {
 				NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
@@ -1548,13 +1550,14 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			}
 			iph = ip_hdr(skb2);
 			l4 = (void *)iph + iph->ihl * 4;
-			skb2->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
+			skb2->len = iph->ihl * 4 + sizeof(struct tcphdr);
 			iph->tot_len = htons(skb2->len);
-			iph->ihl = 5;
 			TCPH(l4)->doff = 5;
 			skb_rcsum_tcpudp(skb2);
 
-			ret = natcap_tcpopt_setup(status, skb2, ct, &tcpopt, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+			ret = natcap_tcpopt_setup(status, skb2, ct, &tcpopt,
+					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
+					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 			if (ret != 0) {
 				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				consume_skb(skb2);
@@ -2155,7 +2158,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		if ((IPS_NATCAP_ENC & master->status)) {
 			status |= NATCAP_NEED_ENC;
 		}
-		ret = natcap_tcpopt_setup(status, skb, master, &tcpopt, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+		ret = natcap_tcpopt_setup(status, skb, master, &tcpopt,
+				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
+				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 		if (ret != 0) {
 			/* skb cannot setup encode, means that tcp option space has no enough left
 			 * so we dup a skb and mark it with NATCAP_TCPOPT_SYN as a pioneer to 'kick the door'
@@ -2167,7 +2172,6 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				return NF_ACCEPT;
 			}
 
-			//TODO FIXME here.
 			skb2 = skb_copy(skb, GFP_ATOMIC);
 			if (skb2 == NULL) {
 				NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
@@ -2177,13 +2181,14 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			}
 			iph = ip_hdr(skb2);
 			l4 = (void *)iph + iph->ihl * 4;
-			skb2->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
+			skb2->len = iph->ihl * 4 + sizeof(struct tcphdr);
 			iph->tot_len = htons(skb2->len);
-			iph->ihl = 5;
 			TCPH(l4)->doff = 5;
 			skb_rcsum_tcpudp(skb2);
 
-			ret = natcap_tcpopt_setup(status, skb2, master, &tcpopt, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+			ret = natcap_tcpopt_setup(status, skb2, master, &tcpopt,
+					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
+					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 			if (ret != 0) {
 				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
