@@ -29,6 +29,7 @@
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
+#include "net/netfilter/nf_conntrack_seqadj.h"
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_core.h>
 #include <net/ip.h>
@@ -989,12 +990,16 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				NATCAP_ERROR("(SPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				return NF_DROP;
 			}
-			if (NTCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION) {
+			if (!TCPH(l4)->syn && NTCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION && (NS_NATCAP_CONFUSION & ns->status)) {
+				if (nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq + 1)) != 0 - ns->tcp_seq_offset) {
+					nf_ct_seqadj_init(ct, ctinfo, 0 - ns->tcp_seq_offset);
+				}
+				if (nf_ct_seq_offset(ct, IP_CT_DIR_REPLY, ntohl(TCPH(l4)->ack + 1)) != ns->tcp_ack_offset) {
+					nf_ct_seqadj_init(ct, IP_CT_ESTABLISHED_REPLY, ns->tcp_ack_offset);
+				}
 				natcap_confusion_tcp_reply_ack(in, skb, ct, ns);
-				short_clear_bit(NS_NATCAP_CONFUSION_BIT, &ns->status);
-				ns->tcp_seq_offset = 0;
-				ns->tcp_ack_offset = 0;
-				return NF_DROP;
+				consume_skb(skb);
+				return NF_STOLEN;
 			}
 			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, NULL);
 			if (ret != E_NATCAP_OK) {
@@ -1029,8 +1034,9 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
-
-			if (tcpopt.header.type & NATCAP_TCPOPT_CONFUSION) {
+			if ((tcpopt.header.type & NATCAP_TCPOPT_CONFUSION)) {
+				__be32 offset = get_byte4((const void *)&tcpopt + tcpopt.header.opsize - sizeof(unsigned int));
+				ns->tcp_seq_offset = ntohl(offset);
 				short_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->status);
 			}
 
@@ -1280,7 +1286,8 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 				if (ret != NF_ACCEPT) {
 					return ret;
 				}
-				return NF_DROP;
+				consume_skb(skb);
+				return NF_STOLEN;
 			}
 		} else if (iph->protocol == IPPROTO_UDP) {
 			if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099) &&

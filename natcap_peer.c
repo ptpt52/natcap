@@ -1367,9 +1367,6 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 			goto h_out;
 		}
 		ns->local_seq = peer_fakeuser_expect(user)->local_seq; //can't be 0
-		if (!nfct_seqadj(ct) && !nfct_seqadj_ext_add(ct)) {
-			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": seqadj_ext add failed\n", DEBUG_TCP_ARG(iph,l4));
-		}
 
 		ps = peer_server_node_in(iph->saddr, 0, 0);
 		if (ps == NULL) {

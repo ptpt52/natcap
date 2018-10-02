@@ -30,6 +30,7 @@
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_conntrack_extend.h>
+#include "net/netfilter/nf_conntrack_seqadj.h"
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_core.h>
 #include <linux/netfilter/ipset/ip_set.h>
@@ -442,7 +443,6 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 
 int natcap_tcp_encode(struct nf_conn *ct, struct sk_buff *skb, const struct natcap_TCPOPT *tcpopt, int dir)
 {
-	struct natcap_session *ns = natcap_session_get(ct);
 	struct iphdr *iph;
 	struct tcphdr *tcph;
 	int offlen;
@@ -473,36 +473,6 @@ int natcap_tcp_encode(struct nf_conn *ct, struct sk_buff *skb, const struct natc
 	skb->tail += tcpopt->header.opsize;
 
 do_encode:
-	if (ns) {
-		if (dir == IP_CT_DIR_ORIGINAL) {
-			if (ns->tcp_seq_offset) {
-				spin_lock_bh(&ct->lock);
-				if (ct->proto.tcp.last_seq == 0 || ct->proto.tcp.last_seq == ntohl(tcph->seq)) {
-					ct->proto.tcp.seen[0].td_end -= ns->tcp_seq_offset;
-					//ct->proto.tcp.seen[0].td_maxend -= ns->tcp_seq_offset;
-				}
-				spin_unlock_bh(&ct->lock);
-				tcph->seq = htonl(ntohl(tcph->seq) - ns->tcp_seq_offset);
-			}
-			if (ns->tcp_ack_offset) {
-				tcph->ack_seq = htonl(ntohl(tcph->ack_seq) - ns->tcp_ack_offset);
-			}
-		} else {
-			if (ns->tcp_ack_offset) {
-				spin_lock_bh(&ct->lock);
-				if (ct->proto.tcp.last_seq == 0 || ct->proto.tcp.last_seq == ntohl(tcph->seq)) {
-					ct->proto.tcp.seen[1].td_end -= ns->tcp_ack_offset;
-					//ct->proto.tcp.seen[1].td_maxend -= ns->tcp_ack_offset;
-				}
-				spin_unlock_bh(&ct->lock);
-				tcph->seq = htonl(ntohl(tcph->seq) - ns->tcp_ack_offset);
-			}
-			if (ns->tcp_seq_offset) {
-				tcph->ack_seq = htonl(ntohl(tcph->ack_seq) - ns->tcp_seq_offset);
-			}
-		}
-	}
-
 	if (tcpopt->header.encryption) {
 		if (!skb_make_writable(skb, skb->len)) {
 			return -3;
@@ -518,7 +488,6 @@ do_encode:
 
 int natcap_tcp_decode(struct nf_conn *ct, struct sk_buff *skb, struct natcap_TCPOPT *tcpopt, int dir)
 {
-	struct natcap_session *ns = natcap_session_get(ct);
 	struct iphdr *iph;
 	struct tcphdr *tcph;
 	struct natcap_TCPOPT *opt;
@@ -544,18 +513,6 @@ int natcap_tcp_decode(struct nf_conn *ct, struct sk_buff *skb, struct natcap_TCP
 		tcph->ack_seq = TCPOPT_NATCAP;
 		goto do_decode;
 	}
-	if ((tcpopt->header.type & NATCAP_TCPOPT_CONFUSION) && ns) {
-		int add_len = ntohl(get_byte4((unsigned char *)tcpopt + tcpopt->header.opsize - sizeof(unsigned int)));
-		if (dir == IP_CT_DIR_ORIGINAL) {
-			if (ns->tcp_seq_offset == 0) {
-				ns->tcp_seq_offset = add_len;
-			}
-		} else {
-			if (ns->tcp_ack_offset == 0) {
-				ns->tcp_ack_offset = add_len;
-			}
-		}
-	}
 
 	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize);
 	BUG_ON(offlen < 0);
@@ -567,36 +524,6 @@ int natcap_tcp_decode(struct nf_conn *ct, struct sk_buff *skb, struct natcap_TCP
 	skb->tail -= tcpopt->header.opsize;
 
 do_decode:
-	if (ns) {
-		if (dir == IP_CT_DIR_ORIGINAL) {
-			if (ns->tcp_seq_offset) {
-				spin_lock_bh(&ct->lock);
-				if (ct->proto.tcp.last_seq == 0 || ct->proto.tcp.last_seq == ntohl(tcph->seq)) {
-					ct->proto.tcp.seen[0].td_end += ns->tcp_seq_offset;
-					//ct->proto.tcp.seen[0].td_maxend += ns->tcp_seq_offset;
-				}
-				spin_unlock_bh(&ct->lock);
-				tcph->seq = htonl(ntohl(tcph->seq) + ns->tcp_seq_offset);
-			}
-			if (ns->tcp_ack_offset) {
-				tcph->ack_seq = htonl(ntohl(tcph->ack_seq) + ns->tcp_ack_offset);
-			}
-		} else {
-			if (ns->tcp_ack_offset) {
-				spin_lock_bh(&ct->lock);
-				if (ct->proto.tcp.last_seq == 0 || ct->proto.tcp.last_seq == ntohl(tcph->seq)) {
-					ct->proto.tcp.seen[1].td_end += ns->tcp_ack_offset;
-					//ct->proto.tcp.seen[1].td_maxend += ns->tcp_ack_offset;
-				}
-				spin_unlock_bh(&ct->lock);
-				tcph->seq = htonl(ntohl(tcph->seq) + ns->tcp_ack_offset);
-			}
-			if (ns->tcp_seq_offset) {
-				tcph->ack_seq = htonl(ntohl(tcph->ack_seq) + ns->tcp_seq_offset);
-			}
-		}
-	}
-
 	if (tcpopt->header.encryption) {
 		if (!skb_make_writable(skb, skb->len)) {
 			return -3;
@@ -1154,6 +1081,10 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		return -1;
 	}
 	if (ct->ext && !!ct->ext->offset[NF_CT_EXT_NAT]) {
+		return -1;
+	}
+	if (!nfct_seqadj(ct) && !nfct_seqadj_ext_add(ct)) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "seqadj_ext add failed\n", DEBUG_ARG_PREFIX);
 		return -1;
 	}
 
