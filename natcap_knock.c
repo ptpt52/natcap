@@ -190,7 +190,7 @@ static unsigned int natcap_knock_post_out_hook(void *priv,
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	void *l4;
-	struct natcap_TCPOPT tcpopt;
+	struct natcap_TCPOPT tcpopt = { };
 
 	if (disabled)
 		return NF_ACCEPT;

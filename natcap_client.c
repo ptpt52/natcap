@@ -1019,7 +1019,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 	struct natcap_session *ns;
 	struct iphdr *iph;
 	void *l4;
-	struct natcap_TCPOPT tcpopt;
+	struct natcap_TCPOPT tcpopt = { };
 
 	if (disabled)
 		return NF_ACCEPT;
@@ -1449,7 +1449,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 	struct iphdr *iph;
 	void *l4;
 	struct net *net = &init_net;
-	struct natcap_TCPOPT tcpopt;
+	struct natcap_TCPOPT tcpopt = { };
 
 	if (disabled)
 		return NF_ACCEPT;
@@ -1523,6 +1523,9 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 		ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 		if (ret != 0) {
+			/* skb cannot setup encode, means that tcp option space has no enough left
+			 * so we dup a skb and mark it with NATCAP_TCPOPT_SYN as a pioneer to 'kick the door'
+			 */
 			if (skb_is_gso(skb) || (!TCPH(l4)->syn || TCPH(l4)->ack)) {
 				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				return NF_DROP;
@@ -1857,7 +1860,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	struct net *net = &init_net;
 	struct natcap_session *ns = NULL;
 	struct natcap_session *master_ns = NULL;
-	struct natcap_TCPOPT tcpopt;
+	struct natcap_TCPOPT tcpopt = { };
 
 	if (disabled)
 		return NF_ACCEPT;
@@ -2146,6 +2149,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 		ret = natcap_tcpopt_setup(status, skb, master, &tcpopt, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 		if (ret != 0) {
+			/* skb cannot setup encode, means that tcp option space has no enough left
+			 * so we dup a skb and mark it with NATCAP_TCPOPT_SYN as a pioneer to 'kick the door'
+			 */
 			if (skb_is_gso(skb) || (!TCPH(l4)->syn || TCPH(l4)->ack)) {
 				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -2180,6 +2186,11 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
 				tcpopt.header.type |= NATCAP_TCPOPT_TARGET;
 			}
+			/* XXX we do not use sproxy for DUAL connection
+			if (sproxy) {
+				tcpopt.header.type |= NATCAP_TCPOPT_SPROXY;
+			}
+			*/
 			ret = natcap_tcp_encode(master, skb2, &tcpopt, IP_CT_DIR_ORIGINAL);
 			if (ret != 0) {
 				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
@@ -2214,7 +2225,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 					return NF_DROP;
 				}
 				skb_htp->tail += offset;
-				skb_htp->len += iph->ihl * 4 + sizeof(struct tcphdr) + size + ns->tcp_seq_offset;;
+				skb_htp->len = iph->ihl * 4 + sizeof(struct tcphdr) + size + ns->tcp_seq_offset;;
 
 				iph = ip_hdr(skb_htp);
 				l4 = (void *)iph + iph->ihl * 4;
@@ -2241,6 +2252,11 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
 				tcpopt.header.type |= NATCAP_TCPOPT_TARGET;
 			}
+			/* XXX we do not use sproxy for DUAL connection
+			if (sproxy) {
+				tcpopt.header.type |= NATCAP_TCPOPT_SPROXY;
+			}
+			*/
 			ret = natcap_tcp_encode(master, skb, &tcpopt, IP_CT_DIR_ORIGINAL);
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;

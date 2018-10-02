@@ -927,7 +927,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 	struct natcap_session *ns;
 	struct iphdr *iph;
 	void *l4;
-	struct natcap_TCPOPT tcpopt;
+	struct natcap_TCPOPT tcpopt = { };
 	struct tuple server;
 
 	if (disabled)
@@ -1233,7 +1233,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	struct natcap_session *ns;
 	struct iphdr *iph;
 	void *l4;
-	struct natcap_TCPOPT tcpopt;
+	struct natcap_TCPOPT tcpopt = { };
 	unsigned long status = 0;
 
 	if (disabled)

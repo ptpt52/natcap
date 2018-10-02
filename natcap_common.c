@@ -348,6 +348,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		return -1;
 	}
 
+	tcpopt->header.subtype = 0;
 	if ((status & NATCAP_NEED_ENC))
 		tcpopt->header.encryption = 1;
 	else
@@ -478,7 +479,7 @@ do_encode:
 				spin_lock_bh(&ct->lock);
 				if (ct->proto.tcp.last_seq == 0 || ct->proto.tcp.last_seq == ntohl(tcph->seq)) {
 					ct->proto.tcp.seen[0].td_end -= ns->tcp_seq_offset;
-					ct->proto.tcp.seen[0].td_maxend -= ns->tcp_seq_offset;
+					//ct->proto.tcp.seen[0].td_maxend -= ns->tcp_seq_offset;
 				}
 				spin_unlock_bh(&ct->lock);
 				tcph->seq = htonl(ntohl(tcph->seq) - ns->tcp_seq_offset);
@@ -491,7 +492,7 @@ do_encode:
 				spin_lock_bh(&ct->lock);
 				if (ct->proto.tcp.last_seq == 0 || ct->proto.tcp.last_seq == ntohl(tcph->seq)) {
 					ct->proto.tcp.seen[1].td_end -= ns->tcp_ack_offset;
-					ct->proto.tcp.seen[1].td_maxend -= ns->tcp_ack_offset;
+					//ct->proto.tcp.seen[1].td_maxend -= ns->tcp_ack_offset;
 				}
 				spin_unlock_bh(&ct->lock);
 				tcph->seq = htonl(ntohl(tcph->seq) - ns->tcp_ack_offset);
@@ -572,7 +573,7 @@ do_decode:
 				spin_lock_bh(&ct->lock);
 				if (ct->proto.tcp.last_seq == 0 || ct->proto.tcp.last_seq == ntohl(tcph->seq)) {
 					ct->proto.tcp.seen[0].td_end += ns->tcp_seq_offset;
-					ct->proto.tcp.seen[0].td_maxend += ns->tcp_seq_offset;
+					//ct->proto.tcp.seen[0].td_maxend += ns->tcp_seq_offset;
 				}
 				spin_unlock_bh(&ct->lock);
 				tcph->seq = htonl(ntohl(tcph->seq) + ns->tcp_seq_offset);
@@ -585,7 +586,7 @@ do_decode:
 				spin_lock_bh(&ct->lock);
 				if (ct->proto.tcp.last_seq == 0 || ct->proto.tcp.last_seq == ntohl(tcph->seq)) {
 					ct->proto.tcp.seen[1].td_end += ns->tcp_ack_offset;
-					ct->proto.tcp.seen[1].td_maxend += ns->tcp_ack_offset;
+					//ct->proto.tcp.seen[1].td_maxend += ns->tcp_ack_offset;
 				}
 				spin_unlock_bh(&ct->lock);
 				tcph->seq = htonl(ntohl(tcph->seq) + ns->tcp_ack_offset);
