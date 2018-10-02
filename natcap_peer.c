@@ -463,7 +463,6 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 			//re-check-in-lock
 			if (ue->tuple[i].sip == saddr && ue->tuple[i].dip == daddr && ue->tuple[i].sport == sport && ue->tuple[i].dport) {
 				pt = &ue->tuple[i];
-				pt->last_active = last_jiffies;
 				spin_unlock_bh(&ue->lock);
 				break;
 			}
@@ -495,7 +494,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 			pt->local_seq = 0;
 			pt->remote_seq = 0;
 			pt->connected = 0;
-			pt->last_active = last_jiffies;
+			pt->last_active = last_jiffies; //just update in new init.
 			spin_unlock_bh(&ue->lock);
 		}
 	}
@@ -506,7 +505,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	return user;
 }
 
-static inline void natcap_peer_reply_pong(const struct net_device *dev, struct sk_buff *oskb, __be16 map_port, struct peer_tuple *pt)
+static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk_buff *oskb, __be16 map_port, struct peer_tuple *pt)
 {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
@@ -920,8 +919,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 				map_port = get_byte2((const void *)&tcpopt->peer.data.map_port);
 				if (map_port != ps->map_port) {
-					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": update map_port from %u to %u\n",
-							DEBUG_TCP_ARG(iph,l4), ntohs(ps->map_port), ntohs(map_port));
+					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": update map_port from %u to %u\n", DEBUG_TCP_ARG(iph,l4), ntohs(ps->map_port), ntohs(map_port));
 					ps->map_port = map_port;
 				}
 
@@ -946,9 +944,9 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": got pong(synack) SYNACK, sending ping(ack) ACK out failed\n", DEBUG_TCP_ARG(iph,l4));
 					}
 				}
-
 				nf_ct_put(user);
 
+				//pass up to icmp
 				do {
 					int offset, add_len;
 					u8 timeval[16] = { };
@@ -1012,9 +1010,9 @@ h_out:
 			consume_skb(skb);
 			nf_ct_put(user);
 			return NF_STOLEN;
-		} else {
-			//XXX no expect found bypass
-		}
+
+		} else { /* XXX no expect found, bypass */ }
+		return NF_ACCEPT;
 
 	} else if (TCPH(l4)->syn && !TCPH(l4)->ack) {
 		//got syn
@@ -1035,7 +1033,7 @@ h_out:
 		do {
 			__be16 id = get_byte2((const void *)&tcpopt->peer.data.icmp_id);
 			__be16 sequence = get_byte2((const void *)&tcpopt->peer.data.icmp_sequence);
-			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4), ntohs(id), ntohs(sequence));
+			NATCAP_DEBUG("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4), ntohs(id), ntohs(sequence));
 		} while (0);
 
 		client_ip = get_byte4((const void *)&tcpopt->peer.data.user.ip);
@@ -1047,26 +1045,32 @@ h_out:
 			//re-check-in-lock
 			if (pt->sip != iph->saddr || pt->dip != iph->daddr || pt->sport != TCPH(l4)->source || pt->dport != TCPH(l4)->dest) {
 				//The caught duck flew
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, but pt[%pI4:%u->%pI4:%u] mismatch\n",
+						DEBUG_TCP_ARG(iph,l4), &pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport));
 				spin_unlock_bh(&peer_user_expect(user)->lock);
-				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, but session has been used\n", DEBUG_TCP_ARG(iph,l4));
 				goto syn_out;
 			}
 			if (pt->remote_seq != ntohl(TCPH(l4)->seq)) {
 				if (pt->remote_seq == 0) {
 					pt->remote_seq = ntohl(TCPH(l4)->seq);
+				} if (!pt->connected) {
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, but seq(=%u,remote_seq=%u) mismatch, reused and force resume\n",
+							DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq);
+					pt->remote_seq = ntohl(TCPH(l4)->seq);
 				} else {
 					spin_unlock_bh(&peer_user_expect(user)->lock);
-					//TODO this we may need to reset this bad session
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, but session remote_seq change? drop\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, but seq(=%u,remote_seq=%u) mismatch, drop \n",
+							DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq);
+					spin_unlock_bh(&peer_user_expect(user)->lock);
 					goto syn_out;
 				}
 			}
 			if (!pt->connected) {
-				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, create new session, sending pong(synack) SYNACK back\n", DEBUG_TCP_ARG(iph,l4));
-				natcap_peer_reply_pong(in, skb, peer_user_expect(user)->map_port, pt);
+				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, new, sending pong(synack) SYNACK back\n", DEBUG_TCP_ARG(iph,l4));
 			} else {
-				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, dup packet, sending pong(ack) ACK back\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, dup, sending pong(ack) ACK back\n", DEBUG_TCP_ARG(iph,l4));
 			}
+			natcap_peer_pong_send(in, skb, peer_user_expect(user)->map_port, pt);
 			spin_unlock_bh(&peer_user_expect(user)->lock);
 		}
 
@@ -1104,13 +1108,19 @@ syn_out:
 					TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
 					skb->ip_summed = CHECKSUM_UNNECESSARY;
 					skb_rcsum_tcpudp(skb);
+				} else {
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack->synack) FACK in, but ct status or dir error\n", DEBUG_TCP_ARG(iph,l4));
 				}
 				nf_ct_put(user);
+			} else {
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack->synack) FACK in, but ct not found\n", DEBUG_TCP_ARG(iph,l4));
 			}
 			return NF_ACCEPT;
 		}
 
 		if (tcpopt->header.subtype != SUBTYPE_PEER_SYN && tcpopt->header.subtype != SUBTYPE_PEER_ACK) {
+			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got unexpected PEER packet in opcode=%u type=%u opsize=%u subtype=%u, ignore pass\n",
+					DEBUG_TCP_ARG(iph,l4), tcpopt->header.opcode, tcpopt->header.type, tcpopt->header.opsize, tcpopt->header.subtype);
 			return NF_ACCEPT;
 		}
 		if (ntohl(TCPH(l4)->seq) - 1 == 0) {
@@ -1122,7 +1132,7 @@ syn_out:
 		do {
 			__be16 id = get_byte2((const void *)&tcpopt->peer.data.icmp_id);
 			__be16 sequence = get_byte2((const void *)&tcpopt->peer.data.icmp_sequence);
-			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4),
+			NATCAP_DEBUG("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4),
 					tcpopt->header.subtype == SUBTYPE_PEER_SYN ? "SYN" : "ACK", ntohs(id), ntohs(sequence));
 		} while (0);
 
@@ -1135,15 +1145,23 @@ syn_out:
 			//re-check-in-lock
 			if (pt->sip != iph->saddr || pt->dip != iph->daddr || pt->sport != TCPH(l4)->source || pt->dport != TCPH(l4)->dest) {
 				//The caught duck flew
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) in, but pt[%pI4:%u->%pI4:%u] mismatch\n",
+						DEBUG_TCP_ARG(iph,l4), &pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport));
 				spin_unlock_bh(&peer_user_expect(user)->lock);
-				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) in, but session has been used\n", DEBUG_TCP_ARG(iph,l4));
+				goto ack_out;
+			}
+			if (pt->local_seq + 1 != ntohl(TCPH(l4)->ack_seq)) {
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) in, but ack_seq(=%u,local_seq=%u) mismatch\n",
+						DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->ack_seq), pt->local_seq);
+				spin_unlock_bh(&peer_user_expect(user)->lock);
 				goto ack_out;
 			}
 			switch (tcpopt->header.subtype) {
 				case SUBTYPE_PEER_ACK:
-					if (pt->remote_seq != ntohl(TCPH(l4)->seq) - 1) {
+					if (pt->remote_seq + 1 != ntohl(TCPH(l4)->seq)) {
+						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, but seq(=%u,remote_seq=%u) mismatch\n",
+								DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq);
 						spin_unlock_bh(&peer_user_expect(user)->lock);
-						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got bad ping(ack) ACK in, pt->remote_seq=%u\n", DEBUG_TCP_ARG(iph,l4), pt->remote_seq);
 						goto ack_out;
 					}
 					if (!pt->connected) {
@@ -1152,9 +1170,10 @@ syn_out:
 					} else {
 						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, dup packet\n", DEBUG_TCP_ARG(iph,l4));
 					}
+					pt->last_active = jiffies;
 					break;
 				case SUBTYPE_PEER_SYN:
-					if (pt->remote_seq == ntohl(TCPH(l4)->seq) - 1) {
+					if (pt->remote_seq + 1 == ntohl(TCPH(l4)->seq)) {
 						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, keepalive, sending pong(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
 					} else if (pt->remote_seq == 0 || pt->local_seq == 0) {
 						//This means server down and reload
@@ -1163,15 +1182,16 @@ syn_out:
 						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, assume, sending pong(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
 					} else {
 						//TODO bad ping what to do?
-						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got bad ping(ack) SYN in, pt->remote_seq=%u, drop\n", DEBUG_TCP_ARG(iph,l4), pt->remote_seq);
+						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, seq=(%u,remote_seq=%u,local_seq=%u) mismatch\n",
+								DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq, pt->local_seq);
 						spin_unlock_bh(&peer_user_expect(user)->lock);
 						goto ack_out;
 					}
-
 					if (!pt->connected) {
 						pt->connected = 1;
 					}
-					natcap_peer_reply_pong(in, skb, peer_user_expect(user)->map_port, pt);
+					pt->last_active = jiffies;
+					natcap_peer_pong_send(in, skb, peer_user_expect(user)->map_port, pt);
 					break;
 				default:
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got bad ping(ack) in unexpected subtype=%u\n", DEBUG_TCP_ARG(iph,l4), tcpopt->header.subtype);
@@ -1183,7 +1203,7 @@ syn_out:
 ack_out:
 		consume_skb(skb);
 		return NF_STOLEN;
-	}
+	} else { /* XXX no expect found, bypass */ }
 
 	return NF_ACCEPT;
 }
