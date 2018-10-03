@@ -182,8 +182,8 @@ struct peer_server_node *peer_server_node_in(__be32 ip, int conn, int new)
 			}
 			spin_unlock_bh(&peer_server[i].lock);
 		}
-		if (maxdiff < ulongdiff(peer_server[i].last_active, last_jiffies)) {
-			maxdiff = ulongdiff(peer_server[i].last_active, last_jiffies);
+		if (maxdiff < uintdiff(peer_server[i].last_active, last_jiffies)) {
+			maxdiff = uintdiff(peer_server[i].last_active, last_jiffies);
 			ps = &peer_server[i];
 		}
 	}
@@ -471,8 +471,8 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	if (pt == NULL) {
 		unsigned long maxdiff = 0;
 		for (i = 0; i < MAX_PEER_TUPLE; i++) {
-			if (maxdiff < ulongdiff(last_jiffies, ue->tuple[i].last_active)) {
-				maxdiff = ulongdiff(last_jiffies, ue->tuple[i].last_active);
+			if (maxdiff < uintdiff(last_jiffies, ue->tuple[i].last_active)) {
+				maxdiff = uintdiff(last_jiffies, ue->tuple[i].last_active);
 				pt = &ue->tuple[i];
 			}
 			if (ue->tuple[i].sip == 0) {
@@ -482,10 +482,10 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 		}
 		if (pt) {
 			spin_lock_bh(&ue->lock);
-			NATCAP_INFO("user [%02X:%02X:%02X:%02X:%02X:%02X] @map_port=%u use new-ct[%pI4:%u->%pI4:%u] replace old-ct[%pI4:%u->%pI4:%u] time=%lu,%lu\n",
+			NATCAP_INFO("user [%02X:%02X:%02X:%02X:%02X:%02X] @map_port=%u use new-ct[%pI4:%u->%pI4:%u] replace old-ct[%pI4:%u->%pI4:%u] time=%u,%u\n",
 					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 					ntohs(ue->map_port), &saddr, ntohs(sport), &daddr, ntohs(dport),
-					&pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport), pt->last_active, last_jiffies);
+					&pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport), pt->last_active, (unsigned int)last_jiffies);
 			pt->sip = saddr;
 			pt->dip = daddr;
 			pt->sport = sport;
@@ -1492,9 +1492,9 @@ h_out:
 			}
 
 			for (i = 0; i < MAX_PEER_TUPLE; i++) {
-				if (ue->tuple[i].connected && ue->tuple[i].sip != 0 && mindiff > ulongdiff(jiffies, ue->tuple[i].last_active)) {
+				if (ue->tuple[i].connected && ue->tuple[i].sip != 0 && mindiff > uintdiff(jiffies, ue->tuple[i].last_active)) {
 					pt = &ue->tuple[i];
-					mindiff = ulongdiff(jiffies, ue->tuple[i].last_active);
+					mindiff = uintdiff(jiffies, ue->tuple[i].last_active);
 				}
 			}
 
@@ -1511,9 +1511,9 @@ h_out:
 				return NF_ACCEPT;
 			}
 			if (pt->connected == 0 || pt->local_seq == 0 || pt->remote_seq == 0) {
-				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": port mapping(%s,local_seq=%u,remote_seq=%u) last_active(%lu,%lu) not ok\n",
+				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": port mapping(%s,local_seq=%u,remote_seq=%u) last_active(%u,%u) not ok\n",
 						DEBUG_TCP_ARG(iph,l4), pt->connected ? "connected" : "disconnected",
-						pt->local_seq, pt->remote_seq, pt->last_active, jiffies);
+						pt->local_seq, pt->remote_seq, pt->last_active, (unsigned int)jiffies);
 				spin_unlock_bh(&ue->lock);
 				return NF_ACCEPT;
 			}

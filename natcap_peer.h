@@ -29,7 +29,7 @@ struct port_tuple {
 	unsigned int local_seq;
 	unsigned int remote_seq;
 	unsigned int connected;
-	unsigned long last_active;
+	unsigned int last_active;
 };
 
 struct peer_server_node {
@@ -38,7 +38,7 @@ struct peer_server_node {
 	__be16 map_port;
 	unsigned short mss;
 	unsigned int conn;
-	unsigned long last_active;
+	unsigned int last_active;
 #define MAX_PEER_CONN 8
 	struct port_tuple port_map[MAX_PEER_CONN];
 };
@@ -61,12 +61,12 @@ struct peer_tuple {
 	unsigned int local_seq;
 	unsigned int remote_seq;
 	unsigned int connected;
-	unsigned long last_active;
+	unsigned int last_active;
 };
 
 struct user_expect {
 	spinlock_t lock;
-	unsigned long last_active;
+	unsigned int last_active;
 	__be32 ip;
 	__be16 map_port;
 #define MAX_PEER_TUPLE 8
