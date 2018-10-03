@@ -35,6 +35,7 @@
 #include <linux/string.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
+#include <linux/timer.h>
 #include <linux/version.h>
 #include <linux/vmalloc.h>
 #include <asm/unaligned.h>
@@ -56,11 +57,55 @@ static inline __be32 gen_seq_number(void)
 	return s;
 }
 
+//__be32 peer_local_ip = __constant_htonl((192<<24)|(168<<16)|(16<<8)|(1<<0));
+__be32 peer_local_ip = __constant_htonl(0);
+__be16 peer_local_port = __constant_htons(443);
+
 #define ICMP_PAYLOAD_LIMIT 1024
 
 #define MAX_PEER_PORT_MAP 65536
 static struct nf_conn **peer_port_map;
 DEFINE_SPINLOCK(peer_port_map_lock);
+static struct timer_list peer_port_map_timer;
+
+#define NATCAP_PEER_EXPECT_TIMEOUT 5
+#define NATCAP_PEER_USER_TIMEOUT_DEFAULT 180
+
+unsigned int peer_port_map_timeout = NATCAP_PEER_USER_TIMEOUT_DEFAULT;
+
+#define PEER_PORT_MAP_FLUSH_STEP 256
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 18, 0)
+static void peer_port_map_flush(unsigned long ignore)
+#else
+static void peer_port_map_flush(struct timer_list *ignore)
+#endif
+{
+	static unsigned short flush_idx = 0;
+	int i, flush_cnt = 0;
+	struct nf_conn *user;
+	NATCAP_DEBUG(DEBUG_FMT_PREFIX "begin flush peer_port_map scanning %d user(s)\n", DEBUG_ARG_PREFIX, PEER_PORT_MAP_FLUSH_STEP);
+	for (i = 0; i < PEER_PORT_MAP_FLUSH_STEP; i++) {
+		if (peer_port_map[flush_idx] == NULL) {
+			flush_idx++;
+			continue;
+		}
+		spin_lock_bh(&peer_port_map_lock);
+		user = peer_port_map[flush_idx];
+		if (user != NULL) {
+			if (uintdiff(peer_user_expect(user)->last_active, jiffies) > peer_port_map_timeout * HZ) {
+				peer_port_map[flush_idx] = NULL;
+				nf_ct_put(user);
+				flush_cnt++;
+			}
+		}
+		spin_unlock_bh(&peer_port_map_lock);
+		flush_idx++;
+	}
+	NATCAP_DEBUG(DEBUG_FMT_PREFIX "pause flush peer_port_map after putting %d user(s)\n", DEBUG_ARG_PREFIX, flush_cnt);
+
+	mod_timer(&peer_port_map_timer, jiffies + HZ / 2);
+}
 
 //this can only be called in BH env
 static inline struct nf_conn *get_peer_user(unsigned int port)
@@ -70,18 +115,31 @@ static inline struct nf_conn *get_peer_user(unsigned int port)
 
 static int peer_port_map_init(void)
 {
+	struct timer_list *timer = &peer_port_map_timer;
+
 	peer_port_map = vmalloc(sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
 	if (peer_port_map == NULL) {
 		return -ENOMEM;
 	}
 	memset(peer_port_map, 0, sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 18, 0)
+	init_timer(timer);
+	timer->data = 0;
+	timer->function = peer_port_map_flush;
+#else
+	timer_setup(timer, peer_port_map_flush, 0);
+#endif
+
+	mod_timer(timer, jiffies + 8 * HZ);
 	return 0;
 }
 
 static void peer_port_map_exit(void)
 {
 	int i;
+
+	del_timer_sync(&peer_port_map_timer);
 
 	spin_lock_bh(&peer_port_map_lock);
 	for (i = 0; i < MAX_PEER_PORT_MAP; i++) {
@@ -136,10 +194,6 @@ static __be16 alloc_peer_port(struct nf_conn *ct, const unsigned char *mac)
 
 	return 0;
 }
-
-__be32 peer_local_ip = __constant_htonl(0);
-//__be32 peer_local_ip = __constant_htonl((192<<24)|(168<<16)|(16<<8)|(1<<0));
-__be16 peer_local_port = __constant_htons(443);
 
 #define MAX_PEER_SERVER 8
 struct peer_server_node peer_server[MAX_PEER_SERVER];
@@ -219,9 +273,6 @@ static inline struct sk_buff *uskb_of_this_cpu(int id)
 	}
 	return peer_user_uskbs[id];
 }
-
-#define NATCAP_PEER_EXPECT_TIMEOUT 5
-#define NATCAP_PEER_USER_TIMEOUT 180
 
 void natcap_user_timeout_touch(struct nf_conn *ct, unsigned long timeout)
 {
@@ -323,7 +374,7 @@ struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport
 	}
 
 	skb_nfct_reset(uskb);
-	natcap_user_timeout_touch(user, NATCAP_PEER_USER_TIMEOUT);
+	natcap_user_timeout_touch(user, peer_port_map_timeout);
 
 	NATCAP_DEBUG("fakeuser create user[%pI4:%u->%pI4:%u] pmi=%d upmi=%d\n", &saddr, ntohs(sport), &daddr, ntohs(dport), pmi, peer_fakeuser_expect(user)->pmi);
 
@@ -433,7 +484,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	}
 
 	skb_nfct_reset(uskb);
-	natcap_user_timeout_touch(user, NATCAP_PEER_USER_TIMEOUT);
+	natcap_user_timeout_touch(user, peer_port_map_timeout);
 
 	ue = peer_user_expect(user);
 
@@ -1476,7 +1527,7 @@ h_out:
 
 		if (user) {
 			int i;
-			unsigned long mindiff = NATCAP_PEER_USER_TIMEOUT * HZ;
+			unsigned long mindiff = peer_port_map_timeout * HZ;
 			struct peer_tuple *pt = NULL;
 			struct natcap_session *ns;
 			struct user_expect *ue = peer_user_expect(user);
