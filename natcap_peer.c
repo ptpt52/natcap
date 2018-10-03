@@ -684,7 +684,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	skb_nfct_reset(nskb);
 
 	if (ops != NULL) {
-		oeth = eth_hdr(nskb);
+		oeth = eth_hdr(oskb);
 		neth = eth_hdr(nskb);
 		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
 		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
