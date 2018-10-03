@@ -526,7 +526,7 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	niph->saddr = oiph->daddr;
 	niph->daddr = oiph->saddr;
 	niph->version = oiph->version;
-	niph->ihl = 5;
+	niph->ihl = sizeof(struct iphdr) / 4;
 	niph->tos = 0;
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;

@@ -549,7 +549,7 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 	niph->saddr = oiph->daddr;
 	niph->daddr = oiph->saddr;
 	niph->version = oiph->version;
-	niph->ihl = 5;
+	niph->ihl = oiph->ihl;
 	niph->tos = 0;
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 255;
@@ -696,7 +696,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	niph->saddr = (ops != NULL) ? oiph->daddr : oiph->saddr;
 	niph->daddr = (ops != NULL) ? oiph->saddr : oiph->daddr;
 	niph->version = oiph->version;
-	niph->ihl = 5;
+	niph->ihl = oiph->ihl;
 	niph->tos = 0;
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 255;

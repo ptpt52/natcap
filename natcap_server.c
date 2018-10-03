@@ -196,7 +196,7 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	niph->saddr = oiph->daddr;
 	niph->daddr = oiph->saddr;
 	niph->version = oiph->version;
-	niph->ihl = 5;
+	niph->ihl = sizeof(struct iphdr) / 4;
 	niph->tos = 0;
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
@@ -268,7 +268,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	niph->saddr = ct->tuplehash[dir].tuple.dst.u3.ip;
 	niph->daddr = ct->tuplehash[dir].tuple.src.u3.ip;
 	niph->version = oiph->version;
-	niph->ihl = 5;
+	niph->ihl = sizeof(struct iphdr) / 4;
 	niph->tos = 0;
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
@@ -359,7 +359,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 	niph->version = oiph->version;
-	niph->ihl = 5;
+	niph->ihl = sizeof(struct iphdr) / 4;
 	niph->tos = 0;
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
@@ -451,7 +451,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 	niph->version = oiph->version;
-	niph->ihl = 5;
+	niph->ihl = sizeof(struct iphdr) / 4;
 	niph->tos = 0;
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
@@ -664,7 +664,7 @@ static inline void natcap_confusion_tcp_reply_ack(const struct net_device *dev, 
 	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 	niph->version = oiph->version;
-	niph->ihl = 5;
+	niph->ihl = sizeof(struct iphdr) / 4;
 	niph->tos = 0;
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
