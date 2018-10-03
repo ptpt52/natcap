@@ -107,12 +107,6 @@ static void peer_port_map_flush(struct timer_list *ignore)
 	mod_timer(&peer_port_map_timer, jiffies + HZ / 2);
 }
 
-//this can only be called in BH env
-static inline struct nf_conn *get_peer_user(unsigned int port)
-{
-	return peer_port_map[port];
-}
-
 static int peer_port_map_init(void)
 {
 	struct timer_list *timer = &peer_port_map_timer;
@@ -151,7 +145,27 @@ static void peer_port_map_exit(void)
 	spin_unlock_bh(&peer_port_map_lock);
 }
 
-static __be16 alloc_peer_port(struct nf_conn *ct, const unsigned char *mac)
+static inline struct nf_conn *get_peer_user(unsigned int port)
+{
+	struct nf_conn *user;
+	if (peer_port_map[port] == NULL)
+		return NULL;
+
+	spin_lock_bh(&peer_port_map_lock);
+	user = peer_port_map[port];
+	if (user) {
+		nf_conntrack_get(&user->ct_general);
+	}
+	spin_unlock_bh(&peer_port_map_lock);
+	return user;
+}
+
+static inline void put_peer_user(struct nf_conn *user)
+{
+	nf_ct_put(user);
+}
+
+static __be16 alloc_peer_port(struct nf_conn *user, const unsigned char *mac)
 {
 	static unsigned int seed_rnd;
 	unsigned short port;
@@ -169,8 +183,8 @@ static __be16 alloc_peer_port(struct nf_conn *ct, const unsigned char *mac)
 			spin_lock_bh(&peer_port_map_lock);
 			//re-check-in-lock
 			if (peer_port_map[port] == NULL) {
-				peer_port_map[port] = ct;
-				nf_conntrack_get(&ct->ct_general);
+				peer_port_map[port] = user;
+				nf_conntrack_get(&user->ct_general);
 				spin_unlock_bh(&peer_port_map_lock);
 				return htons(port);
 			}
@@ -183,8 +197,8 @@ static __be16 alloc_peer_port(struct nf_conn *ct, const unsigned char *mac)
 			spin_lock_bh(&peer_port_map_lock);
 			//re-check-in-lock
 			if (peer_port_map[port] == NULL) {
-				peer_port_map[port] = ct;
-				nf_conntrack_get(&ct->ct_general);
+				peer_port_map[port] = user;
+				nf_conntrack_get(&user->ct_general);
 				spin_unlock_bh(&peer_port_map_lock);
 				return htons(port);
 			}
@@ -1523,8 +1537,8 @@ h_out:
 	} else {
 		struct nf_conn *user;
 		unsigned int port = ntohs(TCPH(l4)->dest);
-		user = get_peer_user(port);
 
+		user = get_peer_user(port);
 		if (user) {
 			int i;
 			unsigned long mindiff = peer_port_map_timeout * HZ;
@@ -1533,12 +1547,14 @@ h_out:
 			struct user_expect *ue = peer_user_expect(user);
 			if (ntohs(ue->map_port) != port) {
 				NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": map_port=%u dest=%u mismatch\n", DEBUG_TCP_ARG(iph,l4), ntohs(ue->map_port), port);
+				put_peer_user(user);
 				return NF_ACCEPT;
 			}
 
 			ns = natcap_session_in(ct);
 			if (!ns) {
 				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+				put_peer_user(user);
 				return NF_ACCEPT;
 			}
 
@@ -1551,6 +1567,7 @@ h_out:
 
 			if (pt == NULL) {
 				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping\n", DEBUG_TCP_ARG(iph,l4));
+				put_peer_user(user);
 				return NF_ACCEPT;
 			}
 
@@ -1559,6 +1576,7 @@ h_out:
 			if (pt->sip == 0) {
 				spin_unlock_bh(&ue->lock);
 				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping\n", DEBUG_TCP_ARG(iph,l4));
+				put_peer_user(user);
 				return NF_ACCEPT;
 			}
 			if (pt->connected == 0 || pt->local_seq == 0 || pt->remote_seq == 0) {
@@ -1566,6 +1584,7 @@ h_out:
 						DEBUG_TCP_ARG(iph,l4), pt->connected ? "connected" : "disconnected",
 						pt->local_seq, pt->remote_seq, pt->last_active, (unsigned int)jiffies);
 				spin_unlock_bh(&ue->lock);
+				put_peer_user(user);
 				return NF_ACCEPT;
 			}
 
@@ -1603,6 +1622,7 @@ h_out:
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": found user expect, do DNAT to " TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 			}
+			put_peer_user(user);
 		}
 	}
 
