@@ -36,8 +36,7 @@ struct peer_server_node {
 	spinlock_t  lock;
 	__be32 ip;
 	__be16 map_port;
-	unsigned short mss;
-	unsigned int conn;
+	unsigned short conn;
 	unsigned int last_active;
 #define MAX_PEER_CONN 8
 	struct port_tuple port_map[MAX_PEER_CONN];

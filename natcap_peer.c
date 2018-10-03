@@ -211,7 +211,7 @@ static __be16 alloc_peer_port(struct nf_conn *user, const unsigned char *mac)
 
 #define MAX_PEER_SERVER 8
 struct peer_server_node peer_server[MAX_PEER_SERVER];
-struct peer_server_node *peer_server_node_in(__be32 ip, int conn, int new)
+struct peer_server_node *peer_server_node_in(__be32 ip, unsigned short conn, int new)
 {
 	int i;
 	unsigned long maxdiff = 0;
@@ -264,7 +264,6 @@ init_out:
 					DEBUG_ARG_PREFIX, &ps->ip, ps->map_port, &ip);
 		}
 		ps->ip = ip;
-		ps->mss = 0;
 		ps->map_port = 0;
 		ps->conn = conn;
 		ps->last_active = last_jiffies;
@@ -705,19 +704,6 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 
 	spin_lock_bh(&ps->lock);
 
-	if (ops == NULL && ps->mss == 0) {
-		unsigned int mss;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0)
-		mss = ip_skb_dst_mtu(oskb);
-#else
-		mss = ip_skb_dst_mtu(NULL, oskb);
-#endif
-		if (mss < IPV4_MIN_MTU) {
-			mss = IPV4_MIN_MTU;
-		}
-		mss = mss - (sizeof(struct iphdr) + sizeof(struct tcphdr));
-		ps->mss = mss;
-	}
 	pmi = (ops != NULL) ? opmi : ntohs(ICMPH(otcph)->un.echo.sequence) % ps->conn;
 	if (ps->port_map[pmi].sport == 0) {
 		ps->port_map[pmi].sport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
@@ -819,7 +805,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 	if (tcpolen_mss == TCPOLEN_MSS) {
 		set_byte1((void *)tcpopt + header_len + 0, TCPOPT_MSS);
 		set_byte1((void *)tcpopt + header_len + 1, TCPOLEN_MSS);
-		set_byte2((void *)tcpopt + header_len + 2, ntohs(ps->mss));
+		set_byte2((void *)tcpopt + header_len + 2, ntohs(TCP_MSS_DEFAULT - (sizeof(struct iphdr) + sizeof(struct tcphdr))));
 	}
 
 	local_seq = ps->port_map[pmi].local_seq;
