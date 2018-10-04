@@ -37,6 +37,7 @@ struct peer_server_node {
 	__be32 ip;
 	__be16 map_port;
 	unsigned short conn;
+	unsigned short mss;
 	unsigned int last_active;
 #define MAX_PEER_CONN 8
 	struct port_tuple port_map[MAX_PEER_CONN];
@@ -59,7 +60,8 @@ struct peer_tuple {
 	__be16 dport;
 	unsigned int local_seq;
 	unsigned int remote_seq;
-	unsigned int connected;
+	unsigned short mss;
+	unsigned short connected;
 	unsigned int last_active;
 };
 
@@ -86,7 +88,10 @@ static inline struct natcap_TCPOPT *natcap_peer_decode_header(struct tcphdr *tcp
 			!(
 				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int)) &&
 				 opt->header.opcode == TCPOPT_PEER &&
-				 (opt->header.subtype == SUBTYPE_PEER_SYN || opt->header.subtype == SUBTYPE_PEER_SYNACK || opt->header.subtype == SUBTYPE_PEER_ACK) &&
+				 (opt->header.subtype == SUBTYPE_PEER_SYN ||
+				  opt->header.subtype == SUBTYPE_PEER_SYNACK ||
+				  opt->header.subtype == SUBTYPE_PEER_ACK ||
+				  opt->header.subtype == SUBTYPE_PEER_FSYNACK) &&
 				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int))) ||
 				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)) &&
 				 opt->header.opcode == TCPOPT_PEER &&

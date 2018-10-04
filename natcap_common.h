@@ -284,6 +284,51 @@ static inline u_int32_t tcpmss_reverse_mtu(struct net *net, const struct sk_buff
 	return mtu;
 }
 
+static inline u16 natcap_tcpmss_get(const struct tcphdr *tcph) {
+	u16 oldmss;
+	unsigned int i;
+	int tcp_hdrlen;
+	u8 *opt;
+
+	tcp_hdrlen = tcph->doff * 4;
+	opt = (u_int8_t *)tcph;
+	for (i = sizeof(struct tcphdr); i <= tcp_hdrlen - TCPOLEN_MSS; i += optlen(opt, i)) {
+		if (opt[i] == TCPOPT_MSS && opt[i+1] == TCPOLEN_MSS) {
+			oldmss = (opt[i+2] << 8) | opt[i+3];
+			return oldmss;
+		}
+	}
+	return 0;
+}
+
+static inline int natcap_tcpmss_set(struct sk_buff *skb, struct tcphdr *tcph, u16 newmss) {
+	u16 oldmss;
+	unsigned int i;
+	int tcp_hdrlen;
+	u8 *opt;
+
+	tcp_hdrlen = tcph->doff * 4;
+	opt = (u_int8_t *)tcph;
+	for (i = sizeof(struct tcphdr); i <= tcp_hdrlen - TCPOLEN_MSS; i += optlen(opt, i)) {
+		if (opt[i] == TCPOPT_MSS && opt[i+1] == TCPOLEN_MSS) {
+
+			oldmss = (opt[i+2] << 8) | opt[i+3];
+			if (oldmss <= newmss) {
+				return -1;
+			}
+
+			opt[i+2] = (newmss & 0xff00) >> 8;
+			opt[i+3] = newmss & 0x00ff;
+
+			inet_proto_csum_replace2(&tcph->check, skb, htons(oldmss), htons(newmss), false);
+
+			NATCAP_INFO("Change TCP MSS %d to %d\n", oldmss, newmss);
+			return 0;
+		}
+	}
+	return -1;
+}
+
 static inline int natcap_tcpmss_adjust(struct sk_buff *skb, struct tcphdr *tcph, int delta) {
 	u16 oldmss, newmss;
 	unsigned int i;

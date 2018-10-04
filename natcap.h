@@ -46,6 +46,7 @@
 #define SUBTYPE_PEER_ACK        66
 #define SUBTYPE_PEER_FSYN       67
 #define SUBTYPE_PEER_FACK       68
+#define SUBTYPE_PEER_FSYNACK    69
 
 struct natcap_TCPOPT_header {
 	u8 opcode;
@@ -160,21 +161,22 @@ struct natcap_session {
 	unsigned short status;
 	union {
 		__be16 new_source;
-		__be16 peer_sport; //for peer
+		__be16 peer_sport; //for peer used on client side
 	};
 	struct tuple tup;
 	int tcp_seq_offset; //for natcap and peer
 	union {
 		int tcp_ack_offset;
-		unsigned int local_seq; //for peer
+		unsigned int local_seq; //for peer used on both side
 	};
 	union {
 		unsigned int foreign_seq;
-		unsigned int remote_seq; //for peer
+		unsigned int remote_seq; //for peer used on both side
 	};
 	union {
 		unsigned int current_seq;
-		__be32 peer_sip; //for peer
+		__be32 peer_sip; //for peer used on client side
+		u16 remote_mss; //for peer used on server side
 	};
 };
 
