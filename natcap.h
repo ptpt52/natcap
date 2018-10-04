@@ -158,27 +158,56 @@ struct natcap_session {
 #define NS_NATCAP_DROP (1 << NS_NATCAP_DROP_BIT)
 #define NS_NATCAP_NOLIMIT_BIT 5
 #define NS_NATCAP_NOLIMIT (1 << NS_NATCAP_NOLIMIT_BIT)
-	unsigned short status;
+
+#define NS_NATCAP_TCPENC_BIT 13
+#define NS_NATCAP_TCPENC (1 << NS_NATCAP_TCPENC_BIT)
+#define NS_NATCAP_UDPENC_BIT 14
+#define NS_NATCAP_UDPENC (1 << NS_NATCAP_UDPENC_BIT)
+#define NS_NATCAP_ENC_BIT 15
+#define NS_NATCAP_ENC (1 << NS_NATCAP_ENC_BIT)
 	union {
-		__be16 new_source;
-		__be16 peer_sport; //for peer used on client side
-	};
-	struct tuple tup;
-	int tcp_seq_offset; //for natcap and peer
-	union {
-		int tcp_ack_offset;
-		unsigned int local_seq; //for peer used on both side
-	};
-	union {
-		unsigned int foreign_seq;
-		unsigned int remote_seq; //for peer used on both side
-	};
-	union {
-		unsigned int current_seq;
-		__be32 peer_sip; //for peer used on client side
-		u16 remote_mss; //for peer used on server side
+		struct {
+			unsigned short status;
+			unsigned short _pad[1];
+			__be16 new_source;
+			__be16 target_port;
+			__be32 target_ip;
+			union {
+				int tcp_seq_offset; //used on HTTP confusion
+				unsigned int current_seq; //used on UDP pack to TCP
+			};
+			union {
+				int tcp_ack_offset; //used on HTTP confusion
+				unsigned int foreign_seq; //used on UDP pack to TCP
+			};
+		} n;
+		struct {
+			unsigned short status;
+			unsigned short _pad[1];
+			u16 remote_mss; //for peer used on server side
+			__be16 peer_sport; //for peer used on server side
+			__be32 peer_sip; //for peer used on server side
+			unsigned int local_seq; //for peer used on both side
+			unsigned int remote_seq; //for peer used on both side
+			int tcp_seq_offset;
+		} p;
 	};
 };
+
+enum {
+	TCP_ENCODE = 0,
+	UDP_ENCODE = 1,
+};
+
+static inline void natcap_tuple_to_ns(struct natcap_session *ns, const struct tuple *t)
+{
+	ns->n.status |= \
+				  ((!!t->encryption) << NS_NATCAP_ENC_BIT) | \
+				  ((t->udp_encode == UDP_ENCODE) << NS_NATCAP_UDPENC_BIT) | \
+				  ((t->tcp_encode == TCP_ENCODE) << NS_NATCAP_TCPENC_BIT);
+	ns->n.target_ip = t->ip;
+	ns->n.target_port = t->port;
+}
 
 #define NATCAP_MAGIC 0x43415099
 

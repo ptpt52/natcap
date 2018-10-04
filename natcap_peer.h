@@ -54,12 +54,12 @@ static inline struct fakeuser_expect *peer_fakeuser_expect(struct nf_conn *ct)
 }
 
 struct peer_tuple {
+	unsigned int local_seq;
+	unsigned int remote_seq;
 	__be32 sip;
 	__be32 dip;
 	__be16 sport;
 	__be16 dport;
-	unsigned int local_seq;
-	unsigned int remote_seq;
 	unsigned short mss;
 	unsigned short connected;
 	unsigned int last_active;

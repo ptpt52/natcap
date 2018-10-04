@@ -49,11 +49,6 @@ enum {
 	PEER_MODE = 5,
 };
 
-enum {
-	TCP_ENCODE = 0,
-	UDP_ENCODE = 1,
-};
-
 extern struct cone_nat_session *cone_nat_array;
 
 extern unsigned int natcap_touch_timeout;

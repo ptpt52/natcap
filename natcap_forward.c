@@ -274,7 +274,7 @@ __do_dnat:
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					return NF_DROP;
 				}
-				short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->status);
+				short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->n.status);
 			}
 
 			NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": pass UDP encoded data\n", DEBUG_UDP_ARG(iph,l4));
@@ -362,7 +362,7 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 		natcap_server_in_touch(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 		flow_total_tx_bytes += skb->len;
 	}
-	if (!(NS_NATCAP_TCPUDPENC & ns->status)) {
+	if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		return NF_ACCEPT;
 	}
 
@@ -575,8 +575,8 @@ static unsigned int natcap_forward_pre_in_hook(void *priv,
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
 		}
-		if (!(NS_NATCAP_TCPUDPENC & ns->status)) {
-			short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->status);
+		if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
+			short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->n.status);
 		}
 	}
 

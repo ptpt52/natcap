@@ -359,7 +359,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 		int add_len = 0;
 		//not syn
 		if (!(tcph->syn && !tcph->ack)) {
-			if ((NS_NATCAP_AUTH & ns->status)) {
+			if ((NS_NATCAP_AUTH & ns->n.status)) {
 				tcpopt->header.type = NATCAP_TCPOPT_TYPE_NONE;
 				tcpopt->header.opsize = 0;
 				return 0;
@@ -371,7 +371,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 				tcpopt->header.opsize = size;
 				memcpy(tcpopt->user.data.mac_addr, default_mac_addr, ETH_ALEN);
 				tcpopt->user.data.u_hash = default_u_hash;
-				short_set_bit(NS_NATCAP_AUTH_BIT, &ns->status);
+				short_set_bit(NS_NATCAP_AUTH_BIT, &ns->n.status);
 				return 0;
 			}
 			tcpopt->header.type = NATCAP_TCPOPT_TYPE_NONE;
@@ -379,10 +379,10 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			return 0;
 		}
 		//syn
-		if (http_confusion && ns && !(NS_NATCAP_TCPUDPENC & ns->status) && (IPS_NATCAP_ENC & ct->status)) {
+		if (http_confusion && ns && !(NS_NATCAP_TCPUDPENC & ns->n.status) && (IPS_NATCAP_ENC & ct->status)) {
 			add_len += sizeof(unsigned int);
-			if (ns->tcp_seq_offset == 0) {
-				ns->tcp_seq_offset = sizeof(htp_confusion_req) / 2 + jiffies % (sizeof(htp_confusion_req) / 4);
+			if (ns->n.tcp_seq_offset == 0) {
+				ns->n.tcp_seq_offset = sizeof(htp_confusion_req) / 2 + jiffies % (sizeof(htp_confusion_req) / 4);
 			}
 		}
 		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_data) + add_len, sizeof(unsigned int));
@@ -396,10 +396,10 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			memcpy(tcpopt->all.data.mac_addr, default_mac_addr, ETH_ALEN);
 			tcpopt->all.data.u_hash = default_u_hash;
 			if (add_len == sizeof(unsigned int)) {
-				set_byte4((unsigned char *)tcpopt + size - add_len, htonl(ns->tcp_seq_offset));
+				set_byte4((unsigned char *)tcpopt + size - add_len, htonl(ns->n.tcp_seq_offset));
 				tcpopt->header.type |= NATCAP_TCPOPT_CONFUSION;
 			}
-			short_set_bit(NS_NATCAP_AUTH_BIT, &ns->status);
+			short_set_bit(NS_NATCAP_AUTH_BIT, &ns->n.status);
 			return 0;
 		}
 		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst) + add_len, sizeof(unsigned int));
@@ -410,26 +410,26 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			tcpopt->dst.data.ip = ip;
 			tcpopt->dst.data.port = port;
 			if (add_len == sizeof(unsigned int)) {
-				set_byte4((unsigned char *)tcpopt + size - add_len, htonl(ns->tcp_seq_offset));
+				set_byte4((unsigned char *)tcpopt + size - add_len, htonl(ns->n.tcp_seq_offset));
 				tcpopt->header.type |= NATCAP_TCPOPT_CONFUSION;
 			}
 			return 0;
 		}
 		return -1;
 	} else {
-		if (ns && (NS_NATCAP_CONFUSION & ns->status)) {
+		if (ns && (NS_NATCAP_CONFUSION & ns->n.status)) {
 			int add_len = 0;
 			if (tcph->syn && tcph->ack) {
 				add_len += sizeof(unsigned int);
-				if (ns->tcp_ack_offset == 0) {
-					ns->tcp_ack_offset = sizeof(htp_confusion_rsp) / 4 + jiffies % (sizeof(htp_confusion_rsp) / 8);
+				if (ns->n.tcp_ack_offset == 0) {
+					ns->n.tcp_ack_offset = sizeof(htp_confusion_rsp) / 4 + jiffies % (sizeof(htp_confusion_rsp) / 8);
 				}
 				size = ALIGN(sizeof(struct natcap_TCPOPT_header) + add_len, sizeof(unsigned int));
 				tcpopt->header.type = NATCAP_TCPOPT_TYPE_ADD;
 				tcpopt->header.opcode = TCPOPT_NATCAP;
 				tcpopt->header.opsize = size;
 				if (add_len == sizeof(unsigned int)) {
-					set_byte4((unsigned char *)tcpopt + size - add_len, htonl(ns->tcp_ack_offset));
+					set_byte4((unsigned char *)tcpopt + size - add_len, htonl(ns->n.tcp_ack_offset));
 					tcpopt->header.type |= NATCAP_TCPOPT_CONFUSION;
 				}
 				return 0;
@@ -1228,9 +1228,9 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	iph->protocol = IPPROTO_TCP;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 
-	TCPH(l4)->seq = ns->current_seq == 0 ? htonl(jiffies) : htonl(ns->current_seq);
-	TCPH(l4)->ack_seq = (m == 0 && ns->current_seq == 0) ? 0 : htonl(ns->foreign_seq);
-	tcp_flag_word(TCPH(l4)) = (ns->current_seq == 0 ? TCP_FLAG_ACK : 0) | ((m == 0 && ns->current_seq == 0) ? 0 : TCP_FLAG_ACK);
+	TCPH(l4)->seq = ns->n.current_seq == 0 ? htonl(jiffies) : htonl(ns->n.current_seq);
+	TCPH(l4)->ack_seq = (m == 0 && ns->n.current_seq == 0) ? 0 : htonl(ns->n.foreign_seq);
+	tcp_flag_word(TCPH(l4)) = (ns->n.current_seq == 0 ? TCP_FLAG_ACK : 0) | ((m == 0 && ns->n.current_seq == 0) ? 0 : TCP_FLAG_ACK);
 	TCPH(l4)->res1 = 0;
 	TCPH(l4)->doff = 5;
 	TCPH(l4)->window = htons(ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xffff) ^ (ntohl(TCPH(l4)->ack_seq) & 0xffff));
@@ -1239,7 +1239,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 
 	skb_rcsum_tcpudp(skb);
 
-	ns->current_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - sizeof(struct tcphdr);
+	ns->n.current_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - sizeof(struct tcphdr);
 
 	ct = nf_ct_get(skb, &ctinfo);
 	skb_nfct_reset(skb);

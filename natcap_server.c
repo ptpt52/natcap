@@ -215,7 +215,7 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	skb_rcsum_tcpudp(nskb);
 
 	ns = natcap_session_get(ct);
-	if (ns && (NS_NATCAP_TCPUDPENC & ns->status)) {
+	if (ns && (NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		natcap_udp_to_tcp_pack(nskb, ns, 1);
 	}
 
@@ -242,7 +242,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
 	ns = natcap_session_get(ct);
-	if (ns && (NS_NATCAP_TCPUDPENC & ns->status)) {
+	if (ns && (NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		header_len = 8;
 		protocol = IPPROTO_UDP;
 	}
@@ -333,7 +333,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
 	ns = natcap_session_get(ct);
-	if (ns && (NS_NATCAP_TCPUDPENC & ns->status)) {
+	if (ns && (NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		header_len = 8;
 		protocol = IPPROTO_UDP;
 	}
@@ -425,7 +425,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
 	ns = natcap_session_get(ct);
-	if (ns && (NS_NATCAP_TCPUDPENC & ns->status)) {
+	if (ns && (NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		header_len = 8;
 		protocol = IPPROTO_UDP;
 	}
@@ -614,12 +614,12 @@ static inline unsigned int natcap_try_http_redirect(struct iphdr *iph, struct sk
 	data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
 	if ((data_len > 4 && strncasecmp(data, "GET ", 4) == 0) ||
 			(data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
-		if (ns) short_set_bit(NS_NATCAP_DROP_BIT, &ns->status);
+		if (ns) short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
 		natcap_auth_http_302(in, skb, ct);
 		natcap_auth_tcp_to_rst(skb);
 		return NF_ACCEPT;
 	} else if (data_len > 0) {
-		if (ns) short_set_bit(NS_NATCAP_DROP_BIT, &ns->status);
+		if (ns) short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
 		natcap_auth_tcp_reply_rst(in, skb, ct, IP_CT_DIR_ORIGINAL);
 		natcap_auth_tcp_to_rst(skb);
 		return NF_ACCEPT;
@@ -643,7 +643,7 @@ static inline void natcap_confusion_tcp_reply_ack(const struct net_device *dev, 
 	oiph = ip_hdr(oskb);
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
-	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + size + ns->tcp_ack_offset - (skb_headlen(oskb) + skb_tailroom(oskb));
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + size + ns->n.tcp_ack_offset - (skb_headlen(oskb) + skb_tailroom(oskb));
 	add_len = offset < 0 ? 0 : offset;
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
@@ -652,7 +652,7 @@ static inline void natcap_confusion_tcp_reply_ack(const struct net_device *dev, 
 		return;
 	}
 	nskb->tail += offset;
-	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + size + ns->tcp_ack_offset;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + size + ns->n.tcp_ack_offset;
 
 	neth = eth_hdr(nskb);
 	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
@@ -690,7 +690,7 @@ static inline void natcap_confusion_tcp_reply_ack(const struct net_device *dev, 
 	tcpopt->header.opsize = size;
 	tcpopt->header.encryption = 0;
 
-	memcpy((void *)tcpopt + size, htp_confusion_rsp, ns->tcp_ack_offset);
+	memcpy((void *)tcpopt + size, htp_confusion_rsp, ns->n.tcp_ack_offset);
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
@@ -755,7 +755,7 @@ static unsigned int natcap_server_forward_hook(void *priv,
 
 	ns = natcap_session_get(ct);
 
-	if (ns && (NS_NATCAP_DROP & ns->status)) {
+	if (ns && (NS_NATCAP_DROP & ns->n.status)) {
 		if (iph->protocol == IPPROTO_TCP) {
 			void *l4 = (void *)iph + iph->ihl * 4;
 			if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
@@ -774,7 +774,7 @@ static unsigned int natcap_server_forward_hook(void *priv,
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
-		if (ns && (NS_NATCAP_AUTH & ns->status)) {
+		if (ns && (NS_NATCAP_AUTH & ns->n.status)) {
 			if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
 				return natcap_try_http_redirect(iph, skb, ct, in);
 			}
@@ -952,7 +952,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 	ns = natcap_session_get(ct);
 
-	if (ns && (NS_NATCAP_DROP & ns->status)) {
+	if (ns && (NS_NATCAP_DROP & ns->n.status)) {
 		return NF_DROP;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
@@ -990,12 +990,12 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				NATCAP_ERROR("(SPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				return NF_DROP;
 			}
-			if (!TCPH(l4)->syn && NTCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION && (NS_NATCAP_CONFUSION & ns->status)) {
-				if (nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq + 1)) != 0 - ns->tcp_seq_offset) {
-					nf_ct_seqadj_init(ct, ctinfo, 0 - ns->tcp_seq_offset);
+			if (!TCPH(l4)->syn && NTCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION && (NS_NATCAP_CONFUSION & ns->n.status)) {
+				if (nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq + 1)) != 0 - ns->n.tcp_seq_offset) {
+					nf_ct_seqadj_init(ct, ctinfo, 0 - ns->n.tcp_seq_offset);
 				}
-				if (nf_ct_seq_offset(ct, IP_CT_DIR_REPLY, ntohl(TCPH(l4)->ack + 1)) != ns->tcp_ack_offset) {
-					nf_ct_seqadj_init(ct, IP_CT_ESTABLISHED_REPLY, ns->tcp_ack_offset);
+				if (nf_ct_seq_offset(ct, IP_CT_DIR_REPLY, ntohl(TCPH(l4)->ack + 1)) != ns->n.tcp_ack_offset) {
+					nf_ct_seqadj_init(ct, IP_CT_ESTABLISHED_REPLY, ns->n.tcp_ack_offset);
 				}
 				natcap_confusion_tcp_reply_ack(in, skb, ct, ns);
 				consume_skb(skb);
@@ -1005,9 +1005,9 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			if (ret != E_NATCAP_OK) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				if (ret == E_NATCAP_AUTH_FAIL) {
-					short_set_bit(NS_NATCAP_AUTH_BIT, &ns->status);
+					short_set_bit(NS_NATCAP_AUTH_BIT, &ns->n.status);
 				} else {
-					short_set_bit(NS_NATCAP_DROP_BIT, &ns->status);
+					short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
 					return NF_DROP;
 				}
 			}
@@ -1036,23 +1036,23 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 			if ((tcpopt.header.type & NATCAP_TCPOPT_CONFUSION)) {
 				__be32 offset = get_byte4((const void *)&tcpopt + tcpopt.header.opsize - sizeof(unsigned int));
-				ns->tcp_seq_offset = ntohl(offset);
-				short_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->status);
+				ns->n.tcp_seq_offset = ntohl(offset);
+				short_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->n.status);
 			}
 
 			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, &server);
 			if (ret != E_NATCAP_OK) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				if (ret == E_NATCAP_AUTH_FAIL) {
-					short_set_bit(NS_NATCAP_AUTH_BIT, &ns->status);
+					short_set_bit(NS_NATCAP_AUTH_BIT, &ns->n.status);
 				} else {
-					short_set_bit(NS_NATCAP_DROP_BIT, &ns->status);
+					short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
 					return NF_DROP;
 				}
 			}
 			if (server.ip == iph->saddr) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": connect target=%pI4 is saddr\n", DEBUG_TCP_ARG(iph,l4), &server.ip);
-				short_set_bit(NS_NATCAP_DROP_BIT, &ns->status);
+				short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
 				return NF_DROP;
 			}
 
@@ -1077,8 +1077,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					rcu_read_unlock();
 
 					if (newdst && newdst != server.ip) {
-						memcpy(&ns->tup, &server, sizeof(struct tuple));
-						short_set_bit(NS_NATCAP_DST_BIT, &ns->status);
+						natcap_tuple_to_ns(ns, &server);
+						short_set_bit(NS_NATCAP_DST_BIT, &ns->n.status);
 
 						server.ip = newdst;
 						server.port = natcap_redirect_port;
@@ -1272,12 +1272,12 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
 		if (iph->protocol == IPPROTO_TCP) {
-			if ((NS_NATCAP_AUTH & ns->status)) {
+			if ((NS_NATCAP_AUTH & ns->n.status)) {
 				if (TCPH(l4)->dest == natcap_redirect_port) {
 					return natcap_try_http_redirect(iph, skb, ct, in);
 				}
 			}
-			if ((NS_NATCAP_TCPUDPENC & ns->status) && TCPH(l4)->syn) {
+			if ((NS_NATCAP_TCPUDPENC & ns->n.status) && TCPH(l4)->syn) {
 				natcap_tcpmss_adjust(skb, TCPH(l4), -8);
 				return NF_ACCEPT;
 			}
@@ -1328,7 +1328,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 		NATCAP_DEBUG("(SPO)" DEBUG_TCP_FMT ":after encode\n", DEBUG_TCP_ARG(iph,l4));
 
-		if (!(NS_NATCAP_TCPUDPENC & ns->status)) {
+		if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
 			return NF_ACCEPT;
 		}
 
@@ -1395,7 +1395,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			skb_rcsum_tcpudp(skb);
 		}
 
-		if ((NS_NATCAP_TCPUDPENC & ns->status)) {
+		if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
 			natcap_udp_to_tcp_pack(skb, ns, 1);
 		}
 		return NF_ACCEPT;
@@ -1540,11 +1540,11 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_DROP;
 			}
-			if (!(NS_NATCAP_TCPUDPENC & ns->status)) {
-				short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->status);
+			if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
+				short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->n.status);
 			}
 
-			ns->foreign_seq = foreign_seq;
+			ns->n.foreign_seq = foreign_seq;
 
 			NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": after decode for UDP-to-TCP packet\n", DEBUG_UDP_ARG(iph,l4));
 			return NF_ACCEPT;
@@ -1634,8 +1634,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
 		}
-		if (!(NS_NATCAP_TCPUDPENC & ns->status)) {
-			short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->status);
+		if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
+			short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->n.status);
 		}
 	} else {
 		set_bit(IPS_NATCAP_PRE_BIT, &master->status);
@@ -1738,10 +1738,10 @@ static int get_natcap_dst(struct sock *sk, int optval, void __user *user, int *l
 		struct natcap_session *ns;
 
 		ns = natcap_session_get(ct);
-		if ((IPS_NATCAP & ct->status) && ns && (NS_NATCAP_DST & ns->status)) {
+		if ((IPS_NATCAP & ct->status) && ns && (NS_NATCAP_DST & ns->n.status)) {
 			sin.sin_family = AF_INET;
-			sin.sin_port = ns->tup.port;
-			sin.sin_addr.s_addr = ns->tup.ip;
+			sin.sin_port = ns->n.target_port;
+			sin.sin_addr.s_addr = ns->n.target_ip;
 			memset(sin.sin_zero, 0, sizeof(sin.sin_zero));
 
 			NATCAP_DEBUG("SO_NATCAP_DST: %pI4 %u\n", &sin.sin_addr.s_addr, ntohs(sin.sin_port));

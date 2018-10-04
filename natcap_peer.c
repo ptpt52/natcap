@@ -1167,8 +1167,8 @@ syn_out:
 					TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
 					skb->ip_summed = CHECKSUM_UNNECESSARY;
 					skb_rcsum_tcpudp(skb);
-					if (ns->remote_mss)
-						natcap_tcpmss_set(skb, TCPH(l4), ns->remote_mss);
+					if (ns->p.remote_mss)
+						natcap_tcpmss_set(skb, TCPH(l4), ns->p.remote_mss);
 				} else {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack->synack) FACK in, but ct status or dir error\n", DEBUG_TCP_ARG(iph,l4));
 				}
@@ -1470,7 +1470,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
 			goto h_out;
 		}
-		ns->local_seq = peer_fakeuser_expect(user)->local_seq; //can't be 0
+		ns->p.local_seq = peer_fakeuser_expect(user)->local_seq; //can't be 0
 
 		ps = peer_server_node_in(iph->saddr, 0, 0);
 		if (ps == NULL) {
@@ -1587,11 +1587,11 @@ h_out:
 			server.ip = pt->sip;
 			server.port = pt->sport;
 
-			ns->peer_sip = pt->dip;
-			ns->peer_sport = pt->dport;
-			ns->tcp_seq_offset = pt->local_seq - ntohl(TCPH(l4)->seq);
-			ns->remote_seq = pt->remote_seq;
-			ns->remote_mss = pt->mss;
+			ns->p.peer_sip = pt->dip;
+			ns->p.peer_sport = pt->dport;
+			ns->p.tcp_seq_offset = pt->local_seq - ntohl(TCPH(l4)->seq);
+			ns->p.remote_seq = pt->remote_seq;
+			ns->p.remote_mss = pt->mss;
 			if (!nfct_seqadj(ct) && !nfct_seqadj_ext_add(ct)) {
 				NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": seqadj_ext add failed\n", DEBUG_TCP_ARG(iph,l4));
 			}
@@ -1694,7 +1694,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 
 	dir = CTINFO2DIR(ctinfo);
 	if (dir != IP_CT_DIR_ORIGINAL) {
-		if (ns->local_seq == 0) {
+		if (ns->p.local_seq == 0) {
 			//on server side
 			return NF_ACCEPT;
 		}
@@ -1732,11 +1732,11 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			tcpopt->header.encryption = 0;
 			tcpopt->header.subtype = SUBTYPE_PEER_FACK;
 
-			if (ns->tcp_seq_offset == 0) {
-				ns->tcp_seq_offset = ns->local_seq - ntohl(TCPH(l4)->seq);
+			if (ns->p.tcp_seq_offset == 0) {
+				ns->p.tcp_seq_offset = ns->p.local_seq - ntohl(TCPH(l4)->seq);
 			}
-			if (nf_ct_seq_offset(ct, dir, ntohl(TCPH(l4)->seq + 1)) != ns->tcp_seq_offset) {
-				nf_ct_seqadj_init(ct, ctinfo, ns->tcp_seq_offset);
+			if (nf_ct_seq_offset(ct, dir, ntohl(TCPH(l4)->seq + 1)) != ns->p.tcp_seq_offset) {
+				nf_ct_seqadj_init(ct, ctinfo, ns->p.tcp_seq_offset);
 			}
 
 			TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) + 1);
@@ -1749,7 +1749,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 		return NF_ACCEPT;
 
 	} else {
-		if (ns->local_seq != 0) {
+		if (ns->p.local_seq != 0) {
 			//on client
 			return NF_ACCEPT;
 		}
@@ -1786,12 +1786,12 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			tcpopt->header.encryption = 0;
 			tcpopt->header.subtype = SUBTYPE_PEER_FSYN;
 
-			if (nf_ct_seq_offset(ct, dir, ntohl(TCPH(l4)->seq) + 1) != ns->tcp_seq_offset) {
-				nf_ct_seqadj_init(ct, ctinfo, ns->tcp_seq_offset);
+			if (nf_ct_seq_offset(ct, dir, ntohl(TCPH(l4)->seq) + 1) != ns->p.tcp_seq_offset) {
+				nf_ct_seqadj_init(ct, ctinfo, ns->p.tcp_seq_offset);
 			}
 
 			//TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) + 1);
-			TCPH(l4)->ack_seq = htonl(ns->remote_seq + 1);
+			TCPH(l4)->ack_seq = htonl(ns->p.remote_seq + 1);
 			//TCPH(l4)->syn = 0;
 			TCPH(l4)->ack = 1;
 			TCPH(l4)->doff = (TCPH(l4)->doff * 4 + add_len) / 4;
@@ -1806,12 +1806,12 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	server.ip = ns->peer_sip;
-	server.port = ns->peer_sport;
+	server.ip = ns->p.peer_sip;
+	server.port = ns->p.peer_sport;
 
 	NATCAP_INFO("(PS)" DEBUG_TCP_FMT ": found user expect, doing SNAT to " TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 
-	ret = natcap_snat_setup(ct, ns->peer_sip, ns->peer_sport);
+	ret = natcap_snat_setup(ct, server.ip, server.port);
 	if (ret != NF_ACCEPT) {
 		NATCAP_ERROR("(PS)" DEBUG_TCP_FMT ": natcap_snat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 	}
