@@ -341,4 +341,6 @@ static inline unsigned int uintdiff(unsigned int a, unsigned int b)
 	return b - a;
 }
 
+#define MAX_IOCTL_LEN 256
+
 #endif /* _NATCAP_H_ */

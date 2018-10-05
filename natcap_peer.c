@@ -19,6 +19,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 #include <linux/ctype.h>
+#include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
@@ -56,12 +57,6 @@ static inline __be32 gen_seq_number(void)
 	} while (s == 0);
 	return s;
 }
-
-//__be32 peer_local_ip = __constant_htonl((192<<24)|(168<<16)|(16<<8)|(1<<0));
-__be32 peer_local_ip = __constant_htonl(0);
-__be16 peer_local_port = __constant_htons(443);
-
-#define ICMP_PAYLOAD_LIMIT 1024
 
 #define MAX_PEER_PORT_MAP 65536
 static struct nf_conn **peer_port_map;
@@ -208,6 +203,12 @@ static __be16 alloc_peer_port(struct nf_conn *user, const unsigned char *mac)
 
 	return 0;
 }
+
+//__be32 peer_local_ip = __constant_htonl((192<<24)|(168<<16)|(16<<8)|(1<<0));
+__be32 peer_local_ip = __constant_htonl(0);
+__be16 peer_local_port = __constant_htons(443);
+
+#define ICMP_PAYLOAD_LIMIT 1024
 
 #define MAX_PEER_SERVER 8
 struct peer_server_node peer_server[MAX_PEER_SERVER];
@@ -1867,9 +1868,196 @@ static struct nf_hook_ops peer_hooks[] = {
 	},
 };
 
+
+static int natcap_peer_major = 0;
+static int natcap_peer_minor = 0;
+static int number_of_devices = 1;
+static struct cdev natcap_peer_cdev;
+const char *natcap_peer_dev_name = "natcap_peer_ctl";
+static struct class *natcap_peer_class;
+static struct device *natcap_peer_dev;
+
+static inline struct peer_server_node *peer_server_node_get(int idx)
+{
+	if (idx < MAX_PEER_SERVER) {
+		return &(peer_server[idx]);
+	}
+	return NULL;
+}
+
+static char natcap_peer_ctl_buffer[PAGE_SIZE];
+static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
+{
+	int n = 0;
+
+	if ((*pos) == 0) {
+		n = snprintf(natcap_peer_ctl_buffer,
+				sizeof(natcap_peer_ctl_buffer) - 1,
+				"# Usage:\n"
+				"#    clean -- none\n"
+				"#\n"
+				"# Info:\n"
+				"#    local_target=%pI4:%u\n"
+				"#\n"
+				"# Reload cmd:\n"
+				"\n"
+				"clean\n"
+				"\n",
+				&peer_local_ip,
+				ntohs(peer_local_port)
+				);
+		natcap_peer_ctl_buffer[n] = 0;
+		return natcap_peer_ctl_buffer;
+	} else if ((*pos) > 0) {
+		struct peer_server_node *ps = peer_server_node_get((*pos) - 1);
+		if (ps) {
+			natcap_peer_ctl_buffer[0] = 0;
+			n = snprintf(natcap_peer_ctl_buffer,
+					sizeof(natcap_peer_ctl_buffer) - 1,
+					"node[%pI4:%u] [active since %us]\n"
+					"    conn[%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u]\n",
+					&ps->ip, ntohs(ps->map_port), (uintdiff(ps->last_active, jiffies) + HZ / 2) / HZ,
+					ntohs(ps->port_map[0].sport), ntohs(ps->port_map[0].dport),
+					ntohs(ps->port_map[1].sport), ntohs(ps->port_map[1].dport),
+					ntohs(ps->port_map[2].sport), ntohs(ps->port_map[2].dport),
+					ntohs(ps->port_map[3].sport), ntohs(ps->port_map[3].dport),
+					ntohs(ps->port_map[4].sport), ntohs(ps->port_map[4].dport),
+					ntohs(ps->port_map[5].sport), ntohs(ps->port_map[5].dport),
+					ntohs(ps->port_map[6].sport), ntohs(ps->port_map[6].dport),
+					ntohs(ps->port_map[7].sport), ntohs(ps->port_map[7].dport)
+					);
+			natcap_peer_ctl_buffer[n] = 0;
+			return natcap_peer_ctl_buffer;
+		}
+	}
+
+	return NULL;
+}
+
+static void *natcap_peer_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	(*pos)++;
+	if ((*pos) > 0) {
+		return natcap_peer_start(m, pos);
+	}
+	return NULL;
+}
+
+static void natcap_peer_stop(struct seq_file *m, void *v)
+{
+}
+
+static int natcap_peer_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%s", (char *)v);
+	return 0;
+}
+
+const struct seq_operations natcap_peer_seq_ops = {
+	.start = natcap_peer_start,
+	.next = natcap_peer_next,
+	.stop = natcap_peer_stop,
+	.show = natcap_peer_show,
+};
+
+static ssize_t natcap_peer_read(struct file *file, char __user *buf, size_t buf_len, loff_t *offset)
+{
+	return seq_read(file, buf, buf_len, offset);
+}
+
+static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size_t buf_len, loff_t *offset)
+{
+	int err = 0;
+	int n, l;
+	int cnt = MAX_IOCTL_LEN;
+	static char data[MAX_IOCTL_LEN];
+	static int data_left = 0;
+
+	cnt -= data_left;
+	if (buf_len < cnt)
+		cnt = buf_len;
+
+	if (copy_from_user(data + data_left, buf, cnt) != 0)
+		return -EACCES;
+
+	n = 0;
+	while(n < cnt && (data[n] == ' ' || data[n] == '\n' || data[n] == '\t')) n++;
+	if (n) {
+		*offset += n;
+		data_left = 0;
+		return n;
+	}
+
+	//make sure line ended with '\n' and line len <= MAX_IOCTL_LEN
+	l = 0;
+	while (l < cnt && data[l + data_left] != '\n') l++;
+	if (l >= cnt) {
+		data_left += l;
+		if (data_left >= MAX_IOCTL_LEN) {
+			NATCAP_println("err: too long a line");
+			data_left = 0;
+			return -EINVAL;
+		}
+		goto done;
+	} else {
+		data[l + data_left] = '\0';
+		data_left = 0;
+		l++;
+	}
+
+	if (strncmp(data, "local_target=", 13) == 0) {
+		unsigned int a, b, c, d, e;
+		n = sscanf(data, "local_target=%u.%u.%u.%u:%u", &a, &b, &c, &d, &e);
+		if ( (n == 5 && e <= 0xffff) &&
+				(((a & 0xff) == a) &&
+				 ((b & 0xff) == b) &&
+				 ((c & 0xff) == c) &&
+				 ((d & 0xff) == d)) ) {
+			peer_local_ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+			peer_local_port = htons(e);
+			goto done;
+		}
+	}
+
+	NATCAP_println("ignoring line[%s]", data);
+	if (err != 0) {
+		return err;
+	}
+
+done:
+	*offset += l;
+	return l;
+}
+
+static int natcap_peer_open(struct inode *inode, struct file *file)
+{
+	int ret = seq_open(file, &natcap_peer_seq_ops);
+	if (ret)
+		return ret;
+	//set nonseekable
+	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
+
+	return 0;
+}
+
+static int natcap_peer_release(struct inode *inode, struct file *file)
+{
+	return seq_release(inode, file);
+}
+
+static struct file_operations natcap_peer_fops = {
+	.owner = THIS_MODULE,
+	.open = natcap_peer_open,
+	.release = natcap_peer_release,
+	.read = natcap_peer_read,
+	.write = natcap_peer_write,
+	.llseek  = seq_lseek,
+};
+
 int natcap_peer_init(void)
 {
 	int i;
+	dev_t devno;
 	int ret = 0;
 
 	need_conntrack();
@@ -1894,8 +2082,54 @@ int natcap_peer_init(void)
 	if (ret != 0)
 		goto nf_register_hooks_failed;
 
+	if (natcap_peer_major > 0) {
+		devno = MKDEV(natcap_peer_major, natcap_peer_minor);
+		ret = register_chrdev_region(devno, number_of_devices, natcap_peer_dev_name);
+	} else {
+		ret = alloc_chrdev_region(&devno, natcap_peer_minor, number_of_devices, natcap_peer_dev_name);
+	}
+	if (ret < 0) {
+		NATCAP_println("alloc_chrdev_region failed!");
+		goto chrdev_region_failed;
+	}
+	natcap_peer_major = MAJOR(devno);
+	natcap_peer_minor = MINOR(devno);
+	NATCAP_println("natcap_peer_major=%d, natcap_peer_minor=%d", natcap_peer_major, natcap_peer_minor);
+
+	cdev_init(&natcap_peer_cdev, &natcap_peer_fops);
+	natcap_peer_cdev.owner = THIS_MODULE;
+	natcap_peer_cdev.ops = &natcap_peer_fops;
+
+	ret = cdev_add(&natcap_peer_cdev, devno, 1);
+	if (ret) {
+		NATCAP_println("adding chardev, error=%d", ret);
+		goto cdev_add_failed;
+	}
+
+	natcap_peer_class = class_create(THIS_MODULE,"natcap_peer_class");
+	if (IS_ERR(natcap_peer_class)) {
+		NATCAP_println("failed in creating class");
+		ret = -EINVAL;
+		goto class_create_failed;
+	}
+
+	natcap_peer_dev = device_create(natcap_peer_class, NULL, devno, NULL, natcap_peer_dev_name);
+	if (!natcap_peer_dev) {
+		ret = -EINVAL;
+		goto device_create_failed;
+	}
+
 	return 0;
 
+	//device_destroy(natcap_peer_class, devno);
+device_create_failed:
+	class_destroy(natcap_peer_class);
+class_create_failed:
+	cdev_del(&natcap_peer_cdev);
+cdev_add_failed:
+	unregister_chrdev_region(devno, number_of_devices);
+chrdev_region_failed:
+	nf_unregister_hooks(peer_hooks, ARRAY_SIZE(peer_hooks));
 nf_register_hooks_failed:
 	peer_port_map_exit();
 peer_port_map_init_failed:
@@ -1905,6 +2139,13 @@ peer_port_map_init_failed:
 void natcap_peer_exit(void)
 {
 	int i;
+	dev_t devno;
+
+	devno = MKDEV(natcap_peer_major, natcap_peer_minor);
+	device_destroy(natcap_peer_class, devno);
+	class_destroy(natcap_peer_class);
+	cdev_del(&natcap_peer_cdev);
+	unregister_chrdev_region(devno, number_of_devices);
 
 	nf_unregister_hooks(peer_hooks, ARRAY_SIZE(peer_hooks));
 
