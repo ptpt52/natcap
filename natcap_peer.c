@@ -75,7 +75,7 @@ unsigned int peer_port_map_timeout = NATCAP_PEER_USER_TIMEOUT_DEFAULT;
 
 #define PEER_PORT_MAP_FLUSH_STEP 256
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 18, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
 static void peer_port_map_flush(unsigned long ignore)
 #else
 static void peer_port_map_flush(struct timer_list *ignore)
@@ -117,7 +117,7 @@ static int peer_port_map_init(void)
 	}
 	memset(peer_port_map, 0, sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 18, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
 	init_timer(timer);
 	timer->data = 0;
 	timer->function = peer_port_map_flush;
