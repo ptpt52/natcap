@@ -268,7 +268,7 @@ init_out:
 		ps->map_port = 0;
 		ps->mss = 0;
 		ps->conn = conn;
-		ps->last_active = last_jiffies;
+		ps->last_active = 0;
 
 		spin_unlock_bh(&ps->lock);
 	}
@@ -1917,7 +1917,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 					PAGE_SIZE - 1,
 					"node[%pI4:%u] [active since %us]\n"
 					"    conn[%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u]\n",
-					&ps->ip, ntohs(ps->map_port), (uintdiff(ps->last_active, jiffies) + HZ / 2) / HZ,
+					&ps->ip, ntohs(ps->map_port), ps->last_active != 0 ? (uintdiff(ps->last_active, jiffies) + HZ / 2) / HZ : (unsigned int)(-1),
 					ntohs(ps->port_map[0].sport), ntohs(ps->port_map[0].dport),
 					ntohs(ps->port_map[1].sport), ntohs(ps->port_map[1].dport),
 					ntohs(ps->port_map[2].sport), ntohs(ps->port_map[2].dport),
