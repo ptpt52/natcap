@@ -1885,14 +1885,15 @@ static inline struct peer_server_node *peer_server_node_get(int idx)
 	return NULL;
 }
 
-static char natcap_peer_ctl_buffer[PAGE_SIZE];
+static int natcap_peer_ctl_buffer_use = 0;
+static char *natcap_peer_ctl_buffer = NULL;
 static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 {
 	int n = 0;
 
 	if ((*pos) == 0) {
 		n = snprintf(natcap_peer_ctl_buffer,
-				sizeof(natcap_peer_ctl_buffer) - 1,
+				PAGE_SIZE - 1,
 				"# Usage:\n"
 				"#    clean -- none\n"
 				"#\n"
@@ -1913,7 +1914,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 		if (ps) {
 			natcap_peer_ctl_buffer[0] = 0;
 			n = snprintf(natcap_peer_ctl_buffer,
-					sizeof(natcap_peer_ctl_buffer) - 1,
+					PAGE_SIZE - 1,
 					"node[%pI4:%u] [active since %us]\n"
 					"    conn[%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u]\n",
 					&ps->ip, ntohs(ps->map_port), (uintdiff(ps->last_active, jiffies) + HZ / 2) / HZ,
@@ -2031,18 +2032,35 @@ done:
 
 static int natcap_peer_open(struct inode *inode, struct file *file)
 {
-	int ret = seq_open(file, &natcap_peer_seq_ops);
-	if (ret)
-		return ret;
+	int ret;
 	//set nonseekable
 	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
 
+	if (natcap_peer_ctl_buffer_use++ == 0)
+	{
+		natcap_peer_ctl_buffer = kmalloc(PAGE_SIZE, GFP_KERNEL);
+		if (natcap_peer_ctl_buffer == NULL) {
+			natcap_peer_ctl_buffer_use--;
+			return -ENOMEM;
+		}
+	}
+
+	ret = seq_open(file, &natcap_peer_seq_ops);
+	if (ret)
+		return ret;
 	return 0;
 }
 
 static int natcap_peer_release(struct inode *inode, struct file *file)
 {
-	return seq_release(inode, file);
+	int ret = seq_release(inode, file);
+
+	if (--natcap_peer_ctl_buffer_use == 0) {
+		kfree(natcap_peer_ctl_buffer);
+		natcap_peer_ctl_buffer = NULL;
+	}
+
+	return ret;
 }
 
 static struct file_operations natcap_peer_fops = {

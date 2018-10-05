@@ -64,14 +64,15 @@ const char *natcap_dev_name = "natcap_ctl";
 static struct class *natcap_class;
 static struct device *natcap_dev;
 
-static char natcap_ctl_buffer[PAGE_SIZE];
+static int natcap_ctl_buffer_use = 0;
+static char *natcap_ctl_buffer = NULL;
 static void *natcap_start(struct seq_file *m, loff_t *pos)
 {
 	int n = 0;
 
 	if ((*pos) == 0) {
 		n = snprintf(natcap_ctl_buffer,
-				sizeof(natcap_ctl_buffer) - 1,
+				PAGE_SIZE - 1,
 				"# Version: %s\n"
 				"# Usage:\n"
 				"#    disabled=Number -- set disable/enable\n"
@@ -142,7 +143,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 
 		if (dst) {
 			n = snprintf(natcap_ctl_buffer,
-					sizeof(natcap_ctl_buffer) - 1,
+					PAGE_SIZE - 1,
 					"server " TUPLE_FMT "\n",
 					TUPLE_ARG(dst));
 			natcap_ctl_buffer[n] = 0;
@@ -155,20 +156,9 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 
 static void *natcap_next(struct seq_file *m, void *v, loff_t *pos)
 {
-	int n;
-	struct tuple *dst;
-
 	(*pos)++;
 	if ((*pos) > 0) {
-		dst = (struct tuple *)natcap_server_info_get((*pos) - 1);
-		if (dst) {
-			n = snprintf(natcap_ctl_buffer,
-					sizeof(natcap_ctl_buffer) - 1,
-					"server " TUPLE_FMT "\n",
-					TUPLE_ARG(dst));
-			natcap_ctl_buffer[n] = 0;
-			return natcap_ctl_buffer;
-		}
+		return natcap_start(m, pos);
 	}
 	return NULL;
 }
@@ -200,8 +190,8 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	int err = 0;
 	int n, l;
 	struct tuple dst;
-	int cnt = 256;
-	static char data[256];
+	int cnt = MAX_IOCTL_LEN;
+	static char data[MAX_IOCTL_LEN];
 	static int data_left = 0;
 
 	cnt -= data_left;
@@ -224,7 +214,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	while (l < cnt && data[l + data_left] != '\n') l++;
 	if (l >= cnt) {
 		data_left += l;
-		if (data_left >= 256) {
+		if (data_left >= MAX_IOCTL_LEN) {
 			NATCAP_println("err: too long a line");
 			data_left = 0;
 			return -EINVAL;
@@ -548,18 +538,36 @@ done:
 
 static int natcap_open(struct inode *inode, struct file *file)
 {
-	int ret = seq_open(file, &natcap_seq_ops);
-	if (ret)
-		return ret;
+	int ret;
 	//set nonseekable
 	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
+
+	if (natcap_ctl_buffer_use++ == 0)
+	{
+		natcap_ctl_buffer = kmalloc(PAGE_SIZE, GFP_KERNEL);
+		if (natcap_ctl_buffer == NULL) {
+			natcap_ctl_buffer_use--;
+			return -ENOMEM;
+		}
+	}
+
+	ret = seq_open(file, &natcap_seq_ops);
+	if (ret)
+		return ret;
 
 	return 0;
 }
 
 static int natcap_release(struct inode *inode, struct file *file)
 {
-	return seq_release(inode, file);
+	int ret = seq_release(inode, file);
+
+	if (--natcap_ctl_buffer_use == 0) {
+		kfree(natcap_ctl_buffer);
+		natcap_ctl_buffer = NULL;
+	}
+
+	return ret;
 }
 
 static struct file_operations natcap_fops = {
