@@ -49,6 +49,23 @@ enum {
 	PEER_MODE = 5,
 };
 
+enum {
+	TCP_ENCODE = 0,
+	UDP_ENCODE = 1,
+};
+
+static inline void natcap_tuple_to_ns(struct natcap_session *ns, const struct tuple *t, unsigned char protocol)
+{
+	if (t->encryption) {
+		short_set_bit(NS_NATCAP_ENC_BIT, &ns->n.status);
+	}
+	if (((protocol == IPPROTO_TCP) && (t->tcp_encode != TCP_ENCODE)) || ((protocol == IPPROTO_UDP) && (t->udp_encode != UDP_ENCODE))) {
+		short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->n.status);
+	}
+	ns->n.target_ip = t->ip;
+	ns->n.target_port = t->port;
+}
+
 extern struct cone_nat_session *cone_nat_array;
 
 extern unsigned int natcap_touch_timeout;

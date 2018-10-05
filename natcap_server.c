@@ -425,7 +425,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
 	ns = natcap_session_get(ct);
-	if (ns && (NS_NATCAP_TCPUDPENC & ns->n.status)) {
+	if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		header_len = 8;
 		protocol = IPPROTO_UDP;
 	}
@@ -479,7 +479,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	ntcph->check = 0;
 	ntcph->urg_ptr = 0;
 
-	if ((IPS_NATCAP_ENC & ct->status)) {
+	if ((NS_NATCAP_ENC & ns->n.status)) {
 		natcap_data_encode(data, payload_len);
 	}
 
@@ -984,7 +984,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				return NF_ACCEPT;
 			}
 
-			tcpopt.header.encryption = !!(IPS_NATCAP_ENC & ct->status);
+			tcpopt.header.encryption = !!(NS_NATCAP_ENC & ns->n.status);
 			ret = natcap_tcp_decode(ct, skb, &tcpopt, IP_CT_DIR_ORIGINAL);
 			if (ret != 0) {
 				NATCAP_ERROR("(SPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
@@ -1060,7 +1060,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				NATCAP_INFO("(SPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 
 				if (server.encryption) {
-					set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+					short_set_bit(NS_NATCAP_ENC_BIT, &ns->n.status);
 				}
 
 				if (mode == SERVER_MODE && natcap_redirect_port != 0 && (tcpopt.header.type & NATCAP_TCPOPT_SPROXY)) {
@@ -1077,7 +1077,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					rcu_read_unlock();
 
 					if (newdst && newdst != server.ip) {
-						natcap_tuple_to_ns(ns, &server);
+						natcap_tuple_to_ns(ns, &server, iph->protocol);
 						short_set_bit(NS_NATCAP_DST_BIT, &ns->n.status);
 
 						server.ip = newdst;
@@ -1128,7 +1128,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 			NATCAP_DEBUG("(SPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
 			if (NATCAP_UDP_GET_ENC(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == 0x01) {
-				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
+				short_set_bit(NS_NATCAP_ENC_BIT, &ns->n.status);
 			}
 			//reply ACK pkt
 			natcap_udp_reply_cfm(in, skb, ct);
@@ -1178,7 +1178,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				return NF_ACCEPT;
 			}
 
-			if ((IPS_NATCAP_ENC & ct->status)) {
+			if ((NS_NATCAP_ENC & ns->n.status)) {
 				if (!skb_make_writable(skb, skb->len)) {
 					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": natcap_udp_decode() failed\n", DEBUG_UDP_ARG(iph,l4));
 					return NF_DROP;
@@ -1310,7 +1310,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 		}
 
 		NATCAP_DEBUG("(SPO)" DEBUG_TCP_FMT ": before encode\n", DEBUG_TCP_ARG(iph,l4));
-		if ((IPS_NATCAP_ENC & ct->status)) {
+		if ((NS_NATCAP_ENC & ns->n.status)) {
 			status |= NATCAP_NEED_ENC;
 		}
 
@@ -1386,7 +1386,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 		return NF_STOLEN;
 	} else if (iph->protocol == IPPROTO_UDP) {
 		NATCAP_DEBUG("(SPO)" DEBUG_UDP_FMT ": pass data reply\n", DEBUG_UDP_ARG(iph,l4));
-		if ((IPS_NATCAP_ENC & ct->status)) {
+		if ((NS_NATCAP_ENC & ns->n.status)) {
 			if (!skb_make_writable(skb, skb->len)) {
 				NATCAP_ERROR("(SPO)" DEBUG_UDP_FMT ": natcap_udp_encode() failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;

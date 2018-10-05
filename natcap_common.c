@@ -379,7 +379,7 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			return 0;
 		}
 		//syn
-		if (http_confusion && ns && !(NS_NATCAP_TCPUDPENC & ns->n.status) && (IPS_NATCAP_ENC & ct->status)) {
+		if (http_confusion && ns && !(NS_NATCAP_TCPUDPENC & ns->n.status) && (NS_NATCAP_ENC & ns->n.status)) {
 			add_len += sizeof(unsigned int);
 			if (ns->n.tcp_seq_offset == 0) {
 				ns->n.tcp_seq_offset = sizeof(htp_confusion_req) / 2 + jiffies % (sizeof(htp_confusion_req) / 4);

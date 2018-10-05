@@ -731,13 +731,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
-
-			if (server.encryption) {
-				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-			}
-			if (server.tcp_encode == UDP_ENCODE) {
-				short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->n.status);
-			}
+			natcap_tuple_to_ns(ns, &server, iph->protocol);
 
 			if (in && strncmp(in->name, "natcap", 6) == 0) {
 				if (!(NS_NATCAP_NOLIMIT & ns->n.status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->n.status);
@@ -778,7 +772,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
-				natcap_tuple_to_ns(ns, &server);
+				natcap_tuple_to_ns(ns, &server, iph->protocol);
 
 				set_bit(IPS_NATCAP_DUAL_BIT, &ct->status);
 
@@ -848,7 +842,7 @@ natcap_dual_out:
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
-				natcap_tuple_to_ns(ns, &server);
+				natcap_tuple_to_ns(ns, &server, iph->protocol);
 
 				set_bit(IPS_NATCAP_DUAL_BIT, &ct->status);
 
@@ -888,13 +882,7 @@ natcap_dual_out:
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
-
-			if (server.encryption) {
-				set_bit(IPS_NATCAP_ENC_BIT, &ct->status);
-			}
-			if (server.udp_encode == TCP_ENCODE) {
-				short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->n.status);
-			}
+			natcap_tuple_to_ns(ns, &server, iph->protocol);
 
 			if (in && strncmp(in->name, "natcap", 6) == 0) {
 				if (!(NS_NATCAP_NOLIMIT & ns->n.status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->n.status);
@@ -1120,7 +1108,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 
 		NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": before decode\n", DEBUG_TCP_ARG(iph,l4));
 
-		tcpopt.header.encryption = !!(IPS_NATCAP_ENC & ct->status);
+		tcpopt.header.encryption = !!(NS_NATCAP_ENC & ns->n.status);
 		ret = natcap_tcp_decode(ct, skb, &tcpopt, IP_CT_DIR_REPLY);
 		if (ret != 0) {
 			NATCAP_ERROR("(CPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
@@ -1156,7 +1144,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			return NF_DROP;
 		}
 
-		if ((IPS_NATCAP_ENC & ct->status)) {
+		if ((NS_NATCAP_ENC & ns->n.status)) {
 			if (!skb_make_writable(skb, skb->len)) {
 				NATCAP_ERROR("(CPCI)" DEBUG_UDP_FMT ": natcap_udp_decode() failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
@@ -1526,7 +1514,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		struct sk_buff *skb2 = NULL;
 		struct sk_buff *skb_htp = NULL;
 
-		if ((IPS_NATCAP_ENC & ct->status)) {
+		if ((NS_NATCAP_ENC & ns->n.status)) {
 			status |= NATCAP_NEED_ENC;
 		}
 
@@ -1602,7 +1590,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		}
 
 		if (ns->n.tcp_seq_offset && TCPH(l4)->ack && !(NS_NATCAP_TCPUDPENC & ns->n.status) &&
-				(IPS_NATCAP_ENC & ct->status) && (IPS_SEEN_REPLY & ct->status) &&
+				(NS_NATCAP_ENC & ns->n.status) && (IPS_SEEN_REPLY & ct->status) &&
 				!(NS_NATCAP_CONFUSION & ns->n.status) && !short_test_and_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->n.status) &&
 				nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq + 1)) != ns->n.tcp_seq_offset) {
 			struct natcap_TCPOPT *tcpopt;
@@ -1735,7 +1723,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 		return NF_STOLEN;
 	} else if (iph->protocol == IPPROTO_UDP) {
-		if ((IPS_NATCAP_ENC & ct->status)) {
+		if ((NS_NATCAP_ENC & ns->n.status)) {
 			if (!skb_make_writable(skb, skb->len)) {
 				NATCAP_ERROR("(CPO)" DEBUG_UDP_FMT ": natcap_udp_encode() failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
@@ -1769,7 +1757,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
 				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x01));
 
-				if ((IPS_NATCAP_ENC & ct->status)) {
+				if ((NS_NATCAP_ENC & ns->n.status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x0100 | 0x01));
 				}
 
@@ -1805,7 +1793,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
 				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x02));
 
-				if ((IPS_NATCAP_ENC & ct->status)) {
+				if ((NS_NATCAP_ENC & ns->n.status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x0100 | 0x02));
 				}
 
@@ -2068,19 +2056,10 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			return NF_ACCEPT;
 		}
 		if ((ns->n.status & NS_NATCAP_ENC)) {
-			set_bit(IPS_NATCAP_ENC_BIT, &master->status);
+			short_set_bit(NS_NATCAP_ENC_BIT, &master_ns->n.status);
 		}
-		switch(iph->protocol) {
-			case IPPROTO_TCP:
-				if (!(ns->n.status & NS_NATCAP_TCPENC)) {
-					short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &master_ns->n.status);
-				}
-				break;
-			case IPPROTO_UDP:
-				if (!(ns->n.status & NS_NATCAP_UDPENC)) {
-					short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &master_ns->n.status);
-				}
-				break;
+		if ((ns->n.status & NS_NATCAP_TCPUDPENC)) {
+			short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &master_ns->n.status);
 		}
 		if ((NS_NATCAP_NOLIMIT & ns->n.status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &master_ns->n.status);
 
@@ -2155,7 +2134,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		struct sk_buff *skb_htp = NULL;
 		struct sk_buff *skb2 = NULL;
 
-		if ((IPS_NATCAP_ENC & master->status)) {
+		if ((NS_NATCAP_ENC & master_ns->n.status)) {
 			status |= NATCAP_NEED_ENC;
 		}
 		ret = natcap_tcpopt_setup(status, skb, master, &tcpopt,
@@ -2243,7 +2222,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 
 		if (master_ns->n.tcp_seq_offset && TCPH(l4)->ack && !(NS_NATCAP_TCPUDPENC & master_ns->n.status) &&
-				(IPS_NATCAP_ENC & ct->status) && (IPS_SEEN_REPLY & master->status) &&
+				(NS_NATCAP_ENC & master_ns->n.status) && (IPS_SEEN_REPLY & master->status) &&
 				!(NS_NATCAP_CONFUSION & master_ns->n.status) && !short_test_and_set_bit(NS_NATCAP_CONFUSION_BIT, &master_ns->n.status) &&
 				nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq + 1)) != master_ns->n.tcp_seq_offset) {
 			struct natcap_TCPOPT *tcpopt;
@@ -2364,7 +2343,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		} while (skb);
 
 	} else {
-		if ((IPS_NATCAP_ENC & master->status)) {
+		if ((NS_NATCAP_ENC & master_ns->n.status)) {
 			if (!skb_make_writable(skb, skb->len)) {
 				NATCAP_ERROR("(CPMO)" DEBUG_UDP_FMT ": natcap_udp_encode() failed\n", DEBUG_UDP_ARG(iph,l4));
 				consume_skb(skb);
@@ -2405,7 +2384,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				}
 				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x01));
 
-				if ((IPS_NATCAP_ENC & master->status)) {
+				if ((NS_NATCAP_ENC & master_ns->n.status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x0100 | 0x01));
 				}
 
@@ -2447,7 +2426,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				}
 				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x02));
 
-				if ((IPS_NATCAP_ENC & master->status)) {
+				if ((NS_NATCAP_ENC & master_ns->n.status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x0100 | 0x02));
 				}
 

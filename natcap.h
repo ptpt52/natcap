@@ -194,21 +194,6 @@ struct natcap_session {
 	};
 };
 
-enum {
-	TCP_ENCODE = 0,
-	UDP_ENCODE = 1,
-};
-
-static inline void natcap_tuple_to_ns(struct natcap_session *ns, const struct tuple *t)
-{
-	ns->n.status |= \
-				  ((!!t->encryption) << NS_NATCAP_ENC_BIT) | \
-				  ((t->udp_encode == UDP_ENCODE) << NS_NATCAP_UDPENC_BIT) | \
-				  ((t->tcp_encode == TCP_ENCODE) << NS_NATCAP_TCPENC_BIT);
-	ns->n.target_ip = t->ip;
-	ns->n.target_port = t->port;
-}
-
 #define NATCAP_MAGIC 0x43415099
 
 /*XXX refer to drivers/nos/src/nos.h */
@@ -266,12 +251,24 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 
 /* @linux/netfilter/nf_conntrack_common.h */
 /* ct->status use bits:[31-24] for ecap status */
-#define IPS_NATCAP_BIT 24
+
+#define IPS_NATCAP_PRE_BIT 21
+#define IPS_NATCAP_PRE (1 << IPS_NATCAP_PRE_BIT)
+
+#define IPS_NATCAP_PEER_BIT 22
+#define IPS_NATCAP_PEER (1 << IPS_NATCAP_PEER_BIT)
+
+#define IPS_NATCAP_CFM_BIT 23
+#define IPS_NATCAP_CFM (1 << IPS_NATCAP_CFM_BIT)
+
+#define IPS_NATCAP_ACK_BIT 24
+#define IPS_NATCAP_ACK (1 << IPS_NATCAP_ACK_BIT)
+
+#define IPS_NATCAP_BIT 25
 #define IPS_NATCAP (1 << IPS_NATCAP_BIT)
-#define IPS_NATCAP_BYPASS_BIT 25
+
+#define IPS_NATCAP_BYPASS_BIT 26
 #define IPS_NATCAP_BYPASS (1 << IPS_NATCAP_BYPASS_BIT)
-#define IPS_NATCAP_ENC_BIT 26
-#define IPS_NATCAP_ENC (1 << IPS_NATCAP_ENC_BIT)
 
 #define IPS_NATCAP_SERVER_BIT 27
 #define IPS_NATCAP_SERVER (1 << IPS_NATCAP_SERVER_BIT)
@@ -287,16 +284,6 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 
 #define IPS_NATCAP_SYN2_BIT 31
 #define IPS_NATCAP_SYN2 (1 << IPS_NATCAP_SYN2_BIT)
-#define IPS_NATCAP_PRE_BIT 31 /* overlay with IPS_NATCAP_SYN2_BIT */
-#define IPS_NATCAP_PRE (1 << IPS_NATCAP_PRE_BIT)
-
-#define IPS_NATCAP_ACK_BIT 23
-#define IPS_NATCAP_ACK (1 << IPS_NATCAP_ACK_BIT)
-#define IPS_NATCAP_CFM_BIT 22
-#define IPS_NATCAP_CFM (1 << IPS_NATCAP_CFM_BIT)
-
-#define IPS_NATCAP_PEER_BIT 21
-#define IPS_NATCAP_PEER (1 << IPS_NATCAP_PEER_BIT)
 
 #define NATCAP_UDP_GET_TYPE(x) (0xFF & ntohs(x))
 #define NATCAP_UDP_GET_ENC(x) ((0xFF00 & ntohs(x)) >> 8)
@@ -306,6 +293,7 @@ enum {
 	E_NATCAP_AUTH_FAIL,
 	E_NATCAP_INVAL,
 };
+
 #endif /* __KERNEL__ */
 
 #define SO_NATCAP_DST 153
