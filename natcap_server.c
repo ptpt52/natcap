@@ -215,7 +215,7 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	skb_rcsum_tcpudp(nskb);
 
 	ns = natcap_session_get(ct);
-	if (ns && (NS_NATCAP_TCPUDPENC & ns->n.status)) {
+	if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		natcap_udp_to_tcp_pack(nskb, ns, 1);
 	}
 
@@ -242,7 +242,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
 	ns = natcap_session_get(ct);
-	if (ns && (NS_NATCAP_TCPUDPENC & ns->n.status)) {
+	if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		header_len = 8;
 		protocol = IPPROTO_UDP;
 	}
@@ -333,7 +333,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
 	ns = natcap_session_get(ct);
-	if (ns && (NS_NATCAP_TCPUDPENC & ns->n.status)) {
+	if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		header_len = 8;
 		protocol = IPPROTO_UDP;
 	}
@@ -614,12 +614,12 @@ static inline unsigned int natcap_try_http_redirect(struct iphdr *iph, struct sk
 	data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
 	if ((data_len > 4 && strncasecmp(data, "GET ", 4) == 0) ||
 			(data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
-		if (ns) short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
+		short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
 		natcap_auth_http_302(in, skb, ct);
 		natcap_auth_tcp_to_rst(skb);
 		return NF_ACCEPT;
 	} else if (data_len > 0) {
-		if (ns) short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
+		short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
 		natcap_auth_tcp_reply_rst(in, skb, ct, IP_CT_DIR_ORIGINAL);
 		natcap_auth_tcp_to_rst(skb);
 		return NF_ACCEPT;
@@ -1077,7 +1077,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					rcu_read_unlock();
 
 					if (newdst && newdst != server.ip) {
-						natcap_tuple_to_ns(ns, &server, iph->protocol);
+						ns->n.target_ip = server.ip;
+						ns->n.target_port = server.port;
 						short_set_bit(NS_NATCAP_DST_BIT, &ns->n.status);
 
 						server.ip = newdst;
