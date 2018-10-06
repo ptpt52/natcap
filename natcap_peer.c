@@ -146,7 +146,7 @@ static void peer_port_map_exit(void)
 static inline struct nf_conn *get_peer_user(unsigned int port)
 {
 	struct nf_conn *user;
-	if (peer_port_map[port] == NULL)
+	if (port >= MAX_PEER_PORT_MAP || peer_port_map[port] == NULL)
 		return NULL;
 
 	spin_lock_bh(&peer_port_map_lock);
@@ -1949,7 +1949,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			return natcap_peer_ctl_buffer;
 		}
 
-		while ((*pos) - MAX_PEER_SERVER < 65536) {
+		while ((*pos) - MAX_PEER_SERVER < MAX_PEER_PORT_MAP) {
 			user = get_peer_user((*pos) - MAX_PEER_SERVER);
 			if (user == NULL) {
 				(*pos)++;
