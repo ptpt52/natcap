@@ -68,6 +68,9 @@ static struct timer_list peer_port_map_timer;
 
 unsigned int peer_port_map_timeout = NATCAP_PEER_USER_TIMEOUT_DEFAULT;
 
+#define NATCAP_PEER_CONN_TIMEOUT_DEFAULT 180
+unsigned int peer_conn_timeout = NATCAP_PEER_CONN_TIMEOUT_DEFAULT;
+
 #define PEER_PORT_MAP_FLUSH_STEP 256
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
@@ -219,8 +222,6 @@ struct peer_server_node *peer_server_node_in(__be32 ip, unsigned short conn, int
 	unsigned long last_jiffies = jiffies;
 	struct peer_server_node *ps = NULL;
 
-	if (conn >= MAX_PEER_CONN)
-		conn = MAX_PEER_CONN;
 	if (conn <= 0)
 		conn = 1;
 
@@ -269,6 +270,7 @@ init_out:
 		ps->mss = 0;
 		ps->conn = conn;
 		ps->last_active = 0;
+		ps->last_inuse = 0;
 
 		spin_unlock_bh(&ps->lock);
 	}
@@ -699,7 +701,18 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 
 	spin_lock_bh(&ps->lock);
 
-	pmi = (ops != NULL) ? opmi : ntohs(ICMPH(otcph)->un.echo.sequence) % ps->conn;
+	pmi = opmi;
+	if (ops == NULL) {
+		if (ps->last_inuse != 0 && uintdiff(ps->last_inuse, jiffies) < peer_conn_timeout * HZ) {
+			pmi = ntohs(ICMPH(otcph)->un.echo.sequence) % MAX_PEER_CONN;
+		} else {
+			pmi = ntohs(ICMPH(otcph)->un.echo.sequence) % ps->conn;
+			if (pmi != 0) {
+				spin_unlock_bh(&ps->lock);
+				return NULL;
+			}
+		}
+	}
 	if (ps->port_map[pmi].sport == 0) {
 		ps->port_map[pmi].sport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
 		ps->port_map[pmi].dport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
@@ -1495,6 +1508,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 		ps->port_map[pmi].local_seq = 0;
 		ps->port_map[pmi].remote_seq = 0;
 		ps->port_map[pmi].connected = 0;
+		ps->last_inuse = jiffies;
 		spin_unlock_bh(&ps->lock);
 
 		//create a new session

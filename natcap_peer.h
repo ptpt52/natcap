@@ -39,6 +39,7 @@ struct peer_server_node {
 	unsigned short conn;
 	unsigned short mss;
 	unsigned int last_active;
+	unsigned int last_inuse;
 #define MAX_PEER_CONN 8
 	struct port_tuple port_map[MAX_PEER_CONN];
 };
