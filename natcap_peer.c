@@ -49,10 +49,10 @@
 #include "natcap_client.h"
 #include "natcap_knock.h"
 
-__be32 peer_knock_ip = __constant_htonl(0);
-__be16 peer_knock_port = __constant_htons(22);
-unsigned char peer_knock_mac[ETH_ALEN] = { };
-__be16 peer_knock_local_port = __constant_htons(997);
+static __be32 peer_knock_ip = __constant_htonl(0);
+static __be16 peer_knock_port = __constant_htons(22);
+static unsigned char peer_knock_mac[ETH_ALEN] = { };
+static __be16 peer_knock_local_port = __constant_htons(997);
 
 static inline __be32 gen_seq_number(void)
 {
@@ -212,9 +212,8 @@ static __be16 alloc_peer_port(struct nf_conn *user, const unsigned char *mac)
 	return 0;
 }
 
-//__be32 peer_local_ip = __constant_htonl((192<<24)|(168<<16)|(16<<8)|(1<<0));
-__be32 peer_local_ip = __constant_htonl(0);
-__be16 peer_local_port = __constant_htons(443);
+static __be32 peer_local_ip = __constant_htonl(0);
+static __be16 peer_local_port = __constant_htons(443);
 
 #define ICMP_PAYLOAD_LIMIT 1024
 
