@@ -1925,6 +1925,9 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 		natcap_peer_ctl_buffer[n] = 0;
 		return natcap_peer_ctl_buffer;
 	} else if ((*pos) > 0) {
+		unsigned char client_mac[ETH_ALEN];
+		struct nf_conn *user;
+		struct user_expect *ue;
 		struct peer_server_node *ps = peer_server_node_get((*pos) - 1);
 		if (ps) {
 			natcap_peer_ctl_buffer[0] = 0;
@@ -1942,6 +1945,27 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 					ntohs(ps->port_map[6].sport), ntohs(ps->port_map[6].dport),
 					ntohs(ps->port_map[7].sport), ntohs(ps->port_map[7].dport)
 					);
+			natcap_peer_ctl_buffer[n] = 0;
+			return natcap_peer_ctl_buffer;
+		}
+
+		while ((*pos) - MAX_PEER_SERVER < 65536) {
+			user = get_peer_user((*pos) - MAX_PEER_SERVER);
+			if (user == NULL) {
+				(*pos)++;
+				continue;
+			}
+			natcap_peer_ctl_buffer[0] = 0;
+			set_byte4(client_mac, get_byte4((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip));
+			set_byte2(client_mac + 4, get_byte2((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all));
+			ue = peer_user_expect(user);
+			n = snprintf(natcap_peer_ctl_buffer,
+					PAGE_SIZE - 1,
+					"client[%02X:%02X:%02X:%02X:%02X:%02X,%pI4] @port=%u [active since %us]\n",
+					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+					&ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (unsigned int)(-1)
+					);
+			nf_ct_put(user);
 			natcap_peer_ctl_buffer[n] = 0;
 			return natcap_peer_ctl_buffer;
 		}
