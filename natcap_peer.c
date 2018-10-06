@@ -1966,7 +1966,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 					&ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 					);
-			nf_ct_put(user);
+			put_peer_user(user);
 			natcap_peer_ctl_buffer[n] = 0;
 			return natcap_peer_ctl_buffer;
 		}
