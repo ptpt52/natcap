@@ -596,6 +596,9 @@ static inline int inet_is_local(const struct net_device *dev, __be32 ip)
 {
 	struct in_device *in_dev;
 
+	if (dev == NULL)
+		return 0;
+
 	rcu_read_lock();
 	in_dev = __in_dev_get_rcu(dev);
 	if (!in_dev)

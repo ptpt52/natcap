@@ -49,6 +49,11 @@
 #include "natcap_client.h"
 #include "natcap_knock.h"
 
+__be32 peer_knock_ip = __constant_htonl(0);
+__be16 peer_knock_port = __constant_htons(22);
+unsigned char peer_knock_mac[ETH_ALEN] = { };
+__be16 peer_knock_local_port = __constant_htons(997);
+
 static inline __be32 gen_seq_number(void)
 {
 	__be32 s;
@@ -953,7 +958,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				goto h_out;
 			}
 
-			if (tcpopt->header.subtype == SUBTYPE_PEER_FSYN) {
+			if (tcpopt->header.subtype == SUBTYPE_PEER_FSYN || tcpopt->header.subtype == SUBTYPE_PEER_XSYN) {
 				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(ack->syn) FSYN in, pass up\n", DEBUG_TCP_ARG(iph,l4));
 				//TCPH(l4)->syn = 1;
 				TCPH(l4)->ack = 0;
@@ -1408,11 +1413,14 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 	enum ip_conntrack_info ctinfo;
 	struct net *net = &init_net;
 	struct nf_conn *ct;
+	struct nf_conn *user;
 	struct iphdr *iph;
 	void *l4;
 	struct nf_conntrack_tuple_hash *h;
 	struct nf_conntrack_tuple tuple;
 	struct tuple server;
+	unsigned int port;
+	int is_knock = 0;
 
 	if (in)
 		net = dev_net(in);
@@ -1446,7 +1454,33 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (!inet_is_local(in, iph->daddr)) {
+	if (in && !inet_is_local(in, iph->daddr)) {
+		return NF_ACCEPT;
+	}
+
+	if (TCPH(l4)->dest == peer_knock_local_port) {
+		memset(&tuple, 0, sizeof(tuple));
+		tuple.src.u3.ip = get_byte4(peer_knock_mac);
+		tuple.src.u.udp.port = get_byte2(peer_knock_mac + 4);
+		tuple.dst.u3.ip = PEER_FAKEUSER_DADDR;
+		tuple.dst.u.udp.port = htons(65535);
+		tuple.src.l3num = PF_INET;
+		tuple.dst.protonum = IPPROTO_UDP;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+		h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
+		h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
+		if (h) {
+			struct user_expect *ue;
+			user = nf_ct_tuplehash_to_ctrack(h);
+			ue = peer_user_expect(user);
+			port = ntohs(ue->map_port);
+			is_knock = 1;
+			nf_ct_put(user);
+			goto knock;
+		}
 		return NF_ACCEPT;
 	}
 
@@ -1468,6 +1502,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 		struct peer_server_node *ps;
 		struct nf_conn *user;
 		struct natcap_session *ns;
+		struct natcap_TCPOPT *tcpopt;
 
 		user = nf_ct_tuplehash_to_ctrack(h);
 		if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
@@ -1526,8 +1561,16 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 		} while (0);
 
 h_bypass:
-		server.ip = peer_local_ip == 0 ? iph->daddr : peer_local_ip;
-		server.port = peer_local_port;
+		tcpopt = natcap_peer_decode_header(TCPH(l4));
+		if (tcpopt != NULL && tcpopt->header.subtype == SUBTYPE_PEER_XSYN) {
+			struct natcap_TCPOPT_dst *optdst = (struct natcap_TCPOPT_dst *)((void *)tcpopt + sizeof(struct natcap_TCPOPT_header));
+			server.ip = get_byte4((void *)&optdst->ip);
+			server.port = get_byte2((void *)&optdst->port);
+			if (server.ip == 0) server.ip = iph->daddr;
+		} else {
+			server.ip = peer_local_ip == 0 ? iph->daddr : peer_local_ip;
+			server.port = peer_local_port;
+		}
 
 		ret = natcap_dnat_setup(ct, server.ip, server.port);
 		if (ret != NF_ACCEPT) {
@@ -1546,9 +1589,8 @@ h_out:
 		nf_ct_put(user);
 		return NF_ACCEPT;
 	} else {
-		struct nf_conn *user;
-		unsigned int port = ntohs(TCPH(l4)->dest);
-
+		port = ntohs(TCPH(l4)->dest);
+knock:
 		user = get_peer_user(port);
 		if (user) {
 			int i;
@@ -1621,6 +1663,10 @@ h_out:
 			pt->connected = 0;
 
 			spin_unlock_bh(&ue->lock);
+
+			if (is_knock) {
+				short_set_bit(NS_PEER_KNOCK_BIT, &ns->p.status);
+			}
 
 			ret = natcap_dnat_setup(ct, server.ip, server.port);
 			if (ret != NF_ACCEPT) {
@@ -1772,8 +1818,13 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 		if (TCPH(l4)->syn && !TCPH(l4)->ack) {
 			//encode syn
 			struct natcap_TCPOPT *tcpopt;
+			struct natcap_TCPOPT_dst *optdst;
 			int offlen;
 			int add_len = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
+
+			if ((NS_PEER_KNOCK & ns->p.status)) {
+				add_len = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int));
+			}
 
 			if (add_len + TCPH(l4)->doff * 4 > 60) {
 				NATCAP_WARN("(PS)" DEBUG_TCP_FMT ": add_len=%u doff=%u over 60\n", DEBUG_TCP_ARG(iph,l4), add_len, TCPH(l4)->doff * 4);
@@ -1800,6 +1851,12 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			tcpopt->header.opsize = add_len;
 			tcpopt->header.encryption = 0;
 			tcpopt->header.subtype = SUBTYPE_PEER_FSYN;
+			if ((NS_PEER_KNOCK & ns->p.status)) {
+				tcpopt->header.subtype = SUBTYPE_PEER_XSYN;
+				optdst = (struct natcap_TCPOPT_dst *)((void *)tcpopt + sizeof(struct natcap_TCPOPT_header));
+				set_byte4((void *)&optdst->ip, peer_knock_ip);
+				set_byte2((void *)&optdst->port, peer_knock_port);
+			}
 
 			if (nf_ct_seq_offset(ct, dir, ntohl(TCPH(l4)->seq) + 1) != ns->p.tcp_seq_offset) {
 				nf_ct_seqadj_init(ct, ctinfo, ns->p.tcp_seq_offset);
@@ -1866,6 +1923,15 @@ static struct nf_hook_ops peer_hooks[] = {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 		.owner = THIS_MODULE,
 #endif
+		.hook = natcap_peer_dnat_hook,
+		.pf = PF_INET,
+		.hooknum = NF_INET_LOCAL_OUT,
+		.priority = NF_IP_PRI_NAT_DST - 40,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
 		.hook = natcap_peer_snat_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_POST_ROUTING,
@@ -1915,13 +1981,17 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 				"#    local_target=%pI4:%u\n"
 				"#    peer_conn_timeout=%us\n"
 				"#    peer_port_map_timeout=%us\n"
+				"#    KN=%pI4:%u MAC=%02X:%02X:%02X:%02X:%02X:%02X LP=%u\n"
 				"#\n"
 				"# Reload cmd:\n"
 				"\n"
 				"clean\n"
 				"\n",
 				&peer_local_ip, ntohs(peer_local_port),
-				peer_conn_timeout, peer_port_map_timeout
+				peer_conn_timeout, peer_port_map_timeout,
+				&peer_knock_ip, ntohs(peer_knock_port),
+				peer_knock_mac[0], peer_knock_mac[1], peer_knock_mac[2], peer_knock_mac[3], peer_knock_mac[4], peer_knock_mac[5],
+				ntohs(peer_knock_local_port)
 				);
 		natcap_peer_ctl_buffer[n] = 0;
 		return natcap_peer_ctl_buffer;
@@ -2071,6 +2141,38 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 		if (n == 1) {
 			peer_port_map_timeout = d;
 			goto done;
+		}
+	} else if (strncmp(data, "KN=", 3) == 0) {
+		unsigned int a, b, c, d, e, f;
+		unsigned int x0, x1, x2, x3, x4, x5;
+		n = sscanf(data, "KN=%u.%u.%u.%u:%u MAC=%02X:%02X:%02X:%02X:%02X:%02X LP=%u\n",
+				&a, &b, &c, &d, &e,
+				&x0, &x1, &x2, &x3, &x4, &x5,
+				&f);
+		if ( (n == 12 && e <= 0xffff) &&
+				((a & 0xff) == a) &&
+				((b & 0xff) == b) &&
+				((c & 0xff) == c) &&
+				((d & 0xff) == d) &&
+				((x0 & 0xff) == x0) &&
+				((x1 & 0xff) == x1) &&
+				((x2 & 0xff) == x2) &&
+				((x3 & 0xff) == x3) &&
+				((x4 & 0xff) == x4) &&
+				((x5 & 0xff) == x5) &&
+				(f <= 0xffff)) {
+			if (htons(f) > 0 || htons(f) < 1024) {
+				peer_knock_ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+				peer_knock_port = htons(e);
+				peer_knock_mac[0] = x0;
+				peer_knock_mac[1] = x1;
+				peer_knock_mac[2] = x2;
+				peer_knock_mac[3] = x3;
+				peer_knock_mac[4] = x4;
+				peer_knock_mac[5] = x5;
+				peer_knock_local_port = htons(f);
+				goto done;
+			}
 		}
 	}
 

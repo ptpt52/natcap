@@ -47,6 +47,7 @@
 #define SUBTYPE_PEER_FSYN       67
 #define SUBTYPE_PEER_FACK       68
 #define SUBTYPE_PEER_FSYNACK    69
+#define SUBTYPE_PEER_XSYN       70
 
 struct natcap_TCPOPT_header {
 	u8 opcode;
@@ -165,6 +166,9 @@ struct natcap_session {
 #define NS_NATCAP_UDPENC (1 << NS_NATCAP_UDPENC_BIT)
 #define NS_NATCAP_ENC_BIT 15
 #define NS_NATCAP_ENC (1 << NS_NATCAP_ENC_BIT)
+
+#define NS_PEER_KNOCK_BIT 12
+#define NS_PEER_KNOCK (1 << NS_PEER_KNOCK_BIT)
 	union {
 		struct {
 			unsigned short status;
