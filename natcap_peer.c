@@ -402,7 +402,7 @@ struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport
 	return user;
 }
 
-struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, const unsigned char *client_mac, struct peer_tuple **ppt)
+struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, __be32 client_ip, const unsigned char *client_mac, struct peer_tuple **ppt)
 {
 	int i;
 	int ret;
@@ -494,6 +494,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 
 		spin_lock_bh(&peer_user_expect(user)->lock);
 		peer_user_expect(user)->ip = saddr;
+		peer_user_expect(user)->local_ip = client_ip;
 		peer_user_expect(user)->map_port = alloc_peer_port(user, client_mac);
 		spin_unlock_bh(&peer_user_expect(user)->lock);
 	}
@@ -527,6 +528,8 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 			return NULL;
 		}
 	}
+	if (ue->ip != saddr) ue->ip = saddr;
+	if (ue->local_ip != client_ip) ue->local_ip = client_ip;
 
 	for (i = 0; i < MAX_PEER_TUPLE; i++) {
 		if (ue->tuple[i].sip == saddr && ue->tuple[i].dip == daddr && ue->tuple[i].sport == sport && ue->tuple[i].dport) {
@@ -1113,7 +1116,7 @@ h_out:
 		client_ip = get_byte4((const void *)&tcpopt->peer.data.user.ip);
 		memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
 
-		user = peer_user_expect_in(iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, client_mac, &pt);
+		user = peer_user_expect_in(iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, client_ip, client_mac, &pt);
 		if (user != NULL && pt != NULL) {
 			spin_lock_bh(&peer_user_expect(user)->lock);
 			//re-check-in-lock
@@ -1218,7 +1221,7 @@ syn_out:
 		client_ip = get_byte4((const void *)&tcpopt->peer.data.user.ip);
 		memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
 
-		user = peer_user_expect_in(iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, client_mac, &pt);
+		user = peer_user_expect_in(iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, client_ip, client_mac, &pt);
 		if (user != NULL && pt != NULL) {
 			spin_lock_bh(&peer_user_expect(user)->lock);
 			//re-check-in-lock
@@ -2031,9 +2034,9 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			ue = peer_user_expect(user);
 			n = snprintf(natcap_peer_ctl_buffer,
 					PAGE_SIZE - 1,
-					"C[%02X:%02X:%02X:%02X:%02X:%02X,%pI4] P=%u [AS %ds]\n",
+					"C[%02X:%02X:%02X:%02X:%02X:%02X,%pI4,%pI4] P=%u [AS %ds]\n",
 					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-					&ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
+					&ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 					);
 			put_peer_user(user);
 			natcap_peer_ctl_buffer[n] = 0;

@@ -69,6 +69,7 @@ struct peer_tuple {
 struct user_expect {
 	spinlock_t lock;
 	unsigned int last_active;
+	__be32 local_ip;
 	__be32 ip;
 	__be16 map_port;
 #define MAX_PEER_TUPLE 8
