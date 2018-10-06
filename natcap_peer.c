@@ -1913,13 +1913,14 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 				"#\n"
 				"# Info:\n"
 				"#    local_target=%pI4:%u\n"
+				"#    peer_conn_timeout=%us\n"
 				"#\n"
 				"# Reload cmd:\n"
 				"\n"
 				"clean\n"
 				"\n",
-				&peer_local_ip,
-				ntohs(peer_local_port)
+				&peer_local_ip, ntohs(peer_local_port),
+				peer_conn_timeout
 				);
 		natcap_peer_ctl_buffer[n] = 0;
 		return natcap_peer_ctl_buffer;
@@ -2030,6 +2031,13 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 				 ((d & 0xff) == d)) ) {
 			peer_local_ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 			peer_local_port = htons(e);
+			goto done;
+		}
+	} else if (strncmp(data, "peer_conn_timeout=", 18) == 0) {
+		unsigned int d;
+		n = sscanf(data, "peer_conn_timeout=%u", &d);
+		if (n == 1) {
+			peer_conn_timeout = d;
 			goto done;
 		}
 	}
