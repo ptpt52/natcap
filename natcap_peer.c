@@ -1934,9 +1934,9 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			natcap_peer_ctl_buffer[0] = 0;
 			n = snprintf(natcap_peer_ctl_buffer,
 					PAGE_SIZE - 1,
-					"node[%pI4:%u] [active since %us]\n"
+					"N[%pI4:%u] [AS %ds]\n"
 					"    conn[%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u]\n",
-					&ps->ip, ntohs(ps->map_port), ps->last_active != 0 ? (uintdiff(ps->last_active, jiffies) + HZ / 2) / HZ : (unsigned int)(-1),
+					&ps->ip, ntohs(ps->map_port), ps->last_active != 0 ? (uintdiff(ps->last_active, jiffies) + HZ / 2) / HZ : (-1),
 					ntohs(ps->port_map[0].sport), ntohs(ps->port_map[0].dport),
 					ntohs(ps->port_map[1].sport), ntohs(ps->port_map[1].dport),
 					ntohs(ps->port_map[2].sport), ntohs(ps->port_map[2].dport),
@@ -1962,9 +1962,9 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			ue = peer_user_expect(user);
 			n = snprintf(natcap_peer_ctl_buffer,
 					PAGE_SIZE - 1,
-					"client[%02X:%02X:%02X:%02X:%02X:%02X,%pI4] @port=%u [active since %us]\n",
+					"C[%02X:%02X:%02X:%02X:%02X:%02X,%pI4] P=%u [AS %ds]\n",
 					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-					&ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (unsigned int)(-1)
+					&ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 					);
 			nf_ct_put(user);
 			natcap_peer_ctl_buffer[n] = 0;
