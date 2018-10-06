@@ -91,7 +91,7 @@ static void peer_port_map_flush(struct timer_list *ignore)
 		spin_lock_bh(&peer_port_map_lock);
 		user = peer_port_map[flush_idx];
 		if (user != NULL) {
-			if (uintdiff(peer_user_expect(user)->last_active, jiffies) > peer_port_map_timeout * HZ) {
+			if (after(jiffies, peer_user_expect(user)->last_active + peer_port_map_timeout * HZ)) {
 				peer_port_map[flush_idx] = NULL;
 				nf_ct_put(user);
 				flush_cnt++;
@@ -703,7 +703,7 @@ static inline struct sk_buff *natcap_peer_ping_init(struct sk_buff *oskb, const 
 
 	pmi = opmi;
 	if (ops == NULL) {
-		if (ps->last_inuse != 0 && uintdiff(ps->last_inuse, jiffies) < peer_conn_timeout * HZ) {
+		if (ps->last_inuse != 0 && before(jiffies, ps->last_inuse + peer_conn_timeout * HZ)) {
 			pmi = ntohs(ICMPH(otcph)->un.echo.sequence) % MAX_PEER_CONN;
 		} else {
 			pmi = ntohs(ICMPH(otcph)->un.echo.sequence) % ps->conn;
