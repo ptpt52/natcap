@@ -932,7 +932,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (!inet_is_local(in, iph->daddr)) {
+	if (hooknum == NF_INET_PRE_ROUTING && !inet_is_local(in, iph->daddr)) {
 		return NF_ACCEPT;
 	}
 
@@ -1456,7 +1456,10 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (in && !inet_is_local(in, iph->daddr)) {
+	if (hooknum == NF_INET_PRE_ROUTING && !inet_is_local(in, iph->daddr)) {
+		return NF_ACCEPT;
+	}
+	if (ipv4_is_loopback(iph->daddr)) {
 		return NF_ACCEPT;
 	}
 
