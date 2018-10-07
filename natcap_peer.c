@@ -1994,18 +1994,12 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 	if ((*pos) == 0) {
 		n = snprintf(natcap_peer_ctl_buffer,
 				PAGE_SIZE - 1,
-				"# Usage:\n"
-				"#    clean -- none\n"
-				"#\n"
 				"# Info:\n"
 				"#    local_target=%pI4:%u\n"
 				"#    peer_conn_timeout=%us\n"
 				"#    peer_port_map_timeout=%us\n"
 				"#    KN=%pI4:%u MAC=%02X:%02X:%02X:%02X:%02X:%02X LP=%u\n"
 				"#\n"
-				"# Reload cmd:\n"
-				"\n"
-				"clean\n"
 				"\n",
 				&peer_local_ip, ntohs(peer_local_port),
 				peer_conn_timeout, peer_port_map_timeout,
