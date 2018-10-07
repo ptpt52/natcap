@@ -909,6 +909,12 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		net = dev_net(out);
 
 	iph = ip_hdr(skb);
+	if (hooknum == NF_INET_LOCAL_OUT) {
+		if (iph->protocol == IPPROTO_ICMP && iph->ttl == 1) {
+			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+		}
+		return NF_ACCEPT;
+	}
 	if (iph->protocol != IPPROTO_TCP) {
 		return NF_ACCEPT;
 	}
@@ -1359,7 +1365,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	if (iph->protocol != IPPROTO_ICMP) {
 		return NF_ACCEPT;
 	}
-	if (iph->ttl != 1) {
+	if (iph->ttl != 1 || xt_mark_natcap_get(&skb->mark) != XT_MARK_NATCAP) {
 		return NF_ACCEPT;
 	}
 	if (skb->len > iph->ihl * 4 + sizeof(struct icmphdr) + ICMP_PAYLOAD_LIMIT) {
@@ -1904,6 +1910,15 @@ static struct nf_hook_ops peer_hooks[] = {
 		.hook = natcap_peer_pre_in_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
+		.priority = NF_IP_PRI_CONNTRACK - 5,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
+		.hook = natcap_peer_pre_in_hook,
+		.pf = PF_INET,
+		.hooknum = NF_INET_LOCAL_OUT,
 		.priority = NF_IP_PRI_CONNTRACK - 5,
 	},
 	{
