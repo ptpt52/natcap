@@ -66,7 +66,7 @@ static inline __be32 gen_seq_number(void)
 #define MAX_PEER_PORT_MAP 65536
 static struct nf_conn **peer_port_map;
 DEFINE_SPINLOCK(peer_port_map_lock);
-static struct timer_list peer_port_map_timer;
+static struct timer_list peer_timer;
 
 #define NATCAP_PEER_EXPECT_TIMEOUT 5
 #define NATCAP_PEER_USER_TIMEOUT_DEFAULT 180
@@ -79,9 +79,9 @@ unsigned int peer_conn_timeout = NATCAP_PEER_CONN_TIMEOUT_DEFAULT;
 #define PEER_PORT_MAP_FLUSH_STEP 256
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
-static void peer_port_map_flush(unsigned long ignore)
+static void peer_timer_flush(unsigned long ignore)
 #else
-static void peer_port_map_flush(struct timer_list *ignore)
+static void peer_timer_flush(struct timer_list *ignore)
 #endif
 {
 	static unsigned short flush_idx = 0;
@@ -107,12 +107,12 @@ static void peer_port_map_flush(struct timer_list *ignore)
 	}
 	NATCAP_DEBUG(DEBUG_FMT_PREFIX "pause flush peer_port_map after putting %d user(s)\n", DEBUG_ARG_PREFIX, flush_cnt);
 
-	mod_timer(&peer_port_map_timer, jiffies + HZ / 2);
+	mod_timer(&peer_timer, jiffies + HZ / 2);
 }
 
-static int peer_port_map_init(void)
+static int peer_timer_init(void)
 {
-	struct timer_list *timer = &peer_port_map_timer;
+	struct timer_list *timer = &peer_timer;
 
 	peer_port_map = vmalloc(sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
 	if (peer_port_map == NULL) {
@@ -123,20 +123,20 @@ static int peer_port_map_init(void)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
 	init_timer(timer);
 	timer->data = 0;
-	timer->function = peer_port_map_flush;
+	timer->function = peer_timer_flush;
 #else
-	timer_setup(timer, peer_port_map_flush, 0);
+	timer_setup(timer, peer_timer_flush, 0);
 #endif
 
 	mod_timer(timer, jiffies + 8 * HZ);
 	return 0;
 }
 
-static void peer_port_map_exit(void)
+static void peer_timer_exit(void)
 {
 	int i;
 
-	del_timer_sync(&peer_port_map_timer);
+	del_timer_sync(&peer_timer);
 
 	spin_lock_bh(&peer_port_map_lock);
 	for (i = 0; i < MAX_PEER_PORT_MAP; i++) {
@@ -2262,9 +2262,9 @@ int natcap_peer_init(void)
 		default_mac_addr_init();
 	}
 
-	ret = peer_port_map_init();
+	ret = peer_timer_init();
 	if (ret != 0)
-		goto peer_port_map_init_failed;
+		goto peer_timer_init_failed;
 
 	ret = nf_register_hooks(peer_hooks, ARRAY_SIZE(peer_hooks));
 	if (ret != 0)
@@ -2319,8 +2319,8 @@ cdev_add_failed:
 chrdev_region_failed:
 	nf_unregister_hooks(peer_hooks, ARRAY_SIZE(peer_hooks));
 nf_register_hooks_failed:
-	peer_port_map_exit();
-peer_port_map_init_failed:
+	peer_timer_exit();
+peer_timer_init_failed:
 	return ret;
 }
 
@@ -2344,5 +2344,5 @@ void natcap_peer_exit(void)
 		}
 	}
 
-	peer_port_map_exit();
+	peer_timer_exit();
 }
