@@ -728,7 +728,7 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
  * PS: oskb is icmp if ops == NULL, dev is outgoing dev of oskb
  * PS: oskb is tcp if ops != NULL, dev is incomming dev of oskb
  */
-static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const struct net_device *dev, struct peer_server_node *ops, int opmi)
+static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const struct net_device *dev, struct peer_server_node *ops, int opmi, unsigned short omss)
 {
 	struct fakeuser_expect *fue;
 	struct nf_conn *user;
@@ -898,6 +898,8 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 			mss = TCP_MSS_DEFAULT;
 		}
 		fue->mss = mss;
+	} else if (fue->mss == 0 && omss != 0) {
+		fue->mss = omss;
 	}
 
 	if (tcpolen_mss == TCPOLEN_MSS) {
@@ -1099,7 +1101,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					fue->remote_seq = ntohl(TCPH(l4)->seq);
 					spin_unlock_bh(&ps->lock);
 					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(synack) SYNACK, sending ping(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
-					natcap_peer_ping_send(skb, in, ps, pmi);
+					natcap_peer_ping_send(skb, in, ps, pmi, fue->mss);
 				}
 				nf_ct_put(user);
 
@@ -1449,7 +1451,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	}
 
 	NATCAP_DEBUG("(PPO)" DEBUG_ICMP_FMT ": ping out\n", DEBUG_ICMP_ARG(iph,l4));
-	nskb = natcap_peer_ping_send(skb, NULL, NULL, 0);
+	nskb = natcap_peer_ping_send(skb, NULL, NULL, 0, 0);
 	if (nskb != NULL) {
 		iph = ip_hdr(nskb);
 		l4 = (void *)iph + iph->ihl * 4;
@@ -1585,6 +1587,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 	h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
 #endif
 	if (h) {
+		unsigned short mss;
 		int pmi;
 		struct peer_server_node *ps;
 		struct fakeuser_expect *fue;
@@ -1623,13 +1626,14 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 			goto h_bypass;
 		}
 		ps->last_inuse = jiffies;
+		mss = fue->mss;
 		nf_ct_put(ps->port_map[pmi]);
 		ps->port_map[pmi] = NULL;
 		spin_unlock_bh(&ps->lock);
 
 		//create a new session
 		//it must return NULL
-		natcap_peer_ping_send(skb, in, ps, pmi);
+		natcap_peer_ping_send(skb, in, ps, pmi, mss);
 
 h_bypass:
 		tcpopt = natcap_peer_decode_header(TCPH(l4));
