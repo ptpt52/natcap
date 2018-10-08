@@ -49,6 +49,60 @@
 #include "natcap_client.h"
 #include "natcap_knock.h"
 
+#define PEER_XSYN_MASK_ADDR __constant_htonl(0xffffffff)
+static void *peer_xsyn_last_dev = NULL;
+static inline __be32 peer_xsyn_enumerate_addr(void)
+{
+	__be32 ip;
+	struct net_device *dev;
+	struct net_device *last_dev;
+	struct in_device *indev;
+	struct in_ifaddr *ifa;
+
+	last_dev = peer_xsyn_last_dev;
+	rcu_read_lock();
+
+	for(dev = first_net_device(&init_net); dev != NULL && dev != last_dev; dev = next_net_device(dev));
+	if (dev == peer_xsyn_last_dev && peer_xsyn_last_dev != NULL) {
+		dev = next_net_device(dev);
+	}
+	if (dev == NULL) {
+		dev = first_net_device(&init_net);
+	}
+
+	last_dev = dev;
+
+	for (; dev != NULL; dev = next_net_device(dev)) {
+		indev = __in_dev_get_rcu(dev);
+		if (indev && indev->ifa_list) {
+			ifa = indev->ifa_list;
+			ip = ifa->ifa_local;
+			if (!ipv4_is_loopback(ip)) {
+				peer_xsyn_last_dev = dev;
+				rcu_read_unlock();
+				return ip;
+			}
+		}
+	}
+
+	for (dev = first_net_device(&init_net); dev != NULL && dev != last_dev; dev = next_net_device(dev)) {
+		indev = __in_dev_get_rcu(dev);
+		if (indev && indev->ifa_list) {
+			ifa = indev->ifa_list;
+			ip = ifa->ifa_local;
+			if (!ipv4_is_loopback(ip)) {
+				peer_xsyn_last_dev = dev;
+				rcu_read_unlock();
+				return ip;
+			}
+		}
+	}
+
+	peer_xsyn_last_dev = last_dev;
+	rcu_read_unlock();
+	return 0;
+}
+
 static __be32 peer_knock_ip = __constant_htonl(0);
 static __be16 peer_knock_port = __constant_htons(22);
 static unsigned char peer_knock_mac[ETH_ALEN] = { };
@@ -1642,7 +1696,11 @@ h_bypass:
 			struct natcap_TCPOPT_dst *optdst = (struct natcap_TCPOPT_dst *)((void *)tcpopt + sizeof(struct natcap_TCPOPT_header));
 			server.ip = get_byte4((void *)&optdst->ip);
 			server.port = get_byte2((void *)&optdst->port);
-			if (server.ip == 0) server.ip = iph->daddr;
+			if (server.ip == 0) {
+				server.ip = iph->daddr;
+			} else if (server.ip == PEER_XSYN_MASK_ADDR) {
+				server.ip = peer_xsyn_enumerate_addr();
+			}
 		} else {
 			server.ip = peer_local_ip == 0 ? iph->daddr : peer_local_ip;
 			server.port = peer_local_port;
