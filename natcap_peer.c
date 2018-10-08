@@ -408,6 +408,7 @@ void natcap_user_timeout_touch(struct nf_conn *ct, unsigned long timeout)
 
 struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, int pmi)
 {
+	struct fakeuser_expect *fue;
 	struct nf_conn *user;
 	struct nf_ct_ext *new = NULL;
 	enum ip_conntrack_info ctinfo;
@@ -483,10 +484,11 @@ struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport
 		new->len = newoff;
 		memset((void *)new + newoff, 0, sizeof(struct fakeuser_expect));
 
-		peer_fakeuser_expect(user)->pmi = pmi;
-		peer_fakeuser_expect(user)->local_seq = gen_seq_number();
-		peer_fakeuser_expect(user)->remote_seq = 0;
-		peer_fakeuser_expect(user)->last_active = jiffies;
+		fue = peer_fakeuser_expect(user);
+		fue->pmi = pmi;
+		fue->local_seq = gen_seq_number();
+		fue->remote_seq = 0;
+		fue->last_active = jiffies;
 	}
 
 	ret = nf_conntrack_confirm(uskb);
@@ -499,7 +501,8 @@ struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport
 	skb_nfct_reset(uskb);
 	natcap_user_timeout_touch(user, peer_conn_timeout);
 
-	NATCAP_DEBUG("fakeuser create user[%pI4:%u->%pI4:%u] pmi=%d upmi=%d\n", &saddr, ntohs(sport), &daddr, ntohs(dport), pmi, peer_fakeuser_expect(user)->pmi);
+	fue = peer_fakeuser_expect(user);
+	NATCAP_DEBUG("fakeuser create user[%pI4:%u->%pI4:%u] pmi=%d upmi=%d\n", &saddr, ntohs(sport), &daddr, ntohs(dport), pmi, fue->pmi);
 
 	return user;
 }
@@ -592,13 +595,14 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 		memset((void *)new + newoff, 0, sizeof(struct user_expect));
 
 		//Repeated initialization cannot happen, it is safe.
-		spin_lock_init(&peer_user_expect(user)->lock);
+		ue = peer_user_expect(user);
+		spin_lock_init(&ue->lock);
 
-		spin_lock_bh(&peer_user_expect(user)->lock);
-		peer_user_expect(user)->ip = saddr;
-		peer_user_expect(user)->local_ip = client_ip;
-		peer_user_expect(user)->map_port = alloc_peer_port(user, client_mac);
-		spin_unlock_bh(&peer_user_expect(user)->lock);
+		spin_lock_bh(&ue->lock);
+		ue->ip = saddr;
+		ue->local_ip = client_ip;
+		ue->map_port = alloc_peer_port(user, client_mac);
+		spin_unlock_bh(&ue->lock);
 	}
 
 	ret = nf_conntrack_confirm(uskb);
@@ -1255,13 +1259,14 @@ h_out:
 
 		user = peer_user_expect_in(iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, client_ip, client_mac, &pt);
 		if (user != NULL && pt != NULL) {
-			spin_lock_bh(&peer_user_expect(user)->lock);
+			struct user_expect *ue = peer_user_expect(user);
+			spin_lock_bh(&ue->lock);
 			//re-check-in-lock
 			if (pt->sip != iph->saddr || pt->dip != iph->daddr || pt->sport != TCPH(l4)->source || pt->dport != TCPH(l4)->dest) {
 				//The caught duck flew
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, but pt[%pI4:%u->%pI4:%u] mismatch\n",
 						DEBUG_TCP_ARG(iph,l4), &pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport));
-				spin_unlock_bh(&peer_user_expect(user)->lock);
+				spin_unlock_bh(&ue->lock);
 				goto syn_out;
 			}
 
@@ -1270,24 +1275,24 @@ h_out:
 					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, new, sending pong(synack) SYNACK back\n", DEBUG_TCP_ARG(iph,l4));
 					pt->remote_seq = ntohl(TCPH(l4)->seq);
 					pt->mss = natcap_tcpmss_get(TCPH(l4));
-					pt->last_active = peer_user_expect(user)->last_active = jiffies;
+					pt->last_active = ue->last_active = jiffies;
 					/* initial */
 				} else if (pt->remote_seq == ntohl(TCPH(l4)->seq)) {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, dup, re-sending pong(synack) SYNACK back\n", DEBUG_TCP_ARG(iph,l4));
 				} else {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, pt[disconnected], seq(=%u,remote_seq=%u) mismatch, drop \n",
 							DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq);
-					spin_unlock_bh(&peer_user_expect(user)->lock);
+					spin_unlock_bh(&ue->lock);
 					goto syn_out;
 				}
 			} else { /* XXX Impossible */
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, pt[connected], seq(=%u,remote_seq=%u) mismatch, ignore and drop\n",
 						DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq);
-				spin_unlock_bh(&peer_user_expect(user)->lock);
+				spin_unlock_bh(&ue->lock);
 				goto syn_out;
 			}
-			natcap_peer_pong_send(in, skb, peer_user_expect(user)->map_port, pt);
-			spin_unlock_bh(&peer_user_expect(user)->lock);
+			natcap_peer_pong_send(in, skb, ue->map_port, pt);
+			spin_unlock_bh(&ue->lock);
 		}
 
 syn_out:
@@ -1361,13 +1366,14 @@ syn_out:
 
 		user = peer_user_expect_in(iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, client_ip, client_mac, &pt);
 		if (user != NULL && pt != NULL) {
-			spin_lock_bh(&peer_user_expect(user)->lock);
+			struct user_expect *ue = peer_user_expect(user);
+			spin_lock_bh(&ue->lock);
 			//re-check-in-lock
 			if (pt->sip != iph->saddr || pt->dip != iph->daddr || pt->sport != TCPH(l4)->source || pt->dport != TCPH(l4)->dest) {
 				//The caught duck flew
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) in, but pt[%pI4:%u->%pI4:%u] mismatch\n",
 						DEBUG_TCP_ARG(iph,l4), &pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport));
-				spin_unlock_bh(&peer_user_expect(user)->lock);
+				spin_unlock_bh(&ue->lock);
 				goto ack_out;
 			}
 
@@ -1380,8 +1386,8 @@ syn_out:
 								pt->local_seq + 1 == ntohl(TCPH(l4)->ack_seq)) {
 							NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, 3-way handshake complete\n", DEBUG_TCP_ARG(iph,l4));
 							pt->connected = 1;
-							pt->last_active = peer_user_expect(user)->last_active = jiffies;
-							spin_unlock_bh(&peer_user_expect(user)->lock);
+							pt->last_active = ue->last_active = jiffies;
+							spin_unlock_bh(&ue->lock);
 							goto ack_out;
 						} else if (pt->local_seq == 0 && pt->remote_seq == 0 &&
 								ntohl(TCPH(l4)->seq) != 1 && ntohl(TCPH(l4)->ack_seq) != 1) {
@@ -1389,12 +1395,12 @@ syn_out:
 							pt->remote_seq = ntohl(TCPH(l4)->seq) - 1;
 							pt->local_seq = ntohl(TCPH(l4)->ack_seq) - 1;
 							pt->connected = 1;
-							pt->last_active = peer_user_expect(user)->last_active = jiffies;
+							pt->last_active = ue->last_active = jiffies;
 							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, assume, sending pong(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
 						} else {
 							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, seq(=%u,remote_seq=%u) ack_seq(=%u,local_seq=%u) mismatch\n",
 									DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq, ntohl(TCPH(l4)->ack_seq), pt->local_seq);
-							spin_unlock_bh(&peer_user_expect(user)->lock);
+							spin_unlock_bh(&ue->lock);
 							goto ack_out;
 						}
 						break;
@@ -1405,8 +1411,8 @@ syn_out:
 								pt->local_seq + 1 == ntohl(TCPH(l4)->ack_seq)) {
 							NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, 3-way handshake complete\n", DEBUG_TCP_ARG(iph,l4));
 							pt->connected = 1;
-							pt->last_active = peer_user_expect(user)->last_active = jiffies;
-							spin_unlock_bh(&peer_user_expect(user)->lock);
+							pt->last_active = ue->last_active = jiffies;
+							spin_unlock_bh(&ue->lock);
 							goto ack_out;
 						} if (pt->local_seq == 0 && pt->remote_seq == 0 &&
 								ntohl(TCPH(l4)->seq) != 1 && ntohl(TCPH(l4)->ack_seq) != 1) {
@@ -1414,12 +1420,12 @@ syn_out:
 							pt->remote_seq = ntohl(TCPH(l4)->seq) - 1;
 							pt->local_seq = ntohl(TCPH(l4)->ack_seq) - 1;
 							pt->connected = 1;
-							pt->last_active = peer_user_expect(user)->last_active = jiffies;
+							pt->last_active = ue->last_active = jiffies;
 							NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, assume, sending pong(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
 						} else {
 							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, seq(=%u,remote_seq=%u) ack_seq(=%u,local_seq=%u) mismatch\n",
 									DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq, ntohl(TCPH(l4)->ack_seq), pt->local_seq);
-							spin_unlock_bh(&peer_user_expect(user)->lock);
+							spin_unlock_bh(&ue->lock);
 							goto ack_out;
 						}
 						break;
@@ -1430,17 +1436,17 @@ syn_out:
 				/* XXX: pt->local_seq != 0 && pt->remote_seq */
 				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, keepalive, sending pong(ack) ACK out\n",
 						DEBUG_TCP_ARG(iph,l4), tcpopt->header.subtype == SUBTYPE_PEER_SYN ? "SYN" : "ACK");
-				pt->last_active = peer_user_expect(user)->last_active = jiffies;
+				pt->last_active = ue->last_active = jiffies;
 			} else {
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, seq(=%u,remote_seq=%u) ack_seq(=%u,local_seq=%u) mismatch\n",
 						DEBUG_TCP_ARG(iph,l4),
 						tcpopt->header.subtype == SUBTYPE_PEER_SYN ? "SYN" : "ACK",
 						ntohl(TCPH(l4)->seq), pt->remote_seq, ntohl(TCPH(l4)->ack_seq), pt->local_seq);
-				spin_unlock_bh(&peer_user_expect(user)->lock);
+				spin_unlock_bh(&ue->lock);
 				goto ack_out;
 			}
-			natcap_peer_pong_send(in, skb, peer_user_expect(user)->map_port, pt);
-			spin_unlock_bh(&peer_user_expect(user)->lock);
+			natcap_peer_pong_send(in, skb, ue->map_port, pt);
+			spin_unlock_bh(&ue->lock);
 		}
 
 ack_out:
@@ -1642,11 +1648,10 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 	h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
 #endif
 	if (h) {
-		unsigned short mss;
 		int pmi;
+		unsigned short mss;
 		struct peer_server_node *ps;
 		struct fakeuser_expect *fue;
-		struct nf_conn *user;
 		struct natcap_session *ns;
 		struct natcap_TCPOPT *tcpopt;
 
