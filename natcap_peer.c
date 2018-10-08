@@ -921,7 +921,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		nf_ct_put(user);
 		spin_unlock_bh(&ps->lock);
 		NATCAP_INFO(DEBUG_FMT_PREFIX DEBUG_FMT_TCP ": %s\n", DEBUG_ARG_PREFIX, DEBUG_ARG_TCP(niph,ntcph),
-				ntcph->syn ? "send ping(syn) SYN out" : "send ping(ack) ACK out");
+				ntcph->syn ? "sent ping(syn) SYN out" : "sent ping(ack) ACK out");
 		dev_queue_xmit(nskb);
 		return NULL;
 	} else if (fue->rt_out.outdev) {
@@ -932,7 +932,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		nf_ct_put(user);
 		spin_unlock_bh(&ps->lock);
 		NATCAP_INFO(DEBUG_FMT_PREFIX DEBUG_FMT_TCP ": %s\n", DEBUG_ARG_PREFIX, DEBUG_ARG_TCP(niph,ntcph),
-				ntcph->syn ? "send ping(syn) SYN out" : "send ping(ack) ACK out");
+				ntcph->syn ? "sent ping(syn) SYN out" : "sent ping(ack) ACK out");
 		dev_queue_xmit(nskb);
 		return NULL;
 	}
@@ -1089,6 +1089,8 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				}
 
 				ps->last_active = fue->last_active = jiffies;
+				natcap_user_timeout_touch(user, peer_conn_timeout);
+
 				if (tcpopt->header.subtype == SUBTYPE_PEER_FSYNACK) {
 					spin_unlock_bh(&ps->lock);
 					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(ack) SYNACK in. keepalive\n", DEBUG_TCP_ARG(iph,l4));
@@ -1096,7 +1098,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					fue->state = FUE_STATE_CONNECTED;
 					fue->remote_seq = ntohl(TCPH(l4)->seq);
 					spin_unlock_bh(&ps->lock);
-
+					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(synack) SYNACK, sending ping(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
 					natcap_peer_ping_send(skb, in, ps, pmi);
 				}
 				nf_ct_put(user);
