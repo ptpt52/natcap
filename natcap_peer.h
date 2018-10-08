@@ -23,30 +23,37 @@
 
 #define __ALIGN_64BITS 8
 
-struct port_tuple {
-	__be16 sport;
-	__be16 dport;
-	unsigned int local_seq;
-	unsigned int remote_seq;
-	unsigned int connected;
-	unsigned int last_active;
-};
-
 struct peer_server_node {
 	spinlock_t  lock;
 	__be32 ip;
 	__be16 map_port;
 	unsigned short conn;
-	unsigned short mss;
 	unsigned int last_active;
 	unsigned int last_inuse;
 #define MAX_PEER_CONN 8
-	struct port_tuple port_map[MAX_PEER_CONN];
+	struct nf_conn *port_map[MAX_PEER_CONN];
+};
+
+struct natcap_route {
+	/* max L2 len supoorted
+	 * mac + vlan + pppoe (=14 + 4 + 8)
+	 */
+#define NF_L2_MAX_LEN (14 + 4 + 8)
+	unsigned char l2_head[NF_L2_MAX_LEN];
+	unsigned short l2_head_len;
+	struct net_device *outdev;
 };
 
 struct fakeuser_expect {
+#define FUE_STATE_INIT 0
+#define FUE_STATE_CONNECTED 1
+	unsigned short state;
+	unsigned short mss;
 	unsigned int pmi;
 	unsigned int local_seq;
+	unsigned int remote_seq;
+	unsigned int last_active;
+	struct natcap_route rt_out;
 };
 
 static inline struct fakeuser_expect *peer_fakeuser_expect(struct nf_conn *ct)
