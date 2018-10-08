@@ -824,6 +824,23 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
 		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
 		//neth->h_proto = htons(ETH_P_IP);
+		if (fue->mss == 0 && omss != 0) {
+			fue->mss = omss;
+		}
+	} else {
+		if (fue->mss == 0 || fue->state == FUE_STATE_INIT) {
+			unsigned short mss;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0)
+			mss = ip_skb_dst_mtu(oskb);
+#else
+			mss = ip_skb_dst_mtu(NULL, oskb);
+#endif
+			mss = mss - (sizeof(struct iphdr) + sizeof(struct tcphdr));
+			if (mss < TCP_MSS_DEFAULT) {
+				mss = TCP_MSS_DEFAULT;
+			}
+			fue->mss = mss;
+		}
 	}
 
 	niph = ip_hdr(nskb);
@@ -884,22 +901,6 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		if (ops != NULL) {
 			tcpopt->header.subtype = SUBTYPE_PEER_ACK;
 		}
-	}
-
-	if (ops == NULL && (fue->mss == 0 || fue->state == FUE_STATE_INIT)) {
-		unsigned short mss;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0)
-		mss = ip_skb_dst_mtu(oskb);
-#else
-		mss = ip_skb_dst_mtu(NULL, oskb);
-#endif
-		mss = mss - (sizeof(struct iphdr) + sizeof(struct tcphdr));
-		if (mss < TCP_MSS_DEFAULT) {
-			mss = TCP_MSS_DEFAULT;
-		}
-		fue->mss = mss;
-	} else if (fue->mss == 0 && omss != 0) {
-		fue->mss = omss;
 	}
 
 	if (tcpolen_mss == TCPOLEN_MSS) {
