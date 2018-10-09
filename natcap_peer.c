@@ -2307,7 +2307,7 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 				((x4 & 0xff) == x4) &&
 				((x5 & 0xff) == x5) &&
 				(f <= 0xffff)) {
-			if (htons(f) > 0 || htons(f) < 1024) {
+			if (f > 0 && f < 1024) {
 				peer_knock_ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 				peer_knock_port = htons(e);
 				peer_knock_mac[0] = x0;
