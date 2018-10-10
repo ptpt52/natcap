@@ -450,7 +450,7 @@ int natcap_tcp_encode(struct nf_conn *ct, struct sk_buff *skb, const struct natc
 	iph = ip_hdr(skb);
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_NONE) {
+	if (NATCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_NONE) {
 		goto do_encode;
 	}
 
@@ -479,7 +479,7 @@ do_encode:
 		}
 		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
 	}
-	if (tcpopt->header.encryption || NTCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_TYPE_NONE) {
+	if (tcpopt->header.encryption || NATCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_TYPE_NONE) {
 		skb_rcsum_tcpudp(skb);
 	}
 
@@ -505,7 +505,7 @@ int natcap_tcp_decode(struct nf_conn *ct, struct sk_buff *skb, struct natcap_TCP
 	}
 
 	memcpy((void *)tcpopt, (void *)opt, opt->header.opsize);
-	if (mode == FORWARD_MODE || NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_CONFUSION) {
+	if (mode == FORWARD_MODE || NATCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_CONFUSION) {
 		goto done;
 	}
 	if ((tcpopt->header.type & NATCAP_TCPOPT_SYN)) {
@@ -530,7 +530,7 @@ do_decode:
 		}
 		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_decode);
 	}
-	if (tcpopt->header.encryption || NTCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_TYPE_NONE) {
+	if (tcpopt->header.encryption || NATCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_TYPE_NONE) {
 		skb_rcsum_tcpudp(skb);
 	}
 done:
@@ -548,9 +548,9 @@ int natcap_tcp_encode_fwdupdate(struct sk_buff *skb, struct tcphdr *tcph, const 
 		return -1;
 	}
 
-	if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_ALL) {
+	if (NATCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_ALL) {
 		target_ip = tcpopt->all.data.ip;
-	} else if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_DST) {
+	} else if (NATCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_DST) {
 		target_ip = tcpopt->dst.data.ip;
 	} else {
 		return -1;

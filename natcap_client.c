@@ -1051,14 +1051,14 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 					}
 					if (opt->header.opcode == TCPOPT_NATCAP) {
 						struct tuple server;
-						if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_DST) {
+						if (NATCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_DST) {
 							server.ip = opt->dst.data.ip;
 							server.port = opt->dst.data.port;
 							//server.encryption = opt->header.encryption;
 							if (natcap_dnat_setup(ct, server.ip, server.port) == NF_ACCEPT) {
 								NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup ok, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 							}
-						} else if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_ALL) {
+						} else if (NATCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_ALL) {
 							server.ip = opt->all.data.ip;
 							server.port = opt->all.data.port;
 							//server.encryption = opt->header.encryption;
@@ -1119,7 +1119,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			ns->n.tcp_ack_offset = ntohl(offset);
 			//short_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->n.status);
 		}
-		if (NTCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION && (NS_NATCAP_CONFUSION & ns->n.status)) {
+		if (NATCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION && (NS_NATCAP_CONFUSION & ns->n.status)) {
 			if (nf_ct_seq_offset(ct, IP_CT_DIR_REPLY, ntohl(TCPH(l4)->seq + 1)) != 0 - ns->n.tcp_ack_offset) {
 				nf_ct_seqadj_init(ct, ctinfo, 0 - ns->n.tcp_ack_offset);
 			}
@@ -1755,10 +1755,10 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFE0099));
 				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
-				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x01));
-
 				if ((NS_NATCAP_ENC & ns->n.status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x0100 | 0x01));
+				} else {
+					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x01));
 				}
 
 				skb_rcsum_tcpudp(nskb);
@@ -1791,10 +1791,10 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFE0099));
 				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
-				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x02));
-
 				if ((NS_NATCAP_ENC & ns->n.status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x0100 | 0x02));
+				} else {
+					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x02));
 				}
 
 				skb_rcsum_tcpudp(skb);
@@ -2382,10 +2382,10 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_server);
 					set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
 				}
-				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x01));
-
 				if ((NS_NATCAP_ENC & master_ns->n.status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x0100 | 0x01));
+				} else {
+					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x01));
 				}
 
 				skb_rcsum_tcpudp(nskb);
@@ -2424,10 +2424,10 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_server);
 					set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
 				}
-				set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x02));
-
 				if ((NS_NATCAP_ENC & master_ns->n.status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x0100 | 0x02));
+				} else {
+					set_byte2(l4 + sizeof(struct udphdr) + 10, __constant_htons(0x02));
 				}
 
 				skb_rcsum_tcpudp(skb);

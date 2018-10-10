@@ -94,7 +94,7 @@ static inline int natcap_auth(const struct net_device *in,
 	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-	if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_ALL) {
+	if (NATCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_ALL) {
 		if (server) {
 			server->ip = tcpopt->all.data.ip;
 			server->port = tcpopt->all.data.port;
@@ -123,7 +123,7 @@ static inline int natcap_auth(const struct net_device *in,
 					tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
 					ntohl(tcpopt->all.data.u_hash));
 		}
-	} else if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_USER) {
+	} else if (NATCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_USER) {
 		if (server) {
 			return E_NATCAP_INVAL;
 		}
@@ -147,7 +147,7 @@ static inline int natcap_auth(const struct net_device *in,
 					tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
 					ntohl(tcpopt->user.data.u_hash));
 		}
-	} else if (NTCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_DST) {
+	} else if (NATCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_DST) {
 		if (server) {
 			server->ip = tcpopt->dst.data.ip;
 			server->port = tcpopt->dst.data.port;
@@ -990,7 +990,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				NATCAP_ERROR("(SPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				return NF_DROP;
 			}
-			if (!TCPH(l4)->syn && NTCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION && (NS_NATCAP_CONFUSION & ns->n.status)) {
+			if (!TCPH(l4)->syn && NATCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION && (NS_NATCAP_CONFUSION & ns->n.status)) {
 				if (nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq + 1)) != 0 - ns->n.tcp_seq_offset) {
 					nf_ct_seqadj_init(ct, ctinfo, 0 - ns->n.tcp_seq_offset);
 				}

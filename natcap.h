@@ -102,7 +102,7 @@ struct natcap_TCPOPT_peer {
 #define NATCAP_TCPOPT_CONFUSION (1<<4)
 
 #define NATCAP_TCPOPT_TYPE_MASK (0x0F)
-#define NTCAP_TCPOPT_TYPE(t) ((t) & NATCAP_TCPOPT_TYPE_MASK)
+#define NATCAP_TCPOPT_TYPE(t) ((t) & NATCAP_TCPOPT_TYPE_MASK)
 
 struct natcap_TCPOPT {
 #define NATCAP_TCPOPT_TYPE_NONE 0

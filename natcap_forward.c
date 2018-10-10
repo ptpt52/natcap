@@ -131,14 +131,14 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 		}
 
 		if (opt->header.opcode == TCPOPT_NATCAP && (opt->header.type & NATCAP_TCPOPT_TARGET)) {
-			if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_DST) {
+			if (NATCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_DST) {
 				server.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 				server.port = opt->dst.data.port;
 				//server.encryption = opt->header.encryption;
 				if (natcap_dnat_setup(ct, server.ip, server.port) == NF_ACCEPT) {
 					NATCAP_DEBUG("(FPCI)" DEBUG_TCP_FMT ": natcap_dnat_setup ok, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 				}
-			} else if (NTCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_ALL) {
+			} else if (NATCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_ALL) {
 				server.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 				server.port = opt->all.data.port;
 				//server.encryption = opt->header.encryption;
