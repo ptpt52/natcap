@@ -290,8 +290,12 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_SYN2_BIT 31
 #define IPS_NATCAP_SYN2 (1 << IPS_NATCAP_SYN2_BIT)
 
-#define NATCAP_UDP_GET_TYPE(x) (0xFF & ntohs(x))
-#define NATCAP_UDP_GET_ENC(x) ((0xFF00 & ntohs(x)) >> 8)
+#define NATCAP_UDP_GET_TYPE(x) (__constant_htons(0x00FF) & (x))
+#define NATCAP_UDP_GET_ENC(x) (__constant_htons(0xFF00) & (x))
+
+#define NATCAP_UDP_TYPE1 __constant_htons(0x0001)
+#define NATCAP_UDP_TYPE2 __constant_htons(0x0002)
+#define NATCAP_UDP_ENC __constant_htons(0x0100)
 
 enum {
 	E_NATCAP_OK = 0,

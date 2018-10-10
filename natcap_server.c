@@ -1128,7 +1128,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 
 			NATCAP_DEBUG("(SPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
-			if (NATCAP_UDP_GET_ENC(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == 0x01) {
+			if (NATCAP_UDP_GET_ENC(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_ENC) {
 				short_set_bit(NS_NATCAP_ENC_BIT, &ns->n.status);
 			}
 			//reply ACK pkt
@@ -1150,12 +1150,12 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				}
 			}
 
-			if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == 0x01) {
+			if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TYPE1) {
 				flow_total_rx_bytes += skb->len;
 				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 				if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 				return NF_ACCEPT;
-			} else if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == 0x02) {
+			} else if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TYPE2) {
 				int offlen;
 
 				offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct udphdr) - 12;
@@ -1292,12 +1292,13 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			}
 		} else if (iph->protocol == IPPROTO_UDP) {
 			if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099) &&
-					NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == 0x01) {
+					NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TYPE1) {
 				ret = nf_conntrack_confirm(skb);
 				if (ret != NF_ACCEPT) {
 					return ret;
 				}
-				return NF_DROP;
+				consume_skb(skb);
+				return NF_STOLEN;
 			}
 		}
 		return NF_ACCEPT;
