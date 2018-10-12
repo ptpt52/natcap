@@ -139,7 +139,7 @@ static inline __be16 peer_fakeuser_dport(struct nf_conn *user)
 }
 
 #define MAX_PEER_PORT_MAP 65536
-static struct nf_conn **peer_port_map;
+static struct nf_conn **peer_port_map = NULL;
 DEFINE_SPINLOCK(peer_port_map_lock);
 static struct timer_list peer_timer;
 
@@ -247,6 +247,9 @@ static void peer_timer_exit(void)
 		}
 	}
 	spin_unlock_bh(&peer_port_map_lock);
+
+	synchronize_rcu();
+	vfree(peer_port_map);
 }
 
 static inline struct nf_conn *get_peer_user(unsigned int port)
