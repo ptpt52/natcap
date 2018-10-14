@@ -961,8 +961,9 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 
 		if (ops != NULL) {
 			tcpopt->header.subtype = SUBTYPE_PEER_ACK;
-		} else if ((ps->status & PEER_SUBTYPE_SSYN) || after(jiffies, fue->last_active + 32 * HZ)) {
-			//XXX auto switch to SSYN mode if fue no active for more than 32s
+		} else if ((ps->status & PEER_SUBTYPE_SSYN) ||
+				(!(ps->status & PEER_SUBTYPE_SYN) && after(jiffies, fue->last_active + 64 * HZ))) {
+			//XXX auto switch to SSYN mode if fue no active for more than 64s
 			if (!(ps->status & PEER_SUBTYPE_SSYN)) short_set_bit(PEER_SUBTYPE_SSYN_BIT, &ps->status);
 			tcpopt->header.subtype = SUBTYPE_PEER_SSYN;
 		}
@@ -1165,6 +1166,8 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				natcap_user_timeout_touch(user, peer_conn_timeout);
 
 				if (tcpopt->header.subtype == SUBTYPE_PEER_FSYNACK) {
+					//if any synack+FSYNACK keepalive success, mark as SYN mode
+					if (TCPH(l4)->syn && !(ps->status & PEER_SUBTYPE_SYN)) short_set_bit(PEER_SUBTYPE_SYN_BIT, &ps->status);
 					spin_unlock_bh(&ps->lock);
 					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(ack) SYNACK in. keepalive\n", DEBUG_TCP_ARG(iph,l4));
 				} else {
