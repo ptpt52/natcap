@@ -690,7 +690,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	return user;
 }
 
-static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk_buff *oskb, __be16 map_port, struct peer_tuple *pt)
+static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk_buff *oskb, __be16 map_port, struct peer_tuple *pt, int ssyn)
 {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
@@ -751,8 +751,8 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 
 	//ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4 + (1 * otcph->syn));
 	ntcph->ack_seq = htonl(pt->remote_seq + 1);
-	ntcph->seq = htonl(pt->local_seq);
-	tcp_flag_word(ntcph) = TCP_FLAG_ACK | TCP_FLAG_SYN;
+	ntcph->seq = (pt->connected && ssyn) ? htonl(pt->local_seq + 1) : htonl(pt->local_seq);
+	tcp_flag_word(ntcph) = (pt->connected && ssyn) ? (TCP_FLAG_ACK) : (TCP_FLAG_ACK | TCP_FLAG_SYN);
 	ntcph->res1 = 0;
 	ntcph->doff = (sizeof(struct tcphdr) + header_len + TCPOLEN_MSS) / 4;
 	ntcph->window = __constant_htons(65535);
@@ -961,6 +961,10 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 
 		if (ops != NULL) {
 			tcpopt->header.subtype = SUBTYPE_PEER_ACK;
+		} else if ((ps->status & PEER_SUBTYPE_SSYN) || after(jiffies, fue->last_active + 32 * HZ)) {
+			//XXX auto switch to SSYN mode if fue no active for more than 32s
+			if (!(ps->status & PEER_SUBTYPE_SSYN)) short_set_bit(PEER_SUBTYPE_SSYN_BIT, &ps->status);
+			tcpopt->header.subtype = SUBTYPE_PEER_SSYN;
 		}
 	}
 
@@ -1087,7 +1091,10 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (TCPH(l4)->syn && TCPH(l4)->ack) {
+	if ((TCPH(l4)->syn && TCPH(l4)->ack) ||
+			tcpopt->header.subtype == SUBTYPE_PEER_FSYN ||
+			tcpopt->header.subtype == SUBTYPE_PEER_XSYN ||
+			tcpopt->header.subtype == SUBTYPE_PEER_FSYNACK) {
 		//got syn ack
 		//first. lookup fakeuser_expect
 		struct nf_conntrack_tuple tuple;
@@ -1113,9 +1120,11 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 			if (tcpopt->header.subtype == SUBTYPE_PEER_FSYN || tcpopt->header.subtype == SUBTYPE_PEER_XSYN) {
 				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(ack->syn) FSYN in, pass up\n", DEBUG_TCP_ARG(iph,l4));
-				//TCPH(l4)->syn = 1;
 				TCPH(l4)->ack = 0;
-				//TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
+				if (!TCPH(l4)->syn) {
+					TCPH(l4)->syn = 1;
+					TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
+				}
 				TCPH(l4)->ack_seq = 0;
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
 				skb_rcsum_tcpudp(skb);
@@ -1294,7 +1303,7 @@ h_out:
 				spin_unlock_bh(&ue->lock);
 				goto syn_out;
 			}
-			natcap_peer_pong_send(in, skb, ue->map_port, pt);
+			natcap_peer_pong_send(in, skb, ue->map_port, pt, (ue->status & PEER_SUBTYPE_SSYN));
 			spin_unlock_bh(&ue->lock);
 		}
 
@@ -1346,14 +1355,14 @@ syn_out:
 			return NF_ACCEPT;
 		}
 
-		if (tcpopt->header.subtype != SUBTYPE_PEER_SYN && tcpopt->header.subtype != SUBTYPE_PEER_ACK) {
+		if (tcpopt->header.subtype != SUBTYPE_PEER_SYN && tcpopt->header.subtype != SUBTYPE_PEER_SSYN && tcpopt->header.subtype != SUBTYPE_PEER_ACK) {
 			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got unexpected PEER packet in opcode=%u type=%u opsize=%u subtype=%u, ignore pass\n",
 					DEBUG_TCP_ARG(iph,l4), tcpopt->header.opcode, tcpopt->header.type, tcpopt->header.opsize, tcpopt->header.subtype);
 			return NF_ACCEPT;
 		}
 		if (ntohl(TCPH(l4)->seq) - 1 == 0) {
 			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, but seq is 1, drop\n", DEBUG_TCP_ARG(iph,l4),
-					tcpopt->header.subtype == SUBTYPE_PEER_SYN ? "SYN" : "ACK");
+					tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK");
 			goto ack_out;
 		}
 
@@ -1361,7 +1370,7 @@ syn_out:
 			__be16 id = get_byte2((const void *)&tcpopt->peer.data.icmp_id);
 			__be16 sequence = get_byte2((const void *)&tcpopt->peer.data.icmp_sequence);
 			NATCAP_DEBUG("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4),
-					tcpopt->header.subtype == SUBTYPE_PEER_SYN ? "SYN" : "ACK", ntohs(id), ntohs(sequence));
+					tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK", ntohs(id), ntohs(sequence));
 		} while (0);
 
 		client_ip = get_byte4((const void *)&tcpopt->peer.data.user.ip);
@@ -1407,6 +1416,8 @@ syn_out:
 							goto ack_out;
 						}
 						break;
+					case SUBTYPE_PEER_SSYN:
+						if (!(ue->status & PEER_SUBTYPE_SSYN)) short_set_bit(PEER_SUBTYPE_SSYN_BIT, &ue->status);
 					case SUBTYPE_PEER_SYN:
 						if (pt->local_seq != 0 &&
 								pt->remote_seq != 0 &&
@@ -1438,17 +1449,20 @@ syn_out:
 			} else if (pt->remote_seq + 1 == ntohl(TCPH(l4)->seq) && pt->local_seq + 1 == ntohl(TCPH(l4)->ack_seq)) {
 				/* XXX: pt->local_seq != 0 && pt->remote_seq */
 				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, keepalive, sending pong(ack) ACK out\n",
-						DEBUG_TCP_ARG(iph,l4), tcpopt->header.subtype == SUBTYPE_PEER_SYN ? "SYN" : "ACK");
+						DEBUG_TCP_ARG(iph,l4), tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK");
 				pt->last_active = ue->last_active = jiffies;
+				if (tcpopt->header.subtype == SUBTYPE_PEER_SSYN) {
+					if (!(ue->status & PEER_SUBTYPE_SSYN)) short_set_bit(PEER_SUBTYPE_SSYN_BIT, &ue->status);
+				}
 			} else {
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, seq(=%u,remote_seq=%u) ack_seq(=%u,local_seq=%u) mismatch\n",
 						DEBUG_TCP_ARG(iph,l4),
-						tcpopt->header.subtype == SUBTYPE_PEER_SYN ? "SYN" : "ACK",
+						tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK",
 						ntohl(TCPH(l4)->seq), pt->remote_seq, ntohl(TCPH(l4)->ack_seq), pt->local_seq);
 				spin_unlock_bh(&ue->lock);
 				goto ack_out;
 			}
-			natcap_peer_pong_send(in, skb, ue->map_port, pt);
+			natcap_peer_pong_send(in, skb, ue->map_port, pt, (ue->status & PEER_SUBTYPE_SSYN));
 			spin_unlock_bh(&ue->lock);
 		}
 
@@ -1804,6 +1818,9 @@ knock:
 			pt->remote_seq = 0;
 			pt->connected = 0;
 
+			if ((ue->status & PEER_SUBTYPE_SSYN)) {
+				short_set_bit(NS_PEER_SSYN_BIT, &ns->p.status);
+			}
 			spin_unlock_bh(&ue->lock);
 
 			if (is_knock) {
@@ -2004,9 +2021,11 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 				nf_ct_seqadj_init(ct, ctinfo, ns->p.tcp_seq_offset);
 			}
 
-			//TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) + 1);
+			if ((ns->p.status & NS_PEER_SSYN)) {
+				TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) + 1);
+				TCPH(l4)->syn = 0;
+			}
 			TCPH(l4)->ack_seq = htonl(ns->p.remote_seq + 1);
-			//TCPH(l4)->syn = 0;
 			TCPH(l4)->ack = 1;
 			TCPH(l4)->doff = (TCPH(l4)->doff * 4 + add_len) / 4;
 			iph->tot_len = htons(ntohs(iph->tot_len) + add_len);

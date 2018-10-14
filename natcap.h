@@ -48,6 +48,7 @@
 #define SUBTYPE_PEER_FACK       68
 #define SUBTYPE_PEER_FSYNACK    69
 #define SUBTYPE_PEER_XSYN       70
+#define SUBTYPE_PEER_SSYN       71
 
 struct natcap_TCPOPT_header {
 	u8 opcode;
@@ -167,6 +168,8 @@ struct natcap_session {
 #define NS_NATCAP_ENC_BIT 15
 #define NS_NATCAP_ENC (1 << NS_NATCAP_ENC_BIT)
 
+#define NS_PEER_SSYN_BIT 11
+#define NS_PEER_SSYN (1 << NS_PEER_SSYN_BIT)
 #define NS_PEER_KNOCK_BIT 12
 #define NS_PEER_KNOCK (1 << NS_PEER_KNOCK_BIT)
 	union {

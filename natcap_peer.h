@@ -25,6 +25,9 @@
 
 struct peer_server_node {
 	spinlock_t  lock;
+#define PEER_SUBTYPE_SSYN_BIT 0
+#define PEER_SUBTYPE_SSYN (1 << PEER_SUBTYPE_SSYN_BIT)
+	unsigned short status;
 	__be32 ip;
 	__be16 map_port;
 	unsigned short conn;
@@ -79,6 +82,7 @@ struct user_expect {
 	__be32 local_ip;
 	__be32 ip;
 	__be16 map_port;
+	unsigned short status;
 #define MAX_PEER_TUPLE 8
 	struct peer_tuple tuple[MAX_PEER_TUPLE];
 };
@@ -98,6 +102,7 @@ static inline struct natcap_TCPOPT *natcap_peer_decode_header(struct tcphdr *tcp
 				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int)) &&
 				 opt->header.opcode == TCPOPT_PEER &&
 				 (opt->header.subtype == SUBTYPE_PEER_SYN ||
+				  opt->header.subtype == SUBTYPE_PEER_SSYN ||
 				  opt->header.subtype == SUBTYPE_PEER_SYNACK ||
 				  opt->header.subtype == SUBTYPE_PEER_ACK ||
 				  opt->header.subtype == SUBTYPE_PEER_FSYNACK) &&
