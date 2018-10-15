@@ -489,7 +489,7 @@ struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport
 
 		fue = peer_fakeuser_expect(user);
 		fue->pmi = pmi;
-		fue->local_seq = gen_seq_number();
+		fue->local_seq = ntohl(gen_seq_number());
 		fue->remote_seq = 0;
 		fue->last_active = jiffies;
 	}
