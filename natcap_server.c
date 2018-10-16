@@ -1063,7 +1063,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					short_set_bit(NS_NATCAP_ENC_BIT, &ns->n.status);
 				}
 
-				if (mode == SERVER_MODE && natcap_redirect_port != 0 && (tcpopt.header.type & NATCAP_TCPOPT_SPROXY)) {
+				if (natcap_redirect_port != 0 && (tcpopt.header.type & NATCAP_TCPOPT_SPROXY)) {
 					__be32 newdst = 0;
 					struct in_device *indev;
 					struct in_ifaddr *ifa;

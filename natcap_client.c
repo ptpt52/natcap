@@ -694,7 +694,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
 		} else if (cnipwhitelist_mode || IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0) {
-			if (natcap_redirect_port != 0 && hooknum == NF_INET_PRE_ROUTING) {
+			if (natcap_client_redirect_port != 0 && hooknum == NF_INET_PRE_ROUTING) {
 				__be32 newdst = 0;
 				struct in_device *indev;
 				struct in_ifaddr *ifa;
@@ -708,7 +708,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				rcu_read_unlock();
 
 				if (newdst) {
-					natcap_dnat_setup(ct, newdst, natcap_redirect_port);
+					natcap_dnat_setup(ct, newdst, natcap_client_redirect_port);
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 

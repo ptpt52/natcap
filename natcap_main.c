@@ -98,6 +98,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    sproxy=%u\n"
 				"#    knock_port=%u\n"
 				"#    natcap_redirect_port=%u\n"
+				"#    natcap_client_redirect_port=%u\n"
 				"#    natcap_touch_timeout=%u\n"
 				"#    flow_total_tx_bytes=%llu\n"
 				"#    flow_total_rx_bytes=%llu\n"
@@ -127,7 +128,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				tx_pkts_threshold,
 				rx_pkts_threshold,
 				http_confusion, encode_http_only, sproxy, ntohs(knock_port),
-				ntohs(natcap_redirect_port),natcap_touch_timeout,
+				ntohs(natcap_redirect_port), ntohs(natcap_client_redirect_port), natcap_touch_timeout,
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
 				htp_confusion_host,
@@ -439,11 +440,20 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			}
 		}
 	} else if (strncmp(data, "natcap_redirect_port=", 21) == 0) {
-		if (mode == SERVER_MODE || mode == CLIENT_MODE || mode == MIXING_MODE) {
+		if (mode == SERVER_MODE || mode == MIXING_MODE) {
 			unsigned int d;
 			n = sscanf(data, "natcap_redirect_port=%u", &d);
 			if (n == 1 && d <= 65535) {
 				natcap_redirect_port = htons((unsigned short)(d & 0xffff));
+				goto done;
+			}
+		}
+	} else if (strncmp(data, "natcap_client_redirect_port=", 28) == 0) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			unsigned int d;
+			n = sscanf(data, "natcap_client_redirect_port=%u", &d);
+			if (n == 1 && d <= 65535) {
+				natcap_client_redirect_port = htons((unsigned short)(d & 0xffff));
 				goto done;
 			}
 		}

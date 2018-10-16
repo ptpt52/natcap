@@ -42,6 +42,7 @@
 unsigned int natcap_touch_timeout = 32;
 
 unsigned short natcap_redirect_port = 0;
+unsigned short natcap_client_redirect_port = 0;
 
 unsigned int disabled = 1;
 unsigned long long flow_total_tx_bytes = 0;
