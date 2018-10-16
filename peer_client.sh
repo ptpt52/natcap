@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SERVER=1.2.3.4
+SERVER=ec2ns.ptpt52.com
 
 while :; do
 	timeout 30 ping -t1 -s16 -c16 $SERVER
