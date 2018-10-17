@@ -472,10 +472,12 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				return -ENOMEM;
 			n = sscanf(data, "auth_http_redirect_url=%s\n", tmp);
 			if (n == 1 && memcmp("http", tmp, 4) == 0) {
-				if (auth_http_redirect_url) {
-					kfree(auth_http_redirect_url);
-				}
+				void *old = auth_http_redirect_url;
 				auth_http_redirect_url = tmp;
+				if (old) {
+					synchronize_rcu();
+					kfree(old);
+				}
 				goto done;
 			}
 			kfree(tmp);

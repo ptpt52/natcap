@@ -1795,11 +1795,15 @@ cleanup_sockopt:
 
 void natcap_server_exit(void)
 {
+	void *tmp;
+
 	nf_unregister_hooks(server_hooks, ARRAY_SIZE(server_hooks));
 
-	if (auth_http_redirect_url) {
-		kfree(auth_http_redirect_url);
-		auth_http_redirect_url = NULL;
+	tmp = auth_http_redirect_url;
+	auth_http_redirect_url = NULL;
+	if (tmp) {
+		synchronize_rcu();
+		kfree(tmp);
 	}
 
 	nf_unregister_sockopt(&so_natcap_dst);

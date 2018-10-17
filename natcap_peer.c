@@ -142,6 +142,7 @@ static inline __be16 peer_fakeuser_dport(struct nf_conn *user)
 static struct nf_conn **peer_port_map = NULL;
 DEFINE_SPINLOCK(peer_port_map_lock);
 static struct timer_list peer_timer;
+static int peer_timer_stop = 0;
 
 #define NATCAP_PEER_EXPECT_TIMEOUT 5
 #define NATCAP_PEER_USER_TIMEOUT_DEFAULT 180
@@ -208,6 +209,9 @@ static void peer_timer_flush(struct timer_list *ignore)
 		spin_unlock_bh(&ps->lock);
 	}
 
+	if (peer_timer_stop) {
+		return;
+	}
 	mod_timer(&peer_timer, jiffies + HZ / 2);
 }
 
@@ -237,7 +241,9 @@ static void peer_timer_exit(void)
 {
 	int i;
 
-	del_timer_sync(&peer_timer);
+	peer_timer_stop = 1;
+	synchronize_rcu();
+	del_timer(&peer_timer);
 
 	spin_lock_bh(&peer_port_map_lock);
 	for (i = 0; i < MAX_PEER_PORT_MAP; i++) {
@@ -247,8 +253,6 @@ static void peer_timer_exit(void)
 		}
 	}
 	spin_unlock_bh(&peer_port_map_lock);
-
-	synchronize_rcu();
 	vfree(peer_port_map);
 }
 
@@ -2531,6 +2535,8 @@ void natcap_peer_exit(void)
 
 	nf_unregister_hooks(peer_hooks, ARRAY_SIZE(peer_hooks));
 
+	synchronize_rcu();
+
 	for (i = 0; i < NR_CPUS; i++) {
 		if (peer_user_uskbs[i]) {
 			kfree(peer_user_uskbs[i]);
@@ -2539,6 +2545,7 @@ void natcap_peer_exit(void)
 	}
 
 	peer_timer_exit();
+
 	unregister_netdevice_notifier(&peer_netdev_notifier);
 
 	for (i = 0; i < MAX_PEER_SERVER; i++) {
