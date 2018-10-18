@@ -2445,7 +2445,7 @@ int natcap_peer_init(void)
 
 	need_conntrack();
 
-	if (mode == PEER_MODE) {
+	if (mode != CLIENT_MODE) {
 		default_mac_addr_init();
 	}
 
