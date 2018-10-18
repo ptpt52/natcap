@@ -49,6 +49,8 @@
 #include "natcap_client.h"
 #include "natcap_knock.h"
 
+static int peer_stop = 1;
+
 #define PEER_XSYN_MASK_ADDR __constant_htonl(0xffffffff)
 static void *peer_xsyn_last_dev = NULL;
 static inline __be32 peer_xsyn_enumerate_addr(void)
@@ -142,7 +144,6 @@ static inline __be16 peer_fakeuser_dport(struct nf_conn *user)
 static struct nf_conn **peer_port_map = NULL;
 DEFINE_SPINLOCK(peer_port_map_lock);
 static struct timer_list peer_timer;
-static int peer_timer_stop = 0;
 
 #define NATCAP_PEER_EXPECT_TIMEOUT 5
 #define NATCAP_PEER_USER_TIMEOUT_DEFAULT 180
@@ -209,7 +210,7 @@ static void peer_timer_flush(struct timer_list *ignore)
 		spin_unlock_bh(&ps->lock);
 	}
 
-	if (peer_timer_stop) {
+	if (peer_stop) {
 		return;
 	}
 	mod_timer(&peer_timer, jiffies + HZ / 2);
@@ -219,12 +220,6 @@ static int peer_timer_init(void)
 {
 	struct timer_list *timer = &peer_timer;
 
-	peer_port_map = vmalloc(sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
-	if (peer_port_map == NULL) {
-		return -ENOMEM;
-	}
-	memset(peer_port_map, 0, sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
 	init_timer(timer);
 	timer->data = 0;
@@ -232,28 +227,18 @@ static int peer_timer_init(void)
 #else
 	timer_setup(timer, peer_timer_flush, 0);
 #endif
-
-	mod_timer(timer, jiffies + 8 * HZ);
 	return 0;
+}
+
+static void peer_timer_start(void)
+{
+	struct timer_list *timer = &peer_timer;
+	mod_timer(timer, jiffies + 8 * HZ);
 }
 
 static void peer_timer_exit(void)
 {
-	int i;
-
-	peer_timer_stop = 1;
-	synchronize_rcu();
 	del_timer(&peer_timer);
-
-	spin_lock_bh(&peer_port_map_lock);
-	for (i = 0; i < MAX_PEER_PORT_MAP; i++) {
-		if (peer_port_map[i] != NULL) {
-			nf_ct_put(peer_port_map[i]);
-			peer_port_map[i] = NULL;
-		}
-	}
-	spin_unlock_bh(&peer_port_map_lock);
-	vfree(peer_port_map);
 }
 
 static inline struct nf_conn *get_peer_user(unsigned int port)
@@ -1057,6 +1042,9 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 	struct net *net = &init_net;
 	struct natcap_TCPOPT *tcpopt;
 
+	if (peer_stop)
+		return NF_ACCEPT;
+
 	if (in)
 		net = dev_net(in);
 	else if (out)
@@ -1523,6 +1511,9 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	struct iphdr *iph;
 	void *l4;
 
+	if (peer_stop)
+		return NF_ACCEPT;
+
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
 	if (iph->protocol != IPPROTO_ICMP) {
@@ -1592,6 +1583,9 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 	struct tuple server;
 	unsigned int port;
 	int is_knock = 0;
+
+	if (peer_stop)
+		return NF_ACCEPT;
 
 	if (in)
 		net = dev_net(in);
@@ -1894,6 +1888,9 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 	void *l4;
 	struct natcap_session *ns;
 	struct tuple server;
+
+	if (peer_stop)
+		return NF_ACCEPT;
 
 	if (in)
 		net = dev_net(in);
@@ -2409,6 +2406,9 @@ static int peer_netdev_event(struct notifier_block *this, unsigned long event, v
 	struct nf_conn *user;
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 
+	if (peer_stop)
+		return NOTIFY_DONE;
+
 	if (event != NETDEV_UNREGISTER)
 		return NOTIFY_DONE;
 
@@ -2444,18 +2444,23 @@ int natcap_peer_init(void)
 	int ret = 0;
 
 	need_conntrack();
-	memset(peer_server, 0, sizeof(peer_server));
-	for (i = 0; i < MAX_PEER_SERVER; i++) {
-		spin_lock_init(&peer_server[i].lock);
-	}
-
-	for (i = 0; i < NR_CPUS; i++) {
-		peer_user_uskbs[i] = NULL;
-	}
 
 	if (mode == PEER_MODE) {
 		default_mac_addr_init();
 	}
+
+	memset(peer_server, 0, sizeof(peer_server));
+	for (i = 0; i < MAX_PEER_SERVER; i++) {
+		spin_lock_init(&peer_server[i].lock);
+	}
+	for (i = 0; i < NR_CPUS; i++) {
+		peer_user_uskbs[i] = NULL;
+	}
+	peer_port_map = vmalloc(sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
+	if (peer_port_map == NULL) {
+		return -ENOMEM;
+	}
+	memset(peer_port_map, 0, sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
 
 	register_netdevice_notifier(&peer_netdev_notifier);
 
@@ -2504,6 +2509,9 @@ int natcap_peer_init(void)
 		goto device_create_failed;
 	}
 
+	peer_stop = 0;
+	peer_timer_start();
+
 	return 0;
 
 	//device_destroy(natcap_peer_class, devno);
@@ -2527,6 +2535,9 @@ void natcap_peer_exit(void)
 	int i;
 	dev_t devno;
 
+	peer_stop = 1;
+	synchronize_rcu();
+
 	devno = MKDEV(natcap_peer_major, natcap_peer_minor);
 	device_destroy(natcap_peer_class, devno);
 	class_destroy(natcap_peer_class);
@@ -2535,7 +2546,19 @@ void natcap_peer_exit(void)
 
 	nf_unregister_hooks(peer_hooks, ARRAY_SIZE(peer_hooks));
 
-	synchronize_rcu();
+	peer_timer_exit();
+
+	unregister_netdevice_notifier(&peer_netdev_notifier);
+
+	spin_lock_bh(&peer_port_map_lock);
+	for (i = 0; i < MAX_PEER_PORT_MAP; i++) {
+		if (peer_port_map[i] != NULL) {
+			nf_ct_put(peer_port_map[i]);
+			peer_port_map[i] = NULL;
+		}
+	}
+	spin_unlock_bh(&peer_port_map_lock);
+	vfree(peer_port_map);
 
 	for (i = 0; i < NR_CPUS; i++) {
 		if (peer_user_uskbs[i]) {
@@ -2543,10 +2566,6 @@ void natcap_peer_exit(void)
 			peer_user_uskbs[i] = NULL;
 		}
 	}
-
-	peer_timer_exit();
-
-	unregister_netdevice_notifier(&peer_netdev_notifier);
 
 	for (i = 0; i < MAX_PEER_SERVER; i++) {
 		int j;
