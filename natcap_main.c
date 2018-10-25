@@ -519,7 +519,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			}
 		}
 	} else if (strncmp(data, "dns_server_node_add=", 20) == 0) {
-		if (mode == SERVER_MODE) {
+		if (mode == SERVER_MODE || mode == MIXING_MODE) {
 			unsigned int a, b, c, d;
 			n = sscanf(data, "dns_server_node_add=%u.%u.%u.%u", &a, &b, &c, &d);
 			if ( (n == 4) &&
