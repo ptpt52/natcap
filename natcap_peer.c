@@ -49,7 +49,123 @@
 #include "natcap_client.h"
 #include "natcap_knock.h"
 
+struct peer_cache_node {
+	struct nf_conn *user;
+	struct sk_buff *skb;
+	unsigned long jiffies;
+};
+
+DEFINE_SPINLOCK(peer_cache_lock);
+#define MAX_PEER_CACHE 64
+static unsigned short peer_cache_index_first = 0;
+static unsigned short peer_cache_index_next = 0;
+static struct peer_cache_node peer_cache[MAX_PEER_CACHE];
+
+static inline void peer_cache_init(void)
+{
+	spin_lock_bh(&peer_cache_lock);
+	memset(peer_cache, 0, sizeof(struct peer_cache_node) * MAX_PEER_CACHE);
+	spin_unlock_bh(&peer_cache_lock);
+}
+
+static inline int peer_cache_attach(struct nf_conn *ct, struct sk_buff *skb)
+{
+	struct natcap_session *ns = natcap_session_get(ct);
+	//XXX we use p.cache_index - 1 as index
+	if (ns == NULL || ns->p.cache_index != 0)
+		return -1;
+	spin_lock_bh(&peer_cache_lock);
+	if (peer_cache[peer_cache_index_next].user != NULL) {
+		spin_unlock_bh(&peer_cache_lock);
+		return -1;
+	}
+	nf_conntrack_get(&ct->ct_general);
+	peer_cache[peer_cache_index_next].jiffies = jiffies;
+	peer_cache[peer_cache_index_next].user = ct;
+	peer_cache[peer_cache_index_next].skb = skb;
+	ns->p.cache_index = peer_cache_index_next + 1;
+	peer_cache_index_next = (peer_cache_index_next + 1) % MAX_PEER_CACHE;
+	spin_unlock_bh(&peer_cache_lock);
+	return 0;
+}
+
+static inline struct sk_buff *peer_cache_detach(struct nf_conn *ct)
+{
+	unsigned short i;
+	struct sk_buff *skb = NULL;
+	struct natcap_session *ns = natcap_session_get(ct);
+
+	if (ns == NULL)
+		return NULL;
+	i = ns->p.cache_index;
+	if (i == 0 || i > MAX_PEER_CACHE)
+		return NULL;
+	i = i - 1;
+	spin_lock_bh(&peer_cache_lock);
+	if (peer_cache[i].user == ct) {
+		ns->p.cache_index = 0;
+		nf_ct_put(peer_cache[i].user);
+		peer_cache[i].user = NULL;
+		if (peer_cache[i].skb != NULL) {
+			skb = peer_cache[i].skb;
+			peer_cache[i].skb = NULL;
+		}
+	}
+	spin_unlock_bh(&peer_cache_lock);
+	return skb;
+}
+
+static inline void peer_cache_cleaner(void)
+{
+	unsigned short i;
+	struct natcap_session *ns;
+	if (peer_cache[peer_cache_index_first].user == NULL || !time_after(jiffies, peer_cache[peer_cache_index_first].jiffies + 8 * HZ))
+		return;
+	spin_lock_bh(&peer_cache_lock);
+	i = peer_cache_index_first;
+	while (peer_cache[i].user != NULL) {
+		if (!time_after(jiffies, peer_cache[i].jiffies + 8 * HZ))
+			break;
+		ns = natcap_session_get(peer_cache[i].user);
+		ns->p.cache_index = 0;
+		nf_ct_put(peer_cache[i].user);
+		peer_cache[i].user = NULL;
+		if (peer_cache[i].skb != NULL) {
+			consume_skb(peer_cache[i].skb);
+			peer_cache[i].skb = NULL;
+		}
+		i = (i + 1) % MAX_PEER_CACHE;
+		if (i == peer_cache_index_first)
+			break;
+	}
+	peer_cache_index_first = i;
+	spin_unlock_bh(&peer_cache_lock);
+}
+
+static inline void peer_cache_cleanup(void)
+{
+	unsigned short i;
+	struct natcap_session *ns;
+	spin_lock_bh(&peer_cache_lock);
+	for (i = 0; i < MAX_PEER_CACHE; i++) {
+		if (peer_cache[i].user == NULL)
+			continue;
+		ns = natcap_session_get(peer_cache[i].user);
+		//BUG_ON(ns == NULL);
+		ns->p.cache_index = 0;
+		nf_ct_put(peer_cache[i].user);
+		peer_cache[i].user = NULL;
+		if (peer_cache[i].skb != NULL) {
+			consume_skb(peer_cache[i].skb);
+			peer_cache[i].skb = NULL;
+		}
+	}
+	spin_unlock_bh(&peer_cache_lock);
+}
+
 static int peer_stop = 1;
+
+static __be16 peer_sni_port = __constant_htons(991);
 
 #define PEER_XSYN_MASK_ADDR __constant_htonl(0xffffffff)
 static void *peer_xsyn_last_dev = NULL;
@@ -209,6 +325,8 @@ static void peer_timer_flush(struct timer_list *ignore)
 		}
 		spin_unlock_bh(&ps->lock);
 	}
+
+	peer_cache_cleaner();
 
 	if (peer_stop) {
 		return;
@@ -1001,6 +1119,366 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 	return nskb;
 }
 
+static inline struct sk_buff *peer_sni_to_syn(struct sk_buff *oskb, unsigned short mss)
+{
+	struct sk_buff *nskb;
+	struct iphdr *oiph;
+	struct tcphdr *otcph;
+	struct natcap_TCPOPT *tcpopt;
+	int offset, add_len;
+	//int header_len = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
+	int header_len = 0;
+
+	nskb = skb_copy(oskb, GFP_ATOMIC);
+	if (nskb == NULL) {
+		return NULL;
+	}
+	if (mss < TCP_MSS_DEFAULT) {
+		mss = TCP_MSS_DEFAULT;
+	}
+
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len + TCPOLEN_MSS - (skb_headlen(oskb) + skb_tailroom(oskb));
+	add_len = offset < 0 ? 0 : offset;
+	offset += skb_tailroom(oskb);
+
+	if (add_len > 0 && skb_tailroom(oskb) < add_len && pskb_expand_head(oskb, 0, add_len, GFP_ATOMIC)) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head() fail\n", DEBUG_ARG_PREFIX);
+		return NULL;
+	}
+	oskb->tail += offset;
+	oskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len + TCPOLEN_MSS;
+
+	oiph = ip_hdr(oskb);
+	oiph->tot_len = htons(oskb->len);
+
+	otcph = (struct tcphdr *)((char *)ip_hdr(oskb) + sizeof(struct iphdr));
+	otcph->seq = htonl(ntohl(otcph->seq) - 1);
+	otcph->ack_seq = __constant_htonl(0);
+	tcp_flag_word(otcph) = TCP_FLAG_SYN;
+	otcph->res1 = 0;
+	otcph->doff = (sizeof(struct tcphdr) + header_len + TCPOLEN_MSS) / 4;
+	otcph->window = __constant_htons(65535);
+	otcph->check = 0;
+	otcph->urg_ptr = 0;
+
+	tcpopt = (struct natcap_TCPOPT *)((void *)otcph + sizeof(struct tcphdr));
+	//tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
+	//tcpopt->header.opcode = TCPOPT_PEER;
+	//tcpopt->header.opsize = add_len;
+	//tcpopt->header.encryption = 0;
+	//tcpopt->header.subtype = SUBTYPE_PEER_FSYN;
+
+	set_byte1((void *)tcpopt + header_len + 0, TCPOPT_MSS);
+	set_byte1((void *)tcpopt + header_len + 1, TCPOLEN_MSS);
+	set_byte2((void *)tcpopt + header_len + 2, ntohs(mss)); //just use mss from client.
+
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(oskb);
+
+	return nskb;
+}
+
+static inline int peer_sni_send_synack(const struct net_device *dev, struct sk_buff *oskb)
+{
+	struct sk_buff *nskb;
+	struct ethhdr *neth, *oeth;
+	struct iphdr *niph, *oiph;
+	struct tcphdr *otcph, *ntcph;
+	struct natcap_TCPOPT *tcpopt;
+	int offset, add_len;
+	int header_len = 0;
+	unsigned short mss;
+
+	oeth = (struct ethhdr *)skb_mac_header(oskb);
+	oiph = ip_hdr(oskb);
+	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
+
+	mss = natcap_tcpmss_get(otcph);
+	if (mss < TCP_MSS_DEFAULT) {
+		mss = TCP_MSS_DEFAULT;
+	}
+
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len + TCPOLEN_MSS - (skb_headlen(oskb) + skb_tailroom(oskb));
+	add_len = offset < 0 ? 0 : offset;
+	offset += skb_tailroom(oskb);
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
+	if (!nskb) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		return -1;
+	}
+	nskb->tail += offset;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len + TCPOLEN_MSS;
+
+	neth = eth_hdr(nskb);
+	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+	//neth->h_proto = htons(ETH_P_IP);
+
+	niph = ip_hdr(nskb);
+	memset(niph, 0, sizeof(struct iphdr));
+	niph->saddr = oiph->daddr;
+	niph->daddr = oiph->saddr;
+	niph->version = oiph->version;
+	niph->ihl = sizeof(struct iphdr) / 4;
+	niph->tos = 0;
+	niph->tot_len = htons(nskb->len);
+	niph->ttl = 0x80;
+	niph->protocol = IPPROTO_TCP;
+	niph->id = __constant_htons(jiffies);
+	niph->frag_off = 0x0;
+
+	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
+	ntcph->source = otcph->dest;
+	ntcph->dest = otcph->source;
+	ntcph->seq = gen_seq_number();
+	ntcph->ack_seq = htonl(ntohl(otcph->seq) + 1);
+	tcp_flag_word(ntcph) = TCP_FLAG_SYN | TCP_FLAG_ACK;
+	ntcph->res1 = 0;
+	ntcph->doff = (sizeof(struct tcphdr) + header_len + TCPOLEN_MSS) / 4;
+	ntcph->window = __constant_htons(65535);
+	ntcph->check = 0;
+	ntcph->urg_ptr = 0;
+
+	tcpopt = (struct natcap_TCPOPT *)((void *)ntcph + sizeof(struct tcphdr));
+	set_byte1((void *)tcpopt + header_len + 0, TCPOPT_MSS);
+	set_byte1((void *)tcpopt + header_len + 1, TCPOLEN_MSS);
+	set_byte2((void *)tcpopt + header_len + 2, ntohs(mss)); //just use mss from client.
+
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(nskb);
+
+	skb_push(nskb, (char *)niph - (char *)neth);
+	nskb->dev = (struct net_device *)dev;
+
+	dev_queue_xmit(nskb);
+	return 0;
+}
+
+unsigned char *tls_sni_search(unsigned char *data, int *data_len)
+{
+	unsigned char *p = data;
+	int p_len = *data_len;
+	int i = 0;
+	unsigned short len;
+
+	if (p[i + 0] != 0x16) {//Content Type NOT HandShake
+		return NULL;
+	}
+	i += 1 + 2; if (i >= p_len) return NULL;
+	len = ntohs(get_byte2(p + i + 0)); //content_len
+	i += 2; if (i >= p_len) return NULL;
+	if (i + len > p_len) return NULL;
+
+	p = p + i;
+	p_len = len;
+	i = 0;
+
+	if (p[i + 0] != 0x01) { //HanShake Type NOT Client Hello
+		return NULL;
+	}
+	i += 1; if (i >= p_len) return NULL;
+	len = (p[i + 0] << 8) + ntohs(get_byte2(p + i + 0 + 1)); //hanshake_len
+	i += 1 + 2; if (i >= p_len) return NULL;
+	if (i + len > p_len) return NULL;
+
+	p = p + i;
+	p_len = len;
+	i = 0;
+
+	i += 2 + 32; if (i >= p_len) return NULL; //tls_v, random
+	i += 1 + p[i + 0]; if (i >= p_len) return NULL; //session id
+	i += 2 + ntohs(get_byte2(p + i + 0)); if (i >= p_len) return NULL; //Cipher Suites
+	i += 1 + p[i + 0]; if (i >= p_len) return NULL; //Compression Methods
+
+	len = ntohs(get_byte2(p + i + 0)); //ext_len
+	i += 2;
+	if (i + len > p_len) return NULL;
+
+	p = p + i;
+	p_len = len;
+	i = 0;
+
+	while (i < p_len) {
+		if (get_byte2(p + i + 0) != __constant_htons(0)) {
+			i += 2 + 2 + ntohs(get_byte2(p + i + 0 + 2));
+			continue;
+		}
+		len = ntohs(get_byte2(p + i + 0 + 2)); //sn_len
+		i = i + 2 + 2;
+		if (i + len > p_len) return NULL;
+
+		p = p + i;
+		p_len = len;
+		i = 0;
+		break;
+	}
+	if (i >= p_len) return NULL;
+
+	len = ntohs(get_byte2(p + i + 0)); //snl_len
+	i += 2;
+	if (i + len > p_len) return NULL;
+
+	p = p + i;
+	p_len = len;
+	i = 0;
+
+	while (i < p_len) {
+		if (p[i + 0] != 0) {
+			i += 1 + 2 + ntohs(get_byte2(p + i + 0 + 1));
+			continue;
+		}
+		len = ntohs(get_byte2(p + i + 0 + 1));
+		i += 1 + 2;
+		if (i + len > p_len) return NULL;
+
+		*data_len = len;
+		return (p + i);
+	}
+
+	return NULL;
+}
+
+static inline void sni_ack_pass_back(struct sk_buff *oskb, struct sk_buff *cache_skb, struct nf_conn *ct, const struct net_device *dev)
+{
+	struct sk_buff *nskb;
+	struct ethhdr *neth, *oeth;
+	struct iphdr *niph, *oiph;
+	struct tcphdr *otcph, *ntcph;
+	int offset, add_len;
+
+	oeth = (struct ethhdr *)skb_mac_header(oskb);
+	oiph = ip_hdr(cache_skb); //use cache_skb
+	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) - (skb_headlen(oskb) + skb_tailroom(oskb));
+	add_len = offset < 0 ? 0 : offset;
+	offset += skb_tailroom(oskb);
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
+	if (!nskb) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		return;
+	}
+	nskb->tail += offset;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
+
+	neth = eth_hdr(nskb);
+	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+	//neth->h_proto = htons(ETH_P_IP);
+
+	niph = ip_hdr(nskb);
+	memset(niph, 0, sizeof(struct iphdr));
+	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+	niph->version = oiph->version;
+	niph->ihl = sizeof(struct iphdr) / 4;
+	niph->tos = 0;
+	niph->tot_len = htons(nskb->len);
+	niph->ttl = 0x80;
+	niph->protocol = IPPROTO_TCP;
+	niph->id = htons(jiffies);
+	niph->frag_off = 0x0;
+
+	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
+	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
+	ntcph->seq = otcph->seq;
+	ntcph->ack_seq = otcph->ack_seq;
+	tcp_flag_word(ntcph) = TCP_FLAG_ACK;
+	ntcph->res1 = 0;
+	ntcph->doff = sizeof(struct tcphdr) / 4;
+	ntcph->window = __constant_htons(65535);
+	ntcph->check = 0;
+	ntcph->urg_ptr = 0;
+
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(nskb);
+	nf_reset(nskb);
+
+	nf_conntrack_in(&init_net, PF_INET, NF_INET_PRE_ROUTING, nskb);
+	nf_conntrack_confirm(nskb);
+
+	oiph = ip_hdr(oskb);
+	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
+	ntcph->seq = otcph->ack_seq;
+	ntcph->ack_seq = htonl(ntohl(otcph->seq) + 1);
+
+	niph->saddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
+	ntcph->source = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.tcp.port;
+	skb_rcsum_tcpudp(nskb);
+
+	skb_push(nskb, (char *)niph - (char *)neth);
+	nskb->dev = (struct net_device *)dev;
+	nf_reset(nskb);
+	dev_queue_xmit(nskb);
+}
+
+
+static inline void sni_cache_skb_pass_back(struct sk_buff *oskb, struct sk_buff *cache_skb,
+		struct nf_conn *ct, const struct net_device *dev, enum ip_conntrack_info ctinfo)
+{
+	struct sk_buff *nskb;
+	struct ethhdr *neth, *oeth;
+	struct iphdr *niph, *oiph;
+	struct tcphdr *ntcph, *otcph;
+	int offset, add_len;
+
+	if (cache_skb == NULL)
+		return;
+	if (!skb_make_writable(cache_skb, ntohs(ip_hdr(cache_skb)->tot_len))) {
+		return;
+	}
+
+	oeth = (struct ethhdr *)skb_mac_header(oskb);
+	offset = ntohs(ip_hdr(cache_skb)->tot_len) - (skb_headlen(oskb) + skb_tailroom(oskb));
+	add_len = offset < 0 ? 0 : offset;
+	offset += skb_tailroom(oskb);
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
+	if (!nskb) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		return;
+	}
+	nskb->tail += offset;
+	nskb->len = ntohs(ip_hdr(cache_skb)->tot_len);
+
+	//use cache_skb
+	oiph = ip_hdr(cache_skb);
+
+	neth = eth_hdr(nskb);
+	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+	//neth->h_proto = htons(ETH_P_IP);
+
+	niph = ip_hdr(nskb);
+	memcpy(niph, oiph, nskb->len);
+
+	ntcph = (struct tcphdr *)((char *)niph + sizeof(struct iphdr));
+
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(nskb);
+	nf_reset(nskb);
+
+	nf_conntrack_in(&init_net, PF_INET, NF_INET_PRE_ROUTING, nskb);
+	nf_conntrack_confirm(nskb);
+
+	oiph = ip_hdr(oskb);
+	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
+	ntcph->seq = otcph->ack_seq;
+	ntcph->ack_seq = htonl(ntohl(otcph->seq) + 1);
+
+	niph->saddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip;
+	niph->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
+	ntcph->source = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.tcp.port;
+	ntcph->dest = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.tcp.port;
+	skb_rcsum_tcpudp(nskb);
+
+	skb_push(nskb, (char *)niph - (char *)neth);
+	nskb->dev = (struct net_device *)dev;
+	nf_reset(nskb);
+	dev_queue_xmit(nskb);
+}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_peer_pre_in_hook(unsigned int hooknum,
 		struct sk_buff *skb,
@@ -1008,7 +1486,7 @@ static unsigned int natcap_peer_pre_in_hook(unsigned int hooknum,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
 {
-	//u_int8_t pf = PF_INET;
+	u_int8_t pf = PF_INET;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_peer_pre_in_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
@@ -1016,14 +1494,14 @@ static unsigned int natcap_peer_pre_in_hook(const struct nf_hook_ops *ops,
 		const struct net_device *out,
 		int (*okfn)(struct sk_buff *))
 {
-	//u_int8_t pf = ops->pf;
+	u_int8_t pf = ops->pf;
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_peer_pre_in_hook(const struct nf_hook_ops *ops,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 {
-	//u_int8_t pf = state->pf;
+	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
@@ -1032,7 +1510,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		struct sk_buff *skb,
 		const struct nf_hook_state *state)
 {
-	//u_int8_t pf = state->pf;
+	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
@@ -1074,6 +1552,216 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 	}
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
+
+	if (TCPH(l4)->dest == peer_sni_port) {
+		enum ip_conntrack_info ctinfo;
+		struct nf_conn *ct;
+		struct nf_conntrack_tuple tuple;
+		struct nf_conntrack_tuple_hash *h;
+		unsigned char *data;
+		int data_len;
+
+		if (hooknum != NF_INET_PRE_ROUTING || !inet_is_local(in, iph->daddr)) {
+			return NF_ACCEPT;
+		}
+
+		memset(&tuple, 0, sizeof(tuple));
+		tuple.src.u3.ip = iph->saddr;
+		tuple.src.u.udp.port = TCPH(l4)->source;
+		tuple.dst.u3.ip = iph->daddr;
+		tuple.dst.u.udp.port = TCPH(l4)->dest;
+		tuple.src.l3num = PF_INET;
+		tuple.dst.protonum = IPPROTO_TCP;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+		h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
+		h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
+		if (h) {
+			struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
+			nf_ct_put(user);
+			return NF_ACCEPT;
+		}
+
+		if (TCPH(l4)->syn && !TCPH(l4)->ack) {
+			//got syn, send synack back.
+			peer_sni_send_synack(in, skb);
+			consume_skb(skb);
+			return NF_STOLEN;
+		}
+		if (!skb_make_writable(skb, skb->len)) {
+			return NF_DROP;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+
+		data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
+		data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
+		data = tls_sni_search(data, &data_len);
+
+		if (data && data_len > 13 && data[12] == '.') { //0b1a29384756.xxx.com
+			int n;
+			unsigned int a, b, c, d, e, f;
+			unsigned char client_mac[ETH_ALEN];
+			unsigned char x = data[data_len];
+			data[data_len] = 0;
+			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got tls sni: %s\n", DEBUG_TCP_ARG(iph,l4), data);
+			n = sscanf(data, "%02X%02X%02X%02X%02X%02X.", &a, &b, &c, &d, &e, &f);
+			data[data_len] = x;
+			if (n != 6) {
+				consume_skb(skb);
+				return NF_STOLEN;
+			}
+			client_mac[0] = a;
+			client_mac[1] = b;
+			client_mac[2] = c;
+			client_mac[3] = d;
+			client_mac[4] = e;
+			client_mac[5] = f;
+
+			memset(&tuple, 0, sizeof(tuple));
+			tuple.src.u3.ip = get_byte4(client_mac);
+			tuple.src.u.udp.port = get_byte2(client_mac + 4);
+			tuple.dst.u3.ip = PEER_FAKEUSER_DADDR;
+			tuple.dst.u.udp.port = __constant_htons(65535);
+			tuple.src.l3num = PF_INET;
+			tuple.dst.protonum = IPPROTO_UDP;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+			h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
+			h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
+			if (h) {
+				int i;
+				int ret;
+				struct tuple server;
+				unsigned long mindiff = peer_port_map_timeout * HZ;
+				struct sk_buff *cache_skb;
+				struct peer_tuple *pt = NULL;
+				struct natcap_session *ns;
+				struct user_expect *ue;
+				struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
+				if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_ORIGINAL) {
+					nf_ct_put(user);
+					goto sni_out;
+				}
+
+				ue = peer_user_expect(user);
+				for (i = 0; i < MAX_PEER_TUPLE; i++) {
+					if (ue->tuple[i].connected && ue->tuple[i].sip != 0 && mindiff > uintdiff(jiffies, ue->tuple[i].last_active)) {
+						pt = &ue->tuple[i];
+						mindiff = uintdiff(jiffies, ue->tuple[i].last_active);
+					}
+				}
+				if (pt == NULL) {
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping\n", DEBUG_TCP_ARG(iph,l4));
+					nf_ct_put(user);
+					goto sni_out;
+				}
+
+				spin_lock_bh(&ue->lock);
+				//re-check-in-lock
+				if (pt->sip == 0) {
+					spin_unlock_bh(&ue->lock);
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping\n", DEBUG_TCP_ARG(iph,l4));
+					nf_ct_put(user);
+					goto sni_out;
+				}
+				if (pt->connected == 0 || pt->local_seq == 0 || pt->remote_seq == 0) {
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": port mapping(%s,local_seq=%u,remote_seq=%u) last_active(%u,%u) not ok\n",
+							DEBUG_TCP_ARG(iph,l4), pt->connected ? "connected" : "disconnected",
+							pt->local_seq, pt->remote_seq, pt->last_active, (unsigned int)jiffies);
+					spin_unlock_bh(&ue->lock);
+					nf_ct_put(user);
+					goto sni_out;
+				}
+
+				cache_skb = peer_sni_to_syn(skb, pt->mss);
+				if (cache_skb == NULL) {
+					spin_unlock_bh(&ue->lock);
+					nf_ct_put(user);
+					consume_skb(cache_skb);
+					goto sni_out;
+				}
+				iph = ip_hdr(cache_skb);
+				l4 = (void *)iph + iph->ihl * 4;
+
+				ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, skb);
+				if (ret != NF_ACCEPT) {
+					spin_unlock_bh(&ue->lock);
+					nf_ct_put(user);
+					consume_skb(cache_skb);
+					goto sni_out;
+				}
+				ct = nf_ct_get(skb, &ctinfo);
+				if (NULL == ct) {
+					spin_unlock_bh(&ue->lock);
+					nf_ct_put(user);
+					consume_skb(cache_skb);
+					goto sni_out;
+				}
+				ns = natcap_session_in(ct);
+				if (!ns) {
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+					spin_unlock_bh(&ue->lock);
+					nf_ct_put(user);
+					consume_skb(cache_skb);
+					goto sni_out;
+				}
+				if (peer_cache_attach(ct, cache_skb) != 0) {
+					consume_skb(cache_skb);
+				}
+
+				server.ip = pt->sip;
+				server.port = pt->sport;
+
+				ns->p.peer_sip = pt->dip;
+				ns->p.peer_sport = pt->dport;
+				ns->p.tcp_seq_offset = pt->local_seq - (ntohl(TCPH(l4)->seq) - 1);
+				ns->p.remote_seq = pt->remote_seq;
+				ns->p.remote_mss = pt->mss;
+				if (!nfct_seqadj(ct) && !nfct_seqadj_ext_add(ct)) {
+					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": seqadj_ext add failed\n", DEBUG_TCP_ARG(iph,l4));
+				}
+
+				//clear this pt
+				pt->sip = 0;
+				pt->dip = 0;
+				pt->sport = 0;
+				pt->dport = 0;
+				pt->local_seq = 0;
+				pt->remote_seq = 0;
+				pt->connected = 0;
+
+				if ((ue->status & PEER_SUBTYPE_SSYN)) {
+					short_set_bit(NS_PEER_SSYN_BIT, &ns->p.status);
+				}
+				spin_unlock_bh(&ue->lock);
+
+				ret = natcap_dnat_setup(ct, server.ip, server.port);
+				if (ret != NF_ACCEPT) {
+					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+				}
+				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+				if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
+
+				if (!(IPS_NATCAP_PEER & ct->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &ct->status)) {
+					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": found user expect, do DNAT to " TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+				}
+
+				nf_ct_put(user);
+
+				return NF_ACCEPT;
+			}
+		}
+		//got ack and payload is 0, drop ignore
+		//got ack with payload > 0, parse sni host, redirect to target(send syn), cache this pkt(wait for synack)
+sni_out:
+		consume_skb(skb);
+		return NF_STOLEN;
+	}
 
 	tcpopt = natcap_peer_decode_header(TCPH(l4));
 	if (tcpopt == NULL) {
@@ -1340,6 +2028,36 @@ syn_out:
 					skb_rcsum_tcpudp(skb);
 					if (ns->p.remote_mss)
 						natcap_tcpmss_set(skb, TCPH(l4), ns->p.remote_mss);
+					if (ns->p.cache_index != 0) {
+						int ret;
+						enum ip_conntrack_info ctinfo;
+						struct nf_conn *ct;
+						struct sk_buff *cache_skb;
+
+						ret = nf_conntrack_in(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
+						if (ret != NF_ACCEPT) {
+							goto sni_skip;
+						}
+						ct = nf_ct_get(skb, &ctinfo);
+						//XXX do NAT?
+						ret = nf_conntrack_confirm(skb);
+						if (ret != NF_ACCEPT) {
+							goto sni_skip;
+						}
+
+						cache_skb = peer_cache_detach(ct);
+						if (cache_skb == NULL) {
+							goto sni_skip;
+						}
+						nf_ct_seqadj_init(ct, ctinfo, ntohl(TCPH((char *)ip_hdr(cache_skb) + sizeof(struct iphdr))->ack_seq) - 1 - ntohl(TCPH(l4)->seq));
+						sni_ack_pass_back(skb, cache_skb, ct, in);
+						sni_cache_skb_pass_back(skb, cache_skb, ct, in, ctinfo);
+						consume_skb(cache_skb);
+					sni_skip:
+						consume_skb(skb);
+						nf_ct_put(user);
+						return NF_STOLEN;
+					}
 				} else {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack->synack) FACK in, but ct status or dir error\n", DEBUG_TCP_ARG(iph,l4));
 				}
@@ -2449,6 +3167,7 @@ int natcap_peer_init(void)
 		default_mac_addr_init();
 	}
 
+	peer_cache_init();
 	memset(peer_server, 0, sizeof(peer_server));
 	for (i = 0; i < MAX_PEER_SERVER; i++) {
 		spin_lock_init(&peer_server[i].lock);
@@ -2578,4 +3297,6 @@ void natcap_peer_exit(void)
 		}
 		spin_unlock_bh(&peer_server[i].lock);
 	}
+
+	peer_cache_cleanup();
 }

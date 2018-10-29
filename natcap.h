@@ -190,7 +190,7 @@ struct natcap_session {
 		} n;
 		struct {
 			unsigned short status;
-			unsigned short _pad[1];
+			unsigned short cache_index;
 			u16 remote_mss; //for peer used on server side
 			__be16 peer_sport; //for peer used on server side
 			__be32 peer_sip; //for peer used on server side
