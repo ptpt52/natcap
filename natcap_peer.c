@@ -170,6 +170,7 @@ static inline void peer_cache_cleanup(void)
 
 static int peer_stop = 1;
 
+static __be32 peer_sni_ip = __constant_htonl(0);
 static __be16 peer_sni_port = __constant_htons(991);
 
 #define PEER_XSYN_MASK_ADDR __constant_htonl(0xffffffff)
@@ -1558,7 +1559,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
 
-	if (TCPH(l4)->dest == peer_sni_port) {
+	if (TCPH(l4)->dest == peer_sni_port && (peer_sni_ip == 0 || peer_sni_ip == iph->daddr)) {
 		enum ip_conntrack_info ctinfo;
 		struct nf_conn *ct;
 		struct nf_conntrack_tuple tuple;
@@ -2919,13 +2920,15 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 				"#    peer_conn_timeout=%us\n"
 				"#    peer_port_map_timeout=%us\n"
 				"#    KN=%pI4:%u MAC=%02X:%02X:%02X:%02X:%02X:%02X LP=%u\n"
+				"#    peer_sni_listen=%pI4:%u\n"
 				"#\n"
 				"\n",
 				&peer_local_ip, ntohs(peer_local_port),
 				peer_conn_timeout, peer_port_map_timeout,
 				&peer_knock_ip, ntohs(peer_knock_port),
 				peer_knock_mac[0], peer_knock_mac[1], peer_knock_mac[2], peer_knock_mac[3], peer_knock_mac[4], peer_knock_mac[5],
-				ntohs(peer_knock_local_port)
+				ntohs(peer_knock_local_port),
+				&peer_sni_ip, ntohs(peer_sni_port)
 				);
 		natcap_peer_ctl_buffer[n] = 0;
 		return natcap_peer_ctl_buffer;
@@ -3111,6 +3114,18 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 				peer_knock_local_port = htons(f);
 				goto done;
 			}
+		}
+	} else if (strncmp(data, "peer_sni_listen=", 16) == 0) {
+		unsigned int a, b, c, d, e;
+		n = sscanf(data, "peer_sni_listen=%u.%u.%u.%u:%u", &a, &b, &c, &d, &e);
+		if ( (n == 5 && e <= 0xffff) &&
+				(((a & 0xff) == a) &&
+				 ((b & 0xff) == b) &&
+				 ((c & 0xff) == c) &&
+				 ((d & 0xff) == d)) ) {
+			peer_sni_ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+			peer_sni_port = htons(e);
+			goto done;
 		}
 	}
 
