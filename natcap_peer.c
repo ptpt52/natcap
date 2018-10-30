@@ -57,9 +57,10 @@ struct peer_cache_node {
 
 DEFINE_SPINLOCK(peer_cache_lock);
 #define MAX_PEER_CACHE 64
-static unsigned short peer_cache_index_first = 0;
-static unsigned short peer_cache_index_next = 0;
+static unsigned short peer_cache_next_to_clean = 0;
+static unsigned short peer_cache_next_to_use = 0;
 static struct peer_cache_node peer_cache[MAX_PEER_CACHE];
+#define PEER_CACHE_TIMEOUT 4
 
 static inline void peer_cache_init(void)
 {
@@ -72,19 +73,20 @@ static inline int peer_cache_attach(struct nf_conn *ct, struct sk_buff *skb)
 {
 	struct natcap_session *ns = natcap_session_get(ct);
 	//XXX we use p.cache_index - 1 as index
-	if (ns == NULL || ns->p.cache_index != 0)
+	if (ns == NULL || ns->p.cache_index != 0) {
 		return -1;
+	}
 	spin_lock_bh(&peer_cache_lock);
-	if (peer_cache[peer_cache_index_next].user != NULL) {
+	if (peer_cache[peer_cache_next_to_use].user != NULL) {
 		spin_unlock_bh(&peer_cache_lock);
 		return -1;
 	}
 	nf_conntrack_get(&ct->ct_general);
-	peer_cache[peer_cache_index_next].jiffies = jiffies;
-	peer_cache[peer_cache_index_next].user = ct;
-	peer_cache[peer_cache_index_next].skb = skb;
-	ns->p.cache_index = peer_cache_index_next + 1;
-	peer_cache_index_next = (peer_cache_index_next + 1) % MAX_PEER_CACHE;
+	peer_cache[peer_cache_next_to_use].jiffies = jiffies;
+	peer_cache[peer_cache_next_to_use].user = ct;
+	peer_cache[peer_cache_next_to_use].skb = skb;
+	ns->p.cache_index = peer_cache_next_to_use + 1;
+	peer_cache_next_to_use = (peer_cache_next_to_use + 1) % MAX_PEER_CACHE;
 	spin_unlock_bh(&peer_cache_lock);
 	return 0;
 }
@@ -119,12 +121,17 @@ static inline void peer_cache_cleaner(void)
 {
 	unsigned short i;
 	struct natcap_session *ns;
-	if (peer_cache[peer_cache_index_first].user == NULL || !time_after(jiffies, peer_cache[peer_cache_index_first].jiffies + 8 * HZ))
+	if (peer_cache[peer_cache_next_to_clean].user != NULL &&
+			!time_after(jiffies, peer_cache[peer_cache_next_to_clean].jiffies + PEER_CACHE_TIMEOUT * HZ))
 		return;
 	spin_lock_bh(&peer_cache_lock);
-	i = peer_cache_index_first;
-	while (peer_cache[i].user != NULL) {
-		if (!time_after(jiffies, peer_cache[i].jiffies + 8 * HZ))
+	i = peer_cache_next_to_clean;
+	while (i != peer_cache_next_to_use) {
+		if (peer_cache[i].user == NULL) {
+			i = (i + 1) % MAX_PEER_CACHE;
+			continue;
+		}
+		if (!time_after(jiffies, peer_cache[i].jiffies + PEER_CACHE_TIMEOUT * HZ))
 			break;
 		ns = natcap_session_get(peer_cache[i].user);
 		ns->p.cache_index = 0;
@@ -135,10 +142,8 @@ static inline void peer_cache_cleaner(void)
 			peer_cache[i].skb = NULL;
 		}
 		i = (i + 1) % MAX_PEER_CACHE;
-		if (i == peer_cache_index_first)
-			break;
 	}
-	peer_cache_index_first = i;
+	peer_cache_next_to_clean = i;
 	spin_unlock_bh(&peer_cache_lock);
 }
 
@@ -1678,6 +1683,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 				cache_skb = peer_sni_to_syn(skb, pt->mss);
 				if (cache_skb == NULL) {
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: peer_sni_to_syn failed\n", DEBUG_TCP_ARG(iph,l4));
 					spin_unlock_bh(&ue->lock);
 					nf_ct_put(user);
 					consume_skb(cache_skb);
@@ -1688,6 +1694,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 				ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, skb);
 				if (ret != NF_ACCEPT) {
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: nf_conntrack_in fail=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 					spin_unlock_bh(&ue->lock);
 					nf_ct_put(user);
 					consume_skb(cache_skb);
@@ -1695,6 +1702,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				}
 				ct = nf_ct_get(skb, &ctinfo);
 				if (NULL == ct) {
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: ct is NULL\n", DEBUG_TCP_ARG(iph,l4));
 					spin_unlock_bh(&ue->lock);
 					nf_ct_put(user);
 					consume_skb(cache_skb);
@@ -1702,13 +1710,14 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				}
 				ns = natcap_session_in(ct);
 				if (!ns) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
 					spin_unlock_bh(&ue->lock);
 					nf_ct_put(user);
 					consume_skb(cache_skb);
 					goto sni_out;
 				}
 				if (peer_cache_attach(ct, cache_skb) != 0) {
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: peer_cache_attach failed\n", DEBUG_TCP_ARG(iph,l4));
 					consume_skb(cache_skb);
 				}
 
@@ -2021,7 +2030,6 @@ syn_out:
 				struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
 				struct natcap_session *ns = natcap_session_get(user);
 				if ((IPS_NATCAP_PEER & user->status) && ns && NF_CT_DIRECTION(h) == IP_CT_DIR_REPLY) {
-					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack->synack) FACK in, pass up\n", DEBUG_TCP_ARG(iph,l4));
 					TCPH(l4)->syn = 1;
 					TCPH(l4)->seq = htonl(ntohl(TCPH(l4)->seq) - 1);
 					skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -2034,19 +2042,26 @@ syn_out:
 						struct nf_conn *ct;
 						struct sk_buff *cache_skb;
 
+						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": FACK https sni\n", DEBUG_TCP_ARG(iph,l4));
 						ret = nf_conntrack_in(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
 						if (ret != NF_ACCEPT) {
+							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": FACK https sni, nf_conntrack_in fail=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 							goto sni_skip;
 						}
 						ct = nf_ct_get(skb, &ctinfo);
-						//XXX do NAT?
+						if (ct == NULL || ct != user) {
+							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": FACK https sni, ct=%p, user=%p mismatch\n", DEBUG_TCP_ARG(iph,l4), ct, user);
+							goto sni_skip;
+						}
 						ret = nf_conntrack_confirm(skb);
 						if (ret != NF_ACCEPT) {
+							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": FACK https sni, nf_conntrack_confirm fail=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 							goto sni_skip;
 						}
 
 						cache_skb = peer_cache_detach(ct);
 						if (cache_skb == NULL) {
+							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": FACK https sni, peer_cache_detach got NULL\n", DEBUG_TCP_ARG(iph,l4));
 							goto sni_skip;
 						}
 						nf_ct_seqadj_init(ct, ctinfo, ntohl(TCPH((char *)ip_hdr(cache_skb) + sizeof(struct iphdr))->ack_seq) - 1 - ntohl(TCPH(l4)->seq));
@@ -2058,6 +2073,7 @@ syn_out:
 						nf_ct_put(user);
 						return NF_STOLEN;
 					}
+					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack->synack) FACK in, pass up\n", DEBUG_TCP_ARG(iph,l4));
 				} else {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack->synack) FACK in, but ct status or dir error\n", DEBUG_TCP_ARG(iph,l4));
 				}
