@@ -1659,7 +1659,15 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					}
 				}
 				if (pt == NULL) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping for user[%02X:%02X:%02X:%02X:%02X:%02X]\n",
+							DEBUG_TCP_ARG(iph,l4),
+							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
+							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
+							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
+							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
+							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
+							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
+							);
 					nf_ct_put(user);
 					goto sni_out;
 				}
@@ -1668,7 +1676,15 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				//re-check-in-lock
 				if (pt->sip == 0) {
 					spin_unlock_bh(&ue->lock);
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping for user[%02X:%02X:%02X:%02X:%02X:%02X]\n",
+							DEBUG_TCP_ARG(iph,l4),
+							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
+							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
+							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
+							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
+							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
+							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
+							);
 					nf_ct_put(user);
 					goto sni_out;
 				}
@@ -2510,7 +2526,15 @@ knock:
 			}
 
 			if (pt == NULL) {
-				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping for user[%02X:%02X:%02X:%02X:%02X:%02X]\n",
+						DEBUG_TCP_ARG(iph,l4),
+						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
+						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
+						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
+						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
+						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
+						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
+						);
 				put_peer_user(user);
 				return NF_ACCEPT;
 			}
@@ -2519,7 +2543,15 @@ knock:
 			//re-check-in-lock
 			if (pt->sip == 0) {
 				spin_unlock_bh(&ue->lock);
-				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping for user[%02X:%02X:%02X:%02X:%02X:%02X]\n",
+						DEBUG_TCP_ARG(iph,l4),
+						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
+						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
+						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
+						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
+						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
+						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
+						);
 				put_peer_user(user);
 				return NF_ACCEPT;
 			}
