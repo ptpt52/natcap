@@ -1625,6 +1625,19 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			client_mac[4] = e;
 			client_mac[5] = f;
 
+			do {
+				int ret;
+				unsigned char old_mac[ETH_ALEN];
+				struct ethhdr *eth = eth_hdr(skb);
+				memcpy(old_mac, eth->h_source, ETH_ALEN);
+				memcpy(eth->h_source, client_mac, ETH_ALEN);
+				ret = IP_SET_test_src_mac(state, in, out, skb, "snilist");
+				memcpy(eth->h_source, old_mac, ETH_ALEN);
+				if (ret <= 0) {
+					return NF_DROP;
+				}
+			} while (0);
+
 			memset(&tuple, 0, sizeof(tuple));
 			tuple.src.u3.ip = get_byte4(client_mac);
 			tuple.src.u.udp.port = get_byte2(client_mac + 4);
