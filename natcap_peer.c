@@ -170,6 +170,8 @@ static inline void peer_cache_cleanup(void)
 
 static int peer_stop = 1;
 
+static unsigned int peer_sni_auth = 0;
+
 static __be32 peer_sni_ip = __constant_htonl(0);
 static __be16 peer_sni_port = __constant_htons(991);
 
@@ -1625,7 +1627,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			client_mac[4] = e;
 			client_mac[5] = f;
 
-			do {
+			if (peer_sni_auth) {
 				int ret;
 				unsigned char old_mac[ETH_ALEN];
 				struct ethhdr *eth = eth_hdr(skb);
@@ -1636,7 +1638,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				if (ret <= 0) {
 					return NF_DROP;
 				}
-			} while (0);
+			}
 
 			memset(&tuple, 0, sizeof(tuple));
 			tuple.src.u3.ip = get_byte4(client_mac);
@@ -2934,6 +2936,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 				"#    peer_port_map_timeout=%us\n"
 				"#    KN=%pI4:%u MAC=%02X:%02X:%02X:%02X:%02X:%02X LP=%u\n"
 				"#    peer_sni_listen=%pI4:%u\n"
+				"#    peer_sni_auth=%u\n"
 				"#\n"
 				"\n",
 				&peer_local_ip, ntohs(peer_local_port),
@@ -2941,7 +2944,8 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 				&peer_knock_ip, ntohs(peer_knock_port),
 				peer_knock_mac[0], peer_knock_mac[1], peer_knock_mac[2], peer_knock_mac[3], peer_knock_mac[4], peer_knock_mac[5],
 				ntohs(peer_knock_local_port),
-				&peer_sni_ip, ntohs(peer_sni_port)
+				&peer_sni_ip, ntohs(peer_sni_port),
+				peer_sni_auth
 				);
 		natcap_peer_ctl_buffer[n] = 0;
 		return natcap_peer_ctl_buffer;
@@ -3138,6 +3142,13 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 				 ((d & 0xff) == d)) ) {
 			peer_sni_ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 			peer_sni_port = htons(e);
+			goto done;
+		}
+	} else if (strncmp(data, "peer_sni_auth=", 14) == 0) {
+		unsigned int d;
+		n = sscanf(data, "peer_sni_auth=%u", &d);
+		if (n == 1) {
+			peer_sni_auth = d;
 			goto done;
 		}
 	}

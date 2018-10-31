@@ -18,5 +18,6 @@ rmmod natcap >/dev/null 2>&1
 ( modprobe natcap mode=5 debug=3 2>/dev/null || insmod ./natcap.ko mode=5 debug=3 ) && {
 cat <<EOF >>/dev/natcap_peer_ctl
 local_target=0.0.0.0:22
+peer_sni_auth=1
 EOF
 }
