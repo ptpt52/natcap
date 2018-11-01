@@ -14,6 +14,7 @@ iptables -A FORWARD -m mark --mark 0x99 -j ACCEPT
 iptables -t nat -A POSTROUTING -m mark --mark 0x99 -j MASQUERADE
 
 # load && run
+modprobe ip_set
 rmmod natcap >/dev/null 2>&1
 ( modprobe natcap mode=1 >/dev/null || insmod ./natcap.ko mode=1 ) && {
 cat <<EOF >>/dev/natcap_ctl
