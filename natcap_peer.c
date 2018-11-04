@@ -1607,14 +1607,14 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
 		data = tls_sni_search(data, &data_len);
 
-		if (data && data_len > 13 && data[12] == '.') { //0b1a29384756.xxx.com
+		if (data && data_len > 15 && data[14] == '.') { //m-0b1a29384756.xxx.com
 			int n;
 			unsigned int a, b, c, d, e, f;
 			unsigned char client_mac[ETH_ALEN];
 			unsigned char x = data[data_len];
 			data[data_len] = 0;
 			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got tls sni: %s\n", DEBUG_TCP_ARG(iph,l4), data);
-			n = sscanf(data, "%02X%02X%02X%02X%02X%02X.", &a, &b, &c, &d, &e, &f);
+			n = sscanf(data, "m-%02X%02X%02X%02X%02X%02X.", &a, &b, &c, &d, &e, &f);
 			data[data_len] = x;
 			if (n != 6) {
 				consume_skb(skb);
