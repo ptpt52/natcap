@@ -378,7 +378,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	}
 	ntcph->seq = otcph->ack_seq;
 	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4 + 1);
-	tcp_flag_word(ntcph) = TCP_FLAG_SYN | TCP_FLAG_ACK;
+	tcp_flag_word(ntcph) = TCP_FLAG_RST | TCP_FLAG_ACK;
 	ntcph->res1 = 0;
 	ntcph->doff = 5;
 	ntcph->window = __constant_htons(0);

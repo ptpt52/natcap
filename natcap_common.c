@@ -1231,7 +1231,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 
 	TCPH(l4)->seq = ns->n.current_seq == 0 ? htonl(jiffies) : htonl(ns->n.current_seq);
 	TCPH(l4)->ack_seq = (m == 0 && ns->n.current_seq == 0) ? 0 : htonl(ns->n.foreign_seq);
-	tcp_flag_word(TCPH(l4)) = (ns->n.current_seq == 0 ? TCP_FLAG_ACK : 0) | ((m == 0 && ns->n.current_seq == 0) ? 0 : TCP_FLAG_ACK);
+	tcp_flag_word(TCPH(l4)) = (ns->n.current_seq == 0 ? TCP_FLAG_SYN : 0) | ((m == 0 && ns->n.current_seq == 0) ? 0 : TCP_FLAG_ACK);
 	TCPH(l4)->res1 = 0;
 	TCPH(l4)->doff = 5;
 	TCPH(l4)->window = htons(ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xffff) ^ (ntohl(TCPH(l4)->ack_seq) & 0xffff));
