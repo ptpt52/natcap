@@ -1482,7 +1482,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xFFFF) ^ (ntohl(TCPH(l4)->ack_seq) & 0xFFFF)) ) {
 			unsigned int tcphdr_len = TCPH(l4)->doff * 4;
-			unsigned int foreign_seq = ntohl(TCPH(l4)->seq) + (TCPH(l4)->syn ? 1 + ntohs(iph->tot_len) - iph->ihl * 4 - tcphdr_len : ntohs(iph->tot_len) - iph->ihl * 4 - tcphdr_len);
+			unsigned int foreign_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - tcphdr_len + !!TCPH(l4)->syn;
 
 			if (!inet_is_local(in, iph->daddr)) {
 				set_bit(IPS_NATCAP_PRE_BIT, &master->status);
