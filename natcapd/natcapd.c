@@ -20,6 +20,7 @@
 #include <pthread.h>
 #include <sys/un.h>
 
+#include <ifaddrs.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <linux/netfilter_ipv4.h>
@@ -176,6 +177,25 @@ static remote_t *connect_to_remote(EV_P_ struct addrinfo *res, struct sockaddr *
 
 #ifndef NATCAP_CLIENT_MODE
 	if (bind_addr) {
+		struct ifaddrs* ifaddr = NULL;
+		struct ifaddrs* ifa;
+
+		getifaddrs(&ifaddr);
+		for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+			if (ifa->ifa_addr && ifa->ifa_name && AF_INET == ifa->ifa_addr->sa_family &&
+					((struct sockaddr_in *)ifa->ifa_addr)->sin_addr.s_addr == ((struct sockaddr_in *)bind_addr)->sin_addr.s_addr) {
+				//bind ifname
+				struct ifreq ifr;
+				memset(&ifr, 0, sizeof(ifr));
+				snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", ifa->ifa_name);
+				if (setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0) {
+					perror("setsockopt SO_BINDTODEVICE");
+				}
+				break;
+			}
+		}
+		freeifaddrs(ifaddr);
+
 		if (bind(sockfd, bind_addr, sizeof(struct sockaddr_in))) {
 			perror("bind");
 		}
