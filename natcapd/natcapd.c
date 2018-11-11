@@ -47,13 +47,18 @@ static void server_timeout_cb(EV_P_ ev_timer *watcher, int revents);
 
 static remote_t *new_remote(int fd);
 static server_t *new_server(int fd, listen_ctx_t *listener);
+#ifdef NATCAP_CLIENT_MODE
 static remote_t *connect_to_remote(EV_P_ struct addrinfo *res, server_t *server);
+#else
+static remote_t *connect_to_remote(EV_P_ struct addrinfo *res, struct sockaddr *bind_addr, server_t *server);
+#endif
 
 static void free_remote(remote_t *remote);
 static void close_and_free_remote(EV_P_ remote_t *remote);
 static void free_server(server_t *server);
 static void close_and_free_server(EV_P_ server_t *server);
 
+int ito = 0;
 int verbose = 0;
 int reuse_port = 0;
 
@@ -153,7 +158,11 @@ int create_and_bind(const char *host, const char *port)
 	return listen_sock;
 }
 
+#ifdef NATCAP_CLIENT_MODE
 static remote_t *connect_to_remote(EV_P_ struct addrinfo *res, server_t *server)
+#else
+static remote_t *connect_to_remote(EV_P_ struct addrinfo *res, struct sockaddr *bind_addr, server_t *server)
+#endif
 {
 	int sockfd;
 
@@ -164,6 +173,14 @@ static remote_t *connect_to_remote(EV_P_ struct addrinfo *res, server_t *server)
 		close(sockfd);
 		return NULL;
 	}
+
+#ifndef NATCAP_CLIENT_MODE
+	if (bind_addr) {
+		if (bind(sockfd, bind_addr, sizeof(struct sockaddr_in))) {
+			perror("bind");
+		}
+	}
+#endif
 
 	int opt = 1;
 	setsockopt(sockfd, SOL_TCP, TCP_NODELAY, &opt, sizeof(opt));
@@ -191,7 +208,7 @@ static remote_t *connect_to_remote(EV_P_ struct addrinfo *res, server_t *server)
 }
 
 #ifdef NATCAP_CLIENT_MODE
-int getdestaddr(int fd, struct sockaddr_storage *destaddr)
+static int getdestaddr(int fd, struct sockaddr_storage *destaddr)
 {
     socklen_t socklen = sizeof(*destaddr);
     int error = 0;
@@ -209,6 +226,18 @@ static int getdestaddr(int fd, struct sockaddr_storage *destaddr)
 	int error = 0;
 
 	error = getsockopt(fd, SOL_IP, SO_NATCAP_DST, destaddr, &socklen);
+	if (error) {
+		return -1;
+	}
+	return 0;
+}
+
+static int get_original_destaddr(int fd, struct sockaddr_storage *destaddr)
+{
+    socklen_t socklen = sizeof(*destaddr);
+    int error = 0;
+
+	error = getsockopt(fd, SOL_IP, SO_ORIGINAL_DST, destaddr, &socklen);
 	if (error) {
 		return -1;
 	}
@@ -653,6 +682,11 @@ static void accept_cb(EV_P_ ev_io *w, int revents)
 		struct sockaddr_in *addr;
 		struct addrinfo info;
 		struct sockaddr_storage storage;
+#ifndef NATCAP_CLIENT_MODE
+		struct sockaddr_storage bind_storage;
+		struct sockaddr *bind_addr = NULL;
+		memset(&bind_storage, 0, sizeof(struct sockaddr_storage));
+#endif
 		memset(&info, 0, sizeof(struct addrinfo));
 		memset(&storage, 0, sizeof(struct sockaddr_storage));
 
@@ -661,7 +695,6 @@ static void accept_cb(EV_P_ ev_io *w, int revents)
 			close_and_free_server(EV_A_ server);
 			return;
 		}
-
 		addr = (struct sockaddr_in *)&storage;
 		info.ai_family   = AF_INET;
 		info.ai_socktype = SOCK_STREAM;
@@ -669,7 +702,20 @@ static void accept_cb(EV_P_ ev_io *w, int revents)
 		info.ai_addrlen  = sizeof(struct sockaddr_in);
 		info.ai_addr     = (struct sockaddr *)addr;
 
+#ifdef NATCAP_CLIENT_MODE
 		remote_t *remote = connect_to_remote(EV_A_ & info, server);
+#else
+		if (ito != 0) {
+			if (get_original_destaddr(server->fd, &bind_storage) != 0) {
+				perror("get_original_destaddr");
+				close_and_free_server(EV_A_ server);
+				return;
+			}
+			bind_addr = (struct sockaddr *)&bind_storage;
+		}
+
+		remote_t *remote = connect_to_remote(EV_A_ & info, bind_addr, server);
+#endif
 		if (remote == NULL) {
 			printf("connect error\n");
 			close_and_free_server(EV_A_ server);
@@ -691,6 +737,9 @@ void usage()
 	printf("  usage:\n\n");
 	printf("       [-s <server_host>]         Local IP address to bind\n");
 	printf("       [-l <local_port>]          Port number of your local server.\n");
+#ifndef NATCAP_CLIENT_MODE
+	printf("       [-I]                       Bind input as output interface\n");
+#endif
 	printf("       [-t <timeout>]             Socket timeout in seconds.\n");
 	printf("       [-v]                       Verbose mode.\n");
 	printf("       [-h, --help]               Print this message.\n");
@@ -708,7 +757,11 @@ int main(int argc, char **argv)
 
 	opterr = 0;
 
+#ifdef NATCAP_CLIENT_MODE
 	while ((c = getopt_long(argc, argv, "s:l:t:hv", NULL, NULL)) != -1) {
+#else
+	while ((c = getopt_long(argc, argv, "s:l:It:hv", NULL, NULL)) != -1) {
+#endif
 		switch (c) {
 			case 's':
 				if (server_num < MAX_REMOTE_NUM) {
@@ -718,6 +771,11 @@ int main(int argc, char **argv)
 			case 'l':
 				server_port = optarg;
 				break;
+#ifndef NATCAP_CLIENT_MODE
+			case 'I':
+				ito = 1;
+				break;
+#endif
 			case 't':
 				timeout = optarg;
 				break;
