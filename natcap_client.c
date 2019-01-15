@@ -634,6 +634,13 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		goto natcaped_out;
 	}
 
+	/* natcapd server local out bypass */
+	if (natcap_redirect_port != 0 && hooknum == NF_INET_LOCAL_OUT) {
+		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+		return NF_ACCEPT;
+	}
+
 	if (macfilter == NATCAP_ACL_ALLOW && IP_SET_test_src_mac(state, in, out, skb, "natcap_maclist") <= 0) {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
