@@ -1290,7 +1290,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				net = dev_net(in);
 			else if (out)
 				net = dev_net(out);
-			ret = nf_conntrack_in(net, pf, hooknum, skb);
+			ret = nf_conntrack_in_compat(net, pf, hooknum, skb);
 			if (ret != NF_ACCEPT) {
 				return ret;
 			}
@@ -1384,7 +1384,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			net = dev_net(in);
 		else if (out)
 			net = dev_net(out);
-		ret = nf_conntrack_in(net, pf, hooknum, skb);
+		ret = nf_conntrack_in_compat(net, pf, hooknum, skb);
 		if (ret != NF_ACCEPT) {
 			return ret;
 		}
@@ -2029,7 +2029,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		net = dev_net(in);
 	else if (out)
 		net = dev_net(out);
-	ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, skb);
+	ret = nf_conntrack_in_compat(net, pf, NF_INET_PRE_ROUTING, skb);
 	if (ret != NF_ACCEPT) {
 		if (ret != NF_STOLEN) {
 			consume_skb(skb);
@@ -2653,7 +2653,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				net = dev_net(in);
 			else if (out)
 				net = dev_net(out);
-			ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, skb);
+			ret = nf_conntrack_in_compat(net, pf, NF_INET_PRE_ROUTING, skb);
 			if (ret != NF_ACCEPT) {
 				return ret;
 			}
@@ -2760,7 +2760,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				net = dev_net(in);
 			else if (out)
 				net = dev_net(out);
-			ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, skb);
+			ret = nf_conntrack_in_compat(net, pf, NF_INET_PRE_ROUTING, skb);
 			if (ret != NF_ACCEPT) {
 				return ret;
 			}

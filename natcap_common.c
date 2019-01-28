@@ -1244,7 +1244,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 
 	ct = nf_ct_get(skb, &ctinfo);
 	skb_nfct_reset(skb);
-	nf_conntrack_in(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
+	nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
 	ct2 = nf_ct_get(skb, &ctinfo);
 	if (!ct || !ct2) {
 		return -EINVAL;

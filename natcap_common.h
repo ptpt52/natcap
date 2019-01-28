@@ -593,6 +593,26 @@ static inline void nf_unregister_hooks(struct nf_hook_ops *reg, unsigned int n)
 }
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 20, 0)
+static inline unsigned int nf_conntrack_in_compat(struct net *net, u_int8_t pf, unsigned int hooknum, struct sk_buff *skb)
+{
+	return nf_conntrack_in(net, pf, hooknum, skb);
+}
+#else
+static inline unsigned int nf_conntrack_in_compat(struct net *net, u_int8_t pf, unsigned int hooknum, struct sk_buff *skb)
+{
+	struct nf_hook_state state = {
+		.hook = hooknum,
+		.pf = pf,
+		.net = net,
+	};
+
+	return nf_conntrack_in(skb, &state);
+}
+
+#define need_conntrack() do {} while (0)
+#endif
+
 static inline int inet_is_local(const struct net_device *dev, __be32 ip)
 {
 	struct in_device *in_dev;
