@@ -570,7 +570,7 @@ struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport
 	udph->len = __constant_htons(sizeof(struct udphdr));
 	udph->check = 0;
 
-	ret = nf_conntrack_in(&init_net, PF_INET, NF_INET_PRE_ROUTING, uskb);
+	ret = nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, uskb);
 	if (ret != NF_ACCEPT) {
 		return NULL;
 	}
@@ -674,7 +674,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	udph->len = __constant_htons(sizeof(struct udphdr));
 	udph->check = 0;
 
-	ret = nf_conntrack_in(&init_net, PF_INET, NF_INET_PRE_ROUTING, uskb);
+	ret = nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, uskb);
 	if (ret != NF_ACCEPT) {
 		return NULL;
 	}
@@ -1402,7 +1402,7 @@ static inline void sni_ack_pass_back(struct sk_buff *oskb, struct sk_buff *cache
 	skb_rcsum_tcpudp(nskb);
 	nf_reset(nskb);
 
-	nf_conntrack_in(&init_net, PF_INET, NF_INET_PRE_ROUTING, nskb);
+	nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, nskb);
 	nf_conntrack_confirm(nskb);
 
 	oiph = ip_hdr(oskb);
@@ -1467,7 +1467,7 @@ static inline void sni_cache_skb_pass_back(struct sk_buff *oskb, struct sk_buff 
 	skb_rcsum_tcpudp(nskb);
 	nf_reset(nskb);
 
-	nf_conntrack_in(&init_net, PF_INET, NF_INET_PRE_ROUTING, nskb);
+	nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, nskb);
 	nf_conntrack_confirm(nskb);
 
 	oiph = ip_hdr(oskb);
@@ -1724,7 +1724,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				iph = ip_hdr(cache_skb);
 				l4 = (void *)iph + iph->ihl * 4;
 
-				ret = nf_conntrack_in(net, pf, NF_INET_PRE_ROUTING, skb);
+				ret = nf_conntrack_in_compat(net, pf, NF_INET_PRE_ROUTING, skb);
 				if (ret != NF_ACCEPT) {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: nf_conntrack_in fail=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 					spin_unlock_bh(&ue->lock);
@@ -2075,7 +2075,7 @@ syn_out:
 						struct sk_buff *cache_skb;
 
 						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": FACK https sni\n", DEBUG_TCP_ARG(iph,l4));
-						ret = nf_conntrack_in(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
+						ret = nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
 						if (ret != NF_ACCEPT) {
 							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": FACK https sni, nf_conntrack_in fail=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 							goto sni_skip;

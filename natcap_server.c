@@ -304,7 +304,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	ntcph->source = ct->tuplehash[!dir].tuple.src.u.tcp.port;
 	ntcph->dest = ct->tuplehash[!dir].tuple.dst.u.tcp.port;
 	/*XXX don't care what is returned */
-	nf_conntrack_in(dev_net(dev), PF_INET, NF_INET_PRE_ROUTING, nskb);
+	nf_conntrack_in_compat(dev_net(dev), PF_INET, NF_INET_PRE_ROUTING, nskb);
 	niph->saddr = ct->tuplehash[dir].tuple.dst.u3.ip;
 	niph->daddr = ct->tuplehash[dir].tuple.src.u3.ip;
 	ntcph->source = ct->tuplehash[dir].tuple.dst.u.tcp.port;
@@ -395,7 +395,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	ntcph->source = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.tcp.port;
 	ntcph->dest = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.tcp.port;
 	/*XXX don't care what is returned */
-	nf_conntrack_in(dev_net(dev), PF_INET, NF_INET_PRE_ROUTING, nskb);
+	nf_conntrack_in_compat(dev_net(dev), PF_INET, NF_INET_PRE_ROUTING, nskb);
 	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
@@ -493,7 +493,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	ntcph->source = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.tcp.port;
 	ntcph->dest = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.tcp.port;
 	/*XXX don't care what is returned */
-	nf_conntrack_in(dev_net(dev), PF_INET, NF_INET_PRE_ROUTING, nskb);
+	nf_conntrack_in_compat(dev_net(dev), PF_INET, NF_INET_PRE_ROUTING, nskb);
 	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
@@ -1527,7 +1527,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 				net = dev_net(in);
 			else if (out)
 				net = dev_net(out);
-			ret = nf_conntrack_in(net, pf, hooknum, skb);
+			ret = nf_conntrack_in_compat(net, pf, hooknum, skb);
 			if (ret != NF_ACCEPT) {
 				return ret;
 			}
@@ -1621,7 +1621,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			net = dev_net(in);
 		else if (out)
 			net = dev_net(out);
-		ret = nf_conntrack_in(net, pf, hooknum, skb);
+		ret = nf_conntrack_in_compat(net, pf, hooknum, skb);
 		if (ret != NF_ACCEPT) {
 			return ret;
 		}

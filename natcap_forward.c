@@ -560,7 +560,7 @@ static unsigned int natcap_forward_pre_in_hook(void *priv,
 			net = dev_net(in);
 		else if (out)
 			net = dev_net(out);
-		ret = nf_conntrack_in(net, pf, hooknum, skb);
+		ret = nf_conntrack_in_compat(net, pf, hooknum, skb);
 		if (ret != NF_ACCEPT) {
 			return ret;
 		}
