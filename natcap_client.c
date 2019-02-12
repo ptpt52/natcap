@@ -273,7 +273,9 @@ static unsigned int server_index = 0;
 void natcap_server_info_change(int change)
 {
 	static unsigned long server_jiffies = 0;
-	if (change || server_jiffies == 0 || time_after(jiffies, server_jiffies + (7 * server_persist_timeout / 8 + jiffies % (server_persist_timeout / 4 + 1)) * HZ)) {
+	if (change || server_jiffies == 0 ||
+			(!server_persist_lock &&
+			 time_after(jiffies, server_jiffies + (7 * server_persist_timeout / 8 + jiffies % (server_persist_timeout / 4 + 1)) * HZ))) {
 		server_jiffies = jiffies;
 		server_index += 1 + prandom_u32();
 	}
