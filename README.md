@@ -25,6 +25,7 @@ Install essential packages
 ```sh
 sudo apt-get install build-essential ipset libev-dev
 sudo apt-get build-dep linux-image-`uname -r`
+sudo apt-get install lua5.1 lua-cjson lua-bitop ipcalc
 ```
 
 Get the source code
