@@ -67,6 +67,7 @@ static inline void natcap_tuple_to_ns(struct natcap_session *ns, const struct tu
 }
 
 extern struct cone_nat_session *cone_nat_array;
+extern struct cone_snat_session *cone_snat_array;
 
 extern unsigned int natcap_touch_timeout;
 
@@ -418,6 +419,8 @@ static inline int natcap_tcpmss_clamp_pmtu_adjust(struct sk_buff *skb, struct ne
 	}
 	return -1;
 }
+
+extern int ip_set_exist(const char *ip_set_name);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 extern int ip_set_test_src_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name);

@@ -1962,10 +1962,26 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		iph->daddr = ns->n.target_ip;
 	} else {
 		if (ns->n.new_source == 0) {
-			unsigned int range_size, min, i;
 			__be16 *portptr;
 			u_int16_t off;
+			unsigned int range_size, min, i;
 			struct nf_conntrack_tuple tuple;
+
+			if (cone_snat_array &&
+					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
+					ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
+					IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+				int idx;
+				struct cone_snat_session css;
+
+				idx = jhash2(&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, 1, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) % 32768;
+				memcpy(&css, &cone_snat_array[idx], sizeof(css));
+				if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip == css.lan_ip &&
+						ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port == css.lan_port &&
+						iph->saddr == css.wan_ip) {
+					ns->n.new_source = css.wan_port;
+				}
+			}
 
 			memset(&tuple, 0, sizeof(tuple));
 			tuple.src.u3.ip = iph->saddr;
@@ -2004,13 +2020,16 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		UDPH(l4)->dest = ns->n.target_port;
 		iph->daddr = ns->n.target_ip;
 
-		if (cone_nat_array &&
+		if (cone_nat_array && cone_snat_array &&
 				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 				ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
 				IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+			int idx;
 			struct cone_nat_session cns;
+			struct cone_snat_session css;
 
-			memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->source)], sizeof(cns));
+			idx = ntohs(UDPH(l4)->source) % 65536;
+			memcpy(&cns, &cone_nat_array[idx], sizeof(cns));
 			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip != cns.ip ||
 					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port != cns.port) {
 
@@ -2018,11 +2037,18 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 						&cns.ip, ntohs(cns.port),
 						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip,
 						ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port),
-						ntohs(UDPH(l4)->source));
+						idx);
 
 				cns.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 				cns.port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port;
-				memcpy(&cone_nat_array[ntohs(UDPH(l4)->source)], &cns, sizeof(cns));
+				memcpy(&cone_nat_array[idx], &cns, sizeof(cns));
+
+				idx = jhash2(&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, 1, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) % 32768;
+				css.wan_ip = iph->saddr;
+				css.wan_port = UDPH(l4)->source;
+				css.lan_ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
+				css.lan_port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port;
+				memcpy(&cone_snat_array[idx], &css, sizeof(css));
 			}
 		}
 	}
