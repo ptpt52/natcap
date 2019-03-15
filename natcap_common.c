@@ -575,6 +575,29 @@ int natcap_tcp_encode_fwdupdate(struct sk_buff *skb, struct tcphdr *tcph, const 
 	return 0;
 }
 
+int ip_set_exist(const char *ip_set_name)
+{
+	int ret = 0;
+	ip_set_id_t id;
+	struct ip_set *set;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+	id = ip_set_get_byname(&init_net, ip_set_name, &set);
+#else
+	id = ip_set_get_byname(ip_set_name, &set);
+#endif
+	if (id != IPSET_INVALID_ID) {
+		ret = 1;
+	}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+	ip_set_put_byindex(&init_net, id);
+#else
+	ip_set_put_byindex(id);
+#endif
+
+	return ret;
+}
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 int ip_set_test_src_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
 #else
@@ -1259,6 +1282,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 }
 
 struct cone_nat_session *cone_nat_array = NULL;
+struct cone_snat_session *cone_snat_array = NULL;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_common_cone_in_hook(unsigned int hooknum,
@@ -1398,6 +1422,7 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 	struct iphdr *iph;
 	void *l4;
 	struct cone_nat_session cns;
+	struct cone_snat_session css;
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_UDP) {
@@ -1422,8 +1447,10 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 			((IPS_NATCAP & ct->status) ||
 			 (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip != iph->saddr &&
 			  IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0))) {
+		int idx;
 
-		memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->source)], sizeof(cns));
+		idx = ntohs(UDPH(l4)->source) % 65536;
+		memcpy(&cns, &cone_nat_array[idx], sizeof(cns));
 		if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip != cns.ip ||
 				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port != cns.port) {
 
@@ -1431,11 +1458,104 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 					&cns.ip, ntohs(cns.port),
 					&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip,
 					ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port),
-					ntohs(UDPH(l4)->source));
+					idx);
 
 			cns.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 			cns.port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port;
-			memcpy(&cone_nat_array[ntohs(UDPH(l4)->source)], &cns, sizeof(cns));
+			memcpy(&cone_nat_array[idx], &cns, sizeof(cns));
+
+			idx = jhash2(&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, 1, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) % 32768;
+			css.wan_ip = iph->saddr;
+			css.wan_port = UDPH(l4)->source;
+			css.lan_ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
+			css.lan_port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port;
+			memcpy(&cone_snat_array[idx], &css, sizeof(css));
+		}
+	}
+
+	return NF_ACCEPT;
+}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned int natcap_common_cone_snat_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+	u_int8_t pf = PF_INET;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_common_cone_snat_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+	//u_int8_t pf = ops->pf;
+	unsigned int hooknum = ops->hooknum;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+static unsigned int natcap_common_cone_snat_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	//u_int8_t pf = state->pf;
+	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
+#else
+static unsigned int natcap_common_cone_snat_hook(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	//u_int8_t pf = state->pf;
+	unsigned int hooknum = state->hook;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
+#endif
+#endif
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
+	struct iphdr *iph;
+	void *l4;
+
+	iph = ip_hdr(skb);
+	if (iph->protocol != IPPROTO_UDP) {
+		return NF_ACCEPT;
+	}
+	l4 = (void *)iph + iph->ihl * 4;
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+	if ((IPS_NATCAP_CONE & ct->status)) {
+		return NF_ACCEPT;
+	}
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+		return NF_ACCEPT;
+	}
+	if (nf_ct_is_confirmed(ct)) {
+		return NF_ACCEPT;
+	}
+
+	if (cone_snat_array) {
+		int ret;
+		int idx;
+		struct cone_snat_session css;
+
+		idx = jhash2(&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, 1, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) % 32768;
+		memcpy(&css, &cone_snat_array[idx], sizeof(css));
+		if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip == css.lan_ip &&
+				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port == css.lan_port &&
+				ip_set_exist("natcap_wan_ip") &&
+				css.wan_ip != 0 && css.wan_port != 0) {
+			//TODO check wan_ip is in wan
+			NATCAP_INFO("(CCS)" DEBUG_UDP_FMT ": SNAT to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &css.wan_ip, ntohs(css.wan_port));
+			ret = natcap_snat_setup(ct, css.wan_ip, css.wan_port);
+			if (ret != NF_ACCEPT) {
+				NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": natcap_snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
+			}
 		}
 	}
 
@@ -1456,6 +1576,15 @@ static struct nf_hook_ops common_hooks[] = {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 		.owner = THIS_MODULE,
 #endif
+		.hook = natcap_common_cone_snat_hook,
+		.pf = PF_INET,
+		.hooknum = NF_INET_POST_ROUTING,
+		.priority = NF_IP_PRI_NAT_SRC - 6,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
 		.hook = natcap_common_cone_out_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_POST_ROUTING,
@@ -1470,15 +1599,32 @@ int natcap_common_init(void)
 	dnatcap_map_init();
 	cone_nat_array = vmalloc(sizeof(struct cone_nat_session) * 65536);
 	if (cone_nat_array == NULL) {
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto err_alloc_cone_nat_array;
 	}
 	memset(cone_nat_array, 0, sizeof(struct cone_nat_session) * 65536);
+
+	cone_snat_array = vmalloc(sizeof(struct cone_snat_session) * 32768);
+	if (cone_snat_array == NULL) {
+		ret = -ENOMEM;
+		goto err_alloc_cone_snat_array;
+	}
+	memset(cone_snat_array, 0, sizeof(struct cone_snat_session) * 32768);
 
 	need_conntrack();
 	ret = nf_register_hooks(common_hooks, ARRAY_SIZE(common_hooks));
 	if (ret != 0) {
-		vfree(cone_nat_array);
+		goto err_nf_register_hooks;
 	}
+
+	return 0;
+
+	nf_unregister_hooks(common_hooks, ARRAY_SIZE(common_hooks));
+err_nf_register_hooks:
+	vfree(cone_snat_array);
+err_alloc_cone_snat_array:
+	vfree(cone_nat_array);
+err_alloc_cone_nat_array:
 	return ret;
 }
 
@@ -1489,6 +1635,13 @@ void natcap_common_exit(void)
 	if (cone_nat_array) {
 		void *tmp = cone_nat_array;
 		cone_nat_array = NULL;
+		synchronize_rcu();
+		vfree(tmp);
+	}
+
+	if (cone_snat_array) {
+		void *tmp = cone_snat_array;
+		cone_snat_array = NULL;
 		synchronize_rcu();
 		vfree(tmp);
 	}

@@ -136,6 +136,13 @@ struct cone_nat_session {
 	__be16 port;
 };
 
+struct cone_snat_session {
+	__be32 lan_ip;
+	__be32 wan_ip;
+	__be16 lan_port;
+	__be16 wan_port;
+};
+
 #pragma pack(pop)
 
 struct tuple {
