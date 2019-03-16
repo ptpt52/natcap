@@ -1447,6 +1447,9 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if ((IPS_NATCAP_CONE & ct->status)) {
+		if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status)) {
+			return NF_ACCEPT;
+		}
 		ns = natcap_session_get(ct);
 		if (ns && (NS_NATCAP_CONESNAT & ns->n.status)) {
 			return NF_ACCEPT;
@@ -1573,6 +1576,11 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 	}
 	if ((IPS_NATCAP_CONE & ct->status)) {
 		//restore original src ip decode && do SNAT
+		ns = natcap_session_get(ct);
+		if (ns && (NS_NATCAP_CONECFM & ns->n.status)) {
+			return NF_ACCEPT;
+		}
+
 		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 8) &&
 				get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE009B)) {
 			int ret;
@@ -1630,10 +1638,11 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 				NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": natcap_snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
 			}
 
-			ns = natcap_session_get(ct);
 			if (ns) {
 				short_set_bit(NS_NATCAP_CONESNAT_BIT, &ns->n.status);
 			}
+		} else if (ns && (NS_NATCAP_CONESNAT & ns->n.status)) {
+			short_set_bit(NS_NATCAP_CONECFM_BIT, &ns->n.status);
 		}
 		return NF_ACCEPT;
 	}
