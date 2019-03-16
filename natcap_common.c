@@ -1323,6 +1323,7 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 #endif
 #endif
 	enum ip_conntrack_info ctinfo;
+	struct natcap_session *ns;
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	void *l4;
@@ -1360,6 +1361,13 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 #endif
 
 	if (cone_nat_array && IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+		//alloc natcap_session
+		ns = natcap_session_in(ct);
+		if (!ns) {
+			NATCAP_WARN("(CCI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+			return NF_ACCEPT;
+		}
+
 		memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->dest)], sizeof(cns));
 		if (cns.ip != 0 && cns.port != 0) {
 			if (natcap_dnat_setup(ct, cns.ip, cns.port) != NF_ACCEPT) {
@@ -1418,6 +1426,7 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 #endif
 #endif
 	enum ip_conntrack_info ctinfo;
+	struct natcap_session *ns;
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	void *l4;
@@ -1434,10 +1443,39 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-	if ((IPS_NATCAP_CONE & ct->status)) {
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
-	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+	if ((IPS_NATCAP_CONE & ct->status)) {
+		ns = natcap_session_get(ct);
+		if (ns && (NS_NATCAP_CONESNAT & ns->n.status)) {
+			return NF_ACCEPT;
+		}
+		//store original src ip encode
+		if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip != ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip ||
+				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all != ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all) {
+			int offlen;
+			if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
+				NATCAP_ERROR("(CCO)" DEBUG_UDP_FMT ": pskb_expand_head failed\n", DEBUG_UDP_ARG(iph,l4));
+				consume_skb(skb);
+				return NF_STOLEN;
+			}
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
+
+			offlen = skb_tail_pointer(skb) - ((unsigned char *)UDPH(l4) + sizeof(struct udphdr));
+			BUG_ON(offlen < 0);
+			memmove((void *)UDPH(l4) + sizeof(struct udphdr) + 8, (void *)UDPH(l4) + sizeof(struct udphdr), offlen);
+			iph->tot_len = htons(ntohs(iph->tot_len) + 8);
+			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
+			UDPH(l4)->check = CSUM_MANGLED_0;
+			skb->len += 8;
+			skb->tail += 8;
+			set_byte4((void *)UDPH(l4) + sizeof(struct udphdr), __constant_htonl(0xFFFE009B));
+			set_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip);
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+			skb_rcsum_tcpudp(skb);
+		}
 		return NF_ACCEPT;
 	}
 
@@ -1515,6 +1553,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 #endif
 #endif
 	enum ip_conntrack_info ctinfo;
+	struct natcap_session *ns;
 	struct nf_conn *ct;
 	struct iphdr *iph;
 	void *l4;
@@ -1529,12 +1568,76 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
-	if ((IPS_NATCAP_CONE & ct->status)) {
-		return NF_ACCEPT;
-	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
+	if ((IPS_NATCAP_CONE & ct->status)) {
+		//restore original src ip decode && do SNAT
+		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 8) &&
+				get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE009B)) {
+			int ret;
+			int offlen;
+			__be32 ip;
+			__be16 port;
+			u_int16_t off;
+			__be16 *portptr;
+			unsigned int range_size, min, i;
+			struct nf_conntrack_tuple tuple;
+
+			ip = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4);
+
+			offlen = skb_tail_pointer(skb) - ((unsigned char *)UDPH(l4) + sizeof(struct udphdr) + 8);
+			BUG_ON(offlen < 0);
+			memmove((void *)UDPH(l4) + sizeof(struct udphdr), (void *)UDPH(l4) + sizeof(struct udphdr) + 8, offlen);
+			iph->tot_len = htons(ntohs(iph->tot_len) - 8);
+			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
+			UDPH(l4)->check = CSUM_MANGLED_0;
+			skb->len -= 8;
+			skb->tail -= 8;
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+			skb_rcsum_tcpudp(skb);
+
+			if (nf_ct_is_confirmed(ct)) {
+				return NF_ACCEPT;
+			}
+
+			memset(&tuple, 0, sizeof(tuple));
+			tuple.src.u3.ip = ip;
+			tuple.src.u.all = UDPH(l4)->source;
+			tuple.src.l3num = AF_INET;
+			tuple.dst.u3.ip = iph->daddr;
+			tuple.dst.u.all = UDPH(l4)->dest;
+			tuple.dst.protonum = IPPROTO_UDP;
+
+			portptr = &tuple.src.u.all;
+
+			min = 1024;
+			range_size = 65535 - 1024 + 1;
+			off = prandom_u32();
+
+			if (nf_nat_used_tuple(&tuple, ct)) {
+				for (i = 0; i != range_size; ++off, ++i) {
+					*portptr = htons(min + off % range_size);
+					if (nf_nat_used_tuple(&tuple, ct))
+						continue;
+				}
+			}
+			port = *portptr;
+
+			NATCAP_INFO("(CCS)" DEBUG_UDP_FMT ": SNAT to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &ip, ntohs(port));
+			ret = natcap_snat_setup(ct, ip, port);
+			if (ret != NF_ACCEPT) {
+				NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": natcap_snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
+			}
+
+			ns = natcap_session_get(ct);
+			if (ns) {
+				short_set_bit(NS_NATCAP_CONESNAT_BIT, &ns->n.status);
+			}
+		}
+		return NF_ACCEPT;
+	}
+
 	if (nf_ct_is_confirmed(ct)) {
 		return NF_ACCEPT;
 	}
