@@ -1478,6 +1478,8 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 			set_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip);
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
+
+			if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 		}
 		return NF_ACCEPT;
 	}
@@ -1605,6 +1607,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
 
+			if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 			if (nf_ct_is_confirmed(ct)) {
 				return NF_ACCEPT;
 			}
