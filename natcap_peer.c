@@ -2273,6 +2273,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	//const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #endif
+	int ret;
 	struct sk_buff *nskb;
 	struct iphdr *iph;
 	void *l4;
@@ -2291,6 +2292,13 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	if (skb->len > iph->ihl * 4 + sizeof(struct icmphdr) + ICMP_PAYLOAD_LIMIT) {
 		return NF_ACCEPT;
 	}
+
+	/* XXX I just confirm it first  */
+	ret = nf_conntrack_confirm(skb);
+	if (ret != NF_ACCEPT) {
+		return ret;
+	}
+	skb_nfct_reset(skb);
 
 	NATCAP_DEBUG("(PPO)" DEBUG_ICMP_FMT ": ping out\n", DEBUG_ICMP_ARG(iph,l4));
 	nskb = natcap_peer_ping_send(skb, NULL, NULL, 0, 0);
