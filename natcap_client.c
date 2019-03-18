@@ -691,6 +691,12 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
+			if (inet_is_local(in, iph->daddr)) {
+				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": target is local, no encoded header, not client in\n", DEBUG_TCP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
 		}
 
 		if (IP_SET_test_dst_ip(state, in, out, skb, "knocklist") > 0) {
@@ -813,6 +819,12 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			}
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
+			if (inet_is_local(in, iph->daddr)) {
+				NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": target is local, no encoded header, not client in\n", DEBUG_UDP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
 		}
 
 		if (UDPH(l4)->dest == __constant_htons(53)) {
