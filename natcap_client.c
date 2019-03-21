@@ -1995,28 +1995,30 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				}
 			}
 
-			memset(&tuple, 0, sizeof(tuple));
-			tuple.src.u3.ip = iph->saddr;
-			tuple.src.u.all = UDPH(l4)->source;
-			tuple.src.l3num = AF_INET;
-			tuple.dst.u3.ip = ns->n.target_ip;
-			tuple.dst.u.all = ns->n.target_port;
-			tuple.dst.protonum = IPPROTO_UDP;
+			if (ns->n.new_source == 0) {
+				memset(&tuple, 0, sizeof(tuple));
+				tuple.src.u3.ip = iph->saddr;
+				tuple.src.u.all = UDPH(l4)->source;
+				tuple.src.l3num = AF_INET;
+				tuple.dst.u3.ip = ns->n.target_ip;
+				tuple.dst.u.all = ns->n.target_port;
+				tuple.dst.protonum = IPPROTO_UDP;
 
-			portptr = &tuple.src.u.all;
+				portptr = &tuple.src.u.all;
 
-			min = 1024;
-			range_size = 65535 - 1024 + 1;
-			off = prandom_u32();
+				min = 1024;
+				range_size = 65535 - 1024 + 1;
+				off = prandom_u32();
 
-			if (nf_nat_used_tuple(&tuple, ct)) {
-				for (i = 0; i != range_size; ++off, ++i) {
-					*portptr = htons(min + off % range_size);
-					if (nf_nat_used_tuple(&tuple, ct))
-						continue;
+				if (nf_nat_used_tuple(&tuple, ct)) {
+					for (i = 0; i != range_size; ++off, ++i) {
+						*portptr = htons(min + off % range_size);
+						if (nf_nat_used_tuple(&tuple, ct))
+							continue;
+					}
 				}
+				ns->n.new_source = *portptr;
 			}
-			ns->n.new_source = *portptr;
 		}
 
 		NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": before natcap post out\n", DEBUG_UDP_ARG(iph,l4));
