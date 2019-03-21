@@ -1544,8 +1544,8 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 	unsigned int hooknum = state->hook;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 	const struct net_device *in = state->in;
-	const struct net_device *out = state->out;
 #endif
+	const struct net_device *out = state->out;
 #endif
 	enum ip_conntrack_info ctinfo;
 	struct natcap_session *ns;
@@ -1654,7 +1654,20 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 		if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip == css.lan_ip &&
 				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port == css.lan_port &&
 				css.wan_ip != 0 && css.wan_port != 0) {
-			__be32 oldip = iph->saddr;
+			const struct rtable *rt;
+			__be32 newsrc, nh;
+			__be32 oldip;
+
+			rt = skb_rtable(skb);
+			nh = rt_nexthop(rt, ip_hdr(skb)->daddr);
+			newsrc = inet_select_addr(out, nh, RT_SCOPE_UNIVERSE);
+			if (newsrc != css.wan_ip) {
+				NATCAP_INFO("(CCS)" DEBUG_UDP_FMT ": newsrc=%pI4, wan=%pI4:%u skip and fallback to MASQ\n",
+						DEBUG_UDP_ARG(iph,l4), &newsrc, &css.wan_ip, ntohs(css.wan_port));
+				return NF_ACCEPT;
+			}
+
+			oldip = iph->saddr;
 			iph->saddr = css.wan_ip;
 			if (IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 				iph->saddr = oldip;
