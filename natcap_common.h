@@ -420,8 +420,6 @@ static inline int natcap_tcpmss_clamp_pmtu_adjust(struct sk_buff *skb, struct ne
 	return -1;
 }
 
-extern int ip_set_exist(const char *ip_set_name);
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 extern int ip_set_test_src_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name);
 #define IP_SET_test_src_ip(state, in, out, skb, name) ip_set_test_src_ip(state, skb, name)

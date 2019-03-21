@@ -575,29 +575,6 @@ int natcap_tcp_encode_fwdupdate(struct sk_buff *skb, struct tcphdr *tcph, const 
 	return 0;
 }
 
-int ip_set_exist(const char *ip_set_name)
-{
-	int ret = 0;
-	ip_set_id_t id;
-	struct ip_set *set;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-	id = ip_set_get_byname(&init_net, ip_set_name, &set);
-#else
-	id = ip_set_get_byname(ip_set_name, &set);
-#endif
-	if (id != IPSET_INVALID_ID) {
-		ret = 1;
-	}
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-	ip_set_put_byindex(&init_net, id);
-#else
-	ip_set_put_byindex(id);
-#endif
-
-	return ret;
-}
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 int ip_set_test_src_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
 #else
