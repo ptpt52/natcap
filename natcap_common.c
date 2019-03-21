@@ -1676,13 +1676,18 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 		memcpy(&css, &cone_snat_array[idx], sizeof(css));
 		if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip == css.lan_ip &&
 				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port == css.lan_port &&
-				ip_set_exist("natcap_wan_ip") &&
 				css.wan_ip != 0 && css.wan_port != 0) {
-			//TODO check wan_ip is in wan
-			NATCAP_INFO("(CCS)" DEBUG_UDP_FMT ": SNAT to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &css.wan_ip, ntohs(css.wan_port));
-			ret = natcap_snat_setup(ct, css.wan_ip, css.wan_port);
-			if (ret != NF_ACCEPT) {
-				NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": natcap_snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
+			__be32 oldip = iph->saddr;
+			iph->saddr = css.wan_ip;
+			if (IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+				iph->saddr = oldip;
+				NATCAP_INFO("(CCS)" DEBUG_UDP_FMT ": SNAT to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &css.wan_ip, ntohs(css.wan_port));
+				ret = natcap_snat_setup(ct, css.wan_ip, css.wan_port);
+				if (ret != NF_ACCEPT) {
+					NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": natcap_snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
+				}
+			} else {
+				iph->saddr = oldip;
 			}
 		}
 	}
