@@ -1451,7 +1451,8 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 			UDPH(l4)->check = CSUM_MANGLED_0;
 			skb->len += 8;
 			skb->tail += 8;
-			set_byte4((void *)UDPH(l4) + sizeof(struct udphdr), __constant_htonl(0xFFFE009B));
+			set_byte2((void *)UDPH(l4) + sizeof(struct udphdr), __constant_htons(0xFE9B));
+			set_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 2, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all);
 			set_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip);
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
@@ -1574,7 +1575,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 		}
 
 		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 8) &&
-				get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE009B)) {
+				get_byte2((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htons(0xFE9B)) {
 			int ret;
 			int offlen;
 			__be32 ip;
@@ -1584,6 +1585,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 			unsigned int range_size, min, i;
 			struct nf_conntrack_tuple tuple;
 
+			port = get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 2);
 			ip = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4);
 
 			offlen = skb_tail_pointer(skb) - ((unsigned char *)UDPH(l4) + sizeof(struct udphdr) + 8);
@@ -1604,7 +1606,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 
 			memset(&tuple, 0, sizeof(tuple));
 			tuple.src.u3.ip = ip;
-			tuple.src.u.all = UDPH(l4)->source;
+			tuple.src.u.all = port;
 			tuple.src.l3num = AF_INET;
 			tuple.dst.u3.ip = iph->daddr;
 			tuple.dst.u.all = UDPH(l4)->dest;
