@@ -45,7 +45,7 @@ C_cniplist.set: cniplist.set local.set
 	@mv C_cniplist.set.tmp C_cniplist.set
 	@rm -f C_cniplist.orig.set.tmp
 
-ipset: cniplist.set C_cniplist.set
+ipset: cniplist.set C_cniplist.set cniplist6.set
 
 apnic.txt:
 	wget https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest -O apnic.txt.tmp
@@ -58,3 +58,10 @@ cniplist.orig.set: apnic.txt
 	@rm -f cniplist.txt.tmp
 	@mv cniplist.orig.set.tmp cniplist.orig.set
 
+cniplist6.orig.set: apnic.txt
+	cat apnic.txt | grep ipv6 | grep CN | cut -d\| -f4,5 | sed 's,|,/,' >cniplist6.orig.set.tmp
+	@mv cniplist6.orig.set.tmp cniplist6.orig.set
+
+cniplist6.set: cniplist6.orig.set local6.set
+	cat local6.set cniplist6.orig.set >cniplist6.set.tmp
+	@mv cniplist6.set.tmp cniplist6.set
