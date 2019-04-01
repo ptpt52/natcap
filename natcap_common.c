@@ -1423,12 +1423,19 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
+	ns = natcap_session_get(ct);
+	if (NULL == ns) {
+		return NF_ACCEPT;
+	}
+	if ((ns->n.status & NS_NATCAP_TCPUDPENC)) {
+		return NF_ACCEPT;
+	}
+
 	if ((IPS_NATCAP_CONE & ct->status)) {
 		if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status)) {
 			return NF_ACCEPT;
 		}
-		ns = natcap_session_get(ct);
-		if (ns && (NS_NATCAP_CONESNAT & ns->n.status)) {
+		if ((NS_NATCAP_CONESNAT & ns->n.status)) {
 			return NF_ACCEPT;
 		}
 		//store original src ip encode
@@ -1567,16 +1574,16 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
+	ns = natcap_session_get(ct);
+	if (NULL == ns) {
+		return NF_ACCEPT;
+	}
+	if ((ns->n.status & NS_NATCAP_TCPUDPENC)) {
+		return NF_ACCEPT;
+	}
+
 	if ((IPS_NATCAP_CONE & ct->status)) {
 		//restore original src ip decode && do SNAT
-		ns = natcap_session_get(ct);
-		if (ns == NULL) {
-			return NF_ACCEPT;
-		}
-		if ((ns->n.status & NS_NATCAP_TCPUDPENC)) {
-			NATCAP_ERROR("(CCS)" DEBUG_UDP_FMT ": should not be UDPENC\n", DEBUG_UDP_ARG(iph,l4));
-			return NF_ACCEPT;
-		}
 		if ((NS_NATCAP_CONECFM & ns->n.status) && ns->n.cone_pkts >= 32) {
 			return NF_ACCEPT;
 		}
