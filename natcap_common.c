@@ -1570,11 +1570,14 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 	if ((IPS_NATCAP_CONE & ct->status)) {
 		//restore original src ip decode && do SNAT
 		ns = natcap_session_get(ct);
+		if (ns == NULL) {
+			return NF_ACCEPT;
+		}
 		if ((ns->n.status & NS_NATCAP_TCPUDPENC)) {
 			NATCAP_ERROR("(CCS)" DEBUG_UDP_FMT ": should not be UDPENC\n", DEBUG_UDP_ARG(iph,l4));
 			return NF_ACCEPT;
 		}
-		if (ns && (NS_NATCAP_CONECFM & ns->n.status) && ns->n.cone_pkts >= 32) {
+		if ((NS_NATCAP_CONECFM & ns->n.status) && ns->n.cone_pkts >= 32) {
 			return NF_ACCEPT;
 		}
 
@@ -1604,6 +1607,12 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 			skb_rcsum_tcpudp(skb);
 
 			if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
+
+			if (ns->n.cone_pkts != 0) {
+				NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": cone_pkts is %u before, maybe out of order\n", DEBUG_UDP_ARG(iph,l4), ns->n.cone_pkts);
+				ns->n.cone_pkts = 0;
+			}
+
 			if (nf_ct_is_confirmed(ct)) {
 				return NF_ACCEPT;
 			}
@@ -1636,11 +1645,9 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 			if (ret != NF_ACCEPT) {
 				NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": natcap_snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
 			}
+			short_set_bit(NS_NATCAP_CONESNAT_BIT, &ns->n.status);
 
-			if (ns) {
-				short_set_bit(NS_NATCAP_CONESNAT_BIT, &ns->n.status);
-			}
-		} else if (ns && (NS_NATCAP_CONESNAT & ns->n.status)) {
+		} else if ((NS_NATCAP_CONESNAT & ns->n.status)) {
 			short_set_bit(NS_NATCAP_CONECFM_BIT, &ns->n.status);
 			ns->n.cone_pkts++;
 		}
