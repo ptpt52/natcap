@@ -1462,7 +1462,7 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (cone_nat_array &&
+	if (cone_nat_array && cone_snat_array &&
 			ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 			ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
 			((IPS_NATCAP & ct->status) ||
