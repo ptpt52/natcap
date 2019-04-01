@@ -194,6 +194,7 @@ struct natcap_session {
 			union {
 				int tcp_seq_offset; //used on HTTP confusion
 				unsigned int current_seq; //used on UDP pack to TCP
+				unsigned int cone_pkts;
 			};
 			union {
 				int tcp_ack_offset; //used on HTTP confusion
