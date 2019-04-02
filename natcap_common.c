@@ -1063,6 +1063,15 @@ unsigned int natcap_snat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto
 	return __natcap_nat_setup(ct, addr, man_proto, 1);
 }
 
+u32 cone_snat_hash(__be32 ip, __be16 port, __be32 wan_ip)
+{
+	static u32 cone_snat_hashrnd __read_mostly;
+
+	net_get_random_once(&cone_snat_hashrnd, sizeof(cone_snat_hashrnd));
+
+	return jhash_3words(ip, port, wan_ip, cone_snat_hashrnd);
+}
+
 #define __ALIGN_64BITS 8
 
 int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
@@ -1494,7 +1503,7 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 
 		}
 
-		idx = jhash2(&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, 1, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) % 32768;
+		idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, iph->saddr) % 32768;
 		memcpy(&css, &cone_snat_array[idx], sizeof(css));
 		if ((css.wan_ip != iph->saddr || css.wan_port != UDPH(l4)->source) ||
 				css.lan_ip != ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip ||
@@ -1668,25 +1677,24 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 	if (cone_snat_array) {
 		int ret;
 		int idx;
+		const struct rtable *rt;
+		__be32 newsrc, nh;
 		struct cone_snat_session css;
 
-		idx = jhash2(&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, 1, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) % 32768;
+		rt = skb_rtable(skb);
+		nh = rt_nexthop(rt, ip_hdr(skb)->daddr);
+		newsrc = inet_select_addr(out, nh, RT_SCOPE_UNIVERSE);
+		if (!newsrc) {
+			NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": %s ate my IP address\n", DEBUG_UDP_ARG(iph,l4), out->name);
+			return NF_ACCEPT;
+		}
+
+		idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, newsrc) % 32768;
 		memcpy(&css, &cone_snat_array[idx], sizeof(css));
 		if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip == css.lan_ip &&
 				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port == css.lan_port &&
-				css.wan_ip != 0 && css.wan_port != 0) {
-			const struct rtable *rt;
-			__be32 newsrc, nh;
+				css.wan_ip == newsrc && css.wan_port != 0) {
 			__be32 oldip;
-
-			rt = skb_rtable(skb);
-			nh = rt_nexthop(rt, ip_hdr(skb)->daddr);
-			newsrc = inet_select_addr(out, nh, RT_SCOPE_UNIVERSE);
-			if (newsrc != css.wan_ip) {
-				NATCAP_INFO("(CCS)" DEBUG_UDP_FMT ": newsrc=%pI4, wan=%pI4:%u skip and fallback to MASQ\n",
-						DEBUG_UDP_ARG(iph,l4), &newsrc, &css.wan_ip, ntohs(css.wan_port));
-				return NF_ACCEPT;
-			}
 
 			oldip = iph->saddr;
 			iph->saddr = css.wan_ip;
