@@ -45,6 +45,7 @@
 #include "natcap_knock.h"
 #include "natcap_peer.h"
 
+unsigned int dns_proxy_drop = 0;
 unsigned int server_persist_lock = 0;
 unsigned int server_persist_timeout = 0;
 module_param(server_persist_timeout, int, 0);
@@ -3046,8 +3047,9 @@ dns_done:
 			if ((IPS_NATCAP & ct->status)) {
 				old_ip = iph->daddr;
 				iph->daddr = ip;
-				if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) {
+				if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 && dns_proxy_drop) {
 					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS is in cniplist ip = %pI4, ignore\n", DEBUG_UDP_ARG(iph,l4), id, &ip);
+					return NF_DROP;
 				}
 				iph->daddr = old_ip;
 			} else {
