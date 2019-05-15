@@ -50,6 +50,7 @@ extern unsigned int sproxy;
 extern unsigned int dns_server;
 extern unsigned short dns_port;
 
+extern u32 default_protocol;
 extern u32 default_u_hash;
 extern unsigned char default_mac_addr[ETH_ALEN];
 void default_mac_addr_init(void);
