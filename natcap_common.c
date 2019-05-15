@@ -495,9 +495,6 @@ int natcap_tcp_encode(struct nf_conn *ct, struct sk_buff *skb, const struct natc
 
 do_encode:
 	if (tcpopt->header.encryption) {
-		if (!skb_make_writable(skb, skb->len)) {
-			return -3;
-		}
 		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
 	}
 	if (tcpopt->header.encryption || NATCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_TYPE_NONE) {
@@ -546,9 +543,6 @@ int natcap_tcp_decode(struct nf_conn *ct, struct sk_buff *skb, struct natcap_TCP
 
 do_decode:
 	if (tcpopt->header.encryption) {
-		if (!skb_make_writable(skb, skb->len)) {
-			return -3;
-		}
 		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_decode);
 	}
 	if (tcpopt->header.encryption || NATCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_TYPE_NONE) {
@@ -1243,7 +1237,6 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 		NATCAP_ERROR(DEBUG_FMT_PREFIX "skb_make_writable failed\n", DEBUG_ARG_PREFIX);
 		return -ENOMEM;
 	}
-
 	if (skb_tailroom(skb) < sizeof(struct tcphdr) - sizeof(struct udphdr) && pskb_expand_head(skb, 0, sizeof(struct tcphdr) - sizeof(struct udphdr), GFP_ATOMIC)) {
 		NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
 		return -ENOMEM;
@@ -1627,6 +1620,8 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 			__be16 *portptr;
 			unsigned int range_size, min, i;
 			struct nf_conntrack_tuple tuple;
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
 
 			port = get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 2);
 			ip = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4);

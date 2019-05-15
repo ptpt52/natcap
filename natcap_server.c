@@ -880,6 +880,8 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
 				(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099) ||
 				 get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFD0099))) {
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
 			set_bit(IPS_NATCAP_SERVER_BIT, &ct->status);
 			if (!inet_is_local(in, iph->daddr)) {
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -1188,10 +1190,6 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 
 			if ((NS_NATCAP_ENC & ns->n.status)) {
-				if (!skb_make_writable(skb, skb->len)) {
-					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": natcap_udp_decode() failed\n", DEBUG_UDP_ARG(iph,l4));
-					return NF_DROP;
-				}
 				skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_decode);
 				skb_rcsum_tcpudp(skb);
 			}
@@ -1398,10 +1396,6 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	} else if (iph->protocol == IPPROTO_UDP) {
 		NATCAP_DEBUG("(SPO)" DEBUG_UDP_FMT ": pass data reply\n", DEBUG_UDP_ARG(iph,l4));
 		if ((NS_NATCAP_ENC & ns->n.status)) {
-			if (!skb_make_writable(skb, skb->len)) {
-				NATCAP_ERROR("(SPO)" DEBUG_UDP_FMT ": natcap_udp_encode() failed\n", DEBUG_UDP_ARG(iph,l4));
-				return NF_DROP;
-			}
 			skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode);
 			skb_rcsum_tcpudp(skb);
 		}
