@@ -115,7 +115,8 @@ static unsigned int natcap_forward_pre_ct_in_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xFFFF) ^ (ntohl(TCPH(l4)->ack_seq) & 0xFFFF)) &&
-			get_byte4(l4 + sizeof(struct tcphdr)) == __constant_htonl(0xFFFE0099) ) {
+			(get_byte4(l4 + sizeof(struct tcphdr)) == __constant_htonl(0xFFFE0099) ||
+			 get_byte4(l4 + sizeof(struct tcphdr)) == __constant_htonl(0xFFFD0099)) ) {
 			goto __do_dnat;
 		}
 
@@ -191,7 +192,8 @@ __do_dnat:
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
-				get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099)) {
+				(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099) ||
+				 get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFD0099))) {
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 
