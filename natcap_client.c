@@ -810,7 +810,8 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 
 		if (hooknum == NF_INET_PRE_ROUTING && !nf_ct_is_confirmed(ct)) {
 			if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
-					get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099)) {
+					(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099) ||
+					get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFD0099))) {
 				iph = ip_hdr(skb);
 				l4 = (void *)iph + iph->ihl * 4;
 				NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": first packet is already encoded, bypass\n", DEBUG_UDP_ARG(iph,l4));
@@ -1761,7 +1762,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				struct sk_buff *nskb;
 				int offset, add_len;
 
-				offset = iph->ihl * 4 + sizeof(struct udphdr) + 12 - (skb_headlen(skb) + skb_tailroom(skb));
+				offset = iph->ihl * 4 + sizeof(struct udphdr) + 24 - (skb_headlen(skb) + skb_tailroom(skb));
 				add_len = offset < 0 ? 0 : offset;
 				offset += skb_tailroom(skb);
 				nskb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
@@ -1770,13 +1771,13 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 					return NF_ACCEPT;
 				}
 				nskb->tail += offset;
-				nskb->len = sizeof(struct iphdr) + sizeof(struct udphdr) + 12;
+				nskb->len = sizeof(struct iphdr) + sizeof(struct udphdr) + 24;
 
 				iph = ip_hdr(nskb);
 				l4 = (void *)iph + iph->ihl * 4;
 				iph->tot_len = htons(nskb->len);
 				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
-				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFE0099));
+				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFD0099));
 				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
 				if ((NS_NATCAP_ENC & ns->n.status)) {
@@ -1784,6 +1785,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				} else {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_TYPE1);
 				}
+				set_byte4(l4 + sizeof(struct udphdr) + 12, default_u_hash);
+				set_byte6(l4 + sizeof(struct udphdr) + 16, default_mac_addr);
 
 				skb_rcsum_tcpudp(nskb);
 
@@ -1798,7 +1801,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			} else {
 				int offlen;
 
-				if (skb_tailroom(skb) < 12 && pskb_expand_head(skb, 0, 12, GFP_ATOMIC)) {
+				if (skb_tailroom(skb) < 24 && pskb_expand_head(skb, 0, 24, GFP_ATOMIC)) {
 					NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
 					return NF_ACCEPT;
 				}
@@ -1807,12 +1810,12 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 				offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct udphdr);
 				BUG_ON(offlen < 0);
-				memmove((void *)UDPH(l4) + sizeof(struct udphdr) + 12, (void *)UDPH(l4) + sizeof(struct udphdr), offlen);
-				iph->tot_len = htons(ntohs(iph->tot_len) + 12);
+				memmove((void *)UDPH(l4) + sizeof(struct udphdr) + 24, (void *)UDPH(l4) + sizeof(struct udphdr), offlen);
+				iph->tot_len = htons(ntohs(iph->tot_len) + 24);
 				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
-				skb->len += 12;
-				skb->tail += 12;
-				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFE0099));
+				skb->len += 24;
+				skb->tail += 24;
+				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFD0099));
 				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
 				if ((NS_NATCAP_ENC & ns->n.status)) {
@@ -1820,6 +1823,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				} else {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_TYPE2);
 				}
+				set_byte4(l4 + sizeof(struct udphdr) + 12, default_u_hash);
+				set_byte6(l4 + sizeof(struct udphdr) + 16, default_mac_addr);
 
 				skb_rcsum_tcpudp(skb);
 
@@ -2422,7 +2427,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				struct sk_buff *nskb;
 				int offset, add_len;
 
-				offset = iph->ihl * 4 + sizeof(struct udphdr) + 12 - (skb_headlen(skb) + skb_tailroom(skb));
+				offset = iph->ihl * 4 + sizeof(struct udphdr) + 24 - (skb_headlen(skb) + skb_tailroom(skb));
 				add_len = offset < 0 ? 0 : offset;
 				offset += skb_tailroom(skb);
 				nskb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
@@ -2432,13 +2437,13 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 					return NF_ACCEPT;
 				}
 				nskb->tail += offset;
-				nskb->len = iph->ihl * 4 + sizeof(struct udphdr) + 12;
+				nskb->len = iph->ihl * 4 + sizeof(struct udphdr) + 24;
 
 				iph = ip_hdr(nskb);
 				l4 = (void *)iph + iph->ihl * 4;
 				iph->tot_len = htons(nskb->len);
 				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
-				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFE0099));
+				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFD0099));
 				if (dns_server == 0 || ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53)) {
 					set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 					set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
@@ -2451,6 +2456,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				} else {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_TYPE1);
 				}
+				set_byte4(l4 + sizeof(struct udphdr) + 12, default_u_hash);
+				set_byte6(l4 + sizeof(struct udphdr) + 16, default_mac_addr);
 
 				skb_rcsum_tcpudp(nskb);
 
@@ -2465,7 +2472,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			} else {
 				int offlen;
 
-				if (skb_tailroom(skb) < 12 && pskb_expand_head(skb, 0, 12, GFP_ATOMIC)) {
+				if (skb_tailroom(skb) < 24 && pskb_expand_head(skb, 0, 24, GFP_ATOMIC)) {
 					NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
 					consume_skb(skb);
 					return NF_ACCEPT;
@@ -2475,12 +2482,12 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 				offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct udphdr);
 				BUG_ON(offlen < 0);
-				memmove((void *)UDPH(l4) + sizeof(struct udphdr) + 12, (void *)UDPH(l4) + sizeof(struct udphdr), offlen);
-				iph->tot_len = htons(ntohs(iph->tot_len) + 12);
+				memmove((void *)UDPH(l4) + sizeof(struct udphdr) + 24, (void *)UDPH(l4) + sizeof(struct udphdr), offlen);
+				iph->tot_len = htons(ntohs(iph->tot_len) + 24);
 				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
-				skb->len += 12;
-				skb->tail += 12;
-				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFE0099));
+				skb->len += 24;
+				skb->tail += 24;
+				set_byte4(l4 + sizeof(struct udphdr), __constant_htonl(0xFFFD0099));
 				if (dns_server == 0 || ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53)) {
 					set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 					set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
@@ -2493,6 +2500,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				} else {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_TYPE2);
 				}
+				set_byte4(l4 + sizeof(struct udphdr) + 12, default_u_hash);
+				set_byte6(l4 + sizeof(struct udphdr) + 16, default_mac_addr);
 
 				skb_rcsum_tcpudp(skb);
 

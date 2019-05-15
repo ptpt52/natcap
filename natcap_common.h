@@ -567,6 +567,16 @@ static inline void set_byte4(unsigned char *p, unsigned int v)
 	memcpy(p, &v, sizeof(v));
 }
 
+static inline void set_byte6(unsigned char *p, const unsigned char *pv)
+{
+	memcpy(p, pv, 6);
+}
+
+static inline void get_byte6(const unsigned char *p, unsigned char *pv)
+{
+	memcpy(pv, p, 6);
+}
+
 #ifndef SKB_NFCT_PTRMASK
 static inline struct nf_conntrack *skb_nfct(const struct sk_buff *skb)
 {
