@@ -1485,7 +1485,7 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 			UDPH(l4)->check = CSUM_MANGLED_0;
 			skb->len += 8;
 			skb->tail += 8;
-			set_byte2((void *)UDPH(l4) + sizeof(struct udphdr), __constant_htons(0xFE9B));
+			set_byte2((void *)UDPH(l4) + sizeof(struct udphdr), __constant_htons(0xfe9b));
 			set_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 2, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all);
 			set_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip);
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -1616,7 +1616,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 		}
 
 		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 8) &&
-				get_byte2((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htons(0xFE9B)) {
+				get_byte2((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htons(0xfe9b)) {
 			int ret;
 			int offlen;
 			__be32 ip;

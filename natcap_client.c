@@ -462,7 +462,7 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 	if (dst->port == __constant_htons(0)) {
 		dst->port = port;
 	} else if (dst->port == __constant_htons(65535)) {
-		dst->port = atomic_add_return(1, &server_port) ^ (ip & 0xFFFF) ^ ((ip >> 16) & 0xFFFF);
+		dst->port = atomic_add_return(1, &server_port) ^ (ip & 0xffff) ^ ((ip >> 16) & 0xffff);
 	}
 
 	if (encode_http_only == 0)
@@ -535,7 +535,7 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
 	niph->protocol = protocol;
-	niph->id = __constant_htons(0xDEAD);
+	niph->id = __constant_htons(0xdead);
 	niph->frag_off = 0x0;
 
 
@@ -544,7 +544,7 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	ntcph->dest = otcph->source;
 	if (protocol == IPPROTO_UDP) {
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(0xFFFF0099));
+		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(0xffff0099));
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		ntcph = (struct tcphdr *)((char *)ntcph + 8);
 	}
@@ -811,8 +811,8 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 
 		if (hooknum == NF_INET_PRE_ROUTING && !nf_ct_is_confirmed(ct)) {
 			if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
-					(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099) ||
-					get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFD0099))) {
+					(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffe0099) ||
+					get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffd0099))) {
 				iph = ip_hdr(skb);
 				l4 = (void *)iph + iph->ihl * 4;
 				NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": first packet is already encoded, bypass\n", DEBUG_UDP_ARG(iph,l4));
@@ -1159,7 +1159,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE009A) &&
+		if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xffffe009a) &&
 				UDPH(l4)->len == __constant_htons(sizeof(struct udphdr) + 4)) {
 			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 				NATCAP_INFO("(CPCI)" DEBUG_UDP_FMT ": got CFM pkt\n", DEBUG_UDP_ARG(iph,l4));
@@ -1256,7 +1256,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xFFFF) ^ (ntohl(TCPH(l4)->ack_seq) & 0xFFFF)) ) {
+		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xffff) ^ (ntohl(TCPH(l4)->ack_seq) & 0xffff)) ) {
 			unsigned int tcphdr_len = TCPH(l4)->doff * 4;
 			unsigned int foreign_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - tcphdr_len + !!TCPH(l4)->syn;
 
@@ -1353,7 +1353,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
 
-	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xFFFF0099)) {
+	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xffff0099)) {
 		int offlen;
 
 		if (!inet_is_local(in, iph->daddr)) {
@@ -1729,7 +1729,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			UDPH(l4)->check = CSUM_MANGLED_0;
 			skb->len += 8;
 			skb->tail += 8;
-			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(0xFFFF0099));
+			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(0xffff0099));
 			iph->protocol = IPPROTO_UDP;
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
@@ -1771,7 +1771,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				l4 = (void *)iph + iph->ihl * 4;
 				iph->tot_len = htons(nskb->len);
 				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
-				set_byte4(l4 + sizeof(struct udphdr), default_protocol == 1 ? __constant_htonl(0xFFFD0099) : __constant_htonl(0xFFFE0099));
+				set_byte4(l4 + sizeof(struct udphdr), default_protocol == 1 ? __constant_htonl(0xfffd0099) : __constant_htonl(0xfffe0099));
 				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
 				if ((NS_NATCAP_ENC & ns->n.status)) {
@@ -1811,7 +1811,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
 				skb->len += off;
 				skb->tail += off;
-				set_byte4(l4 + sizeof(struct udphdr), default_protocol == 1 ? __constant_htonl(0xFFFD0099) : __constant_htonl(0xFFFE0099));
+				set_byte4(l4 + sizeof(struct udphdr), default_protocol == 1 ? __constant_htonl(0xfffd0099) : __constant_htonl(0xfffe0099));
 				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
 				if ((NS_NATCAP_ENC & ns->n.status)) {
@@ -2395,7 +2395,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			UDPH(l4)->check = CSUM_MANGLED_0;
 			skb->len += 8;
 			skb->tail += 8;
-			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(0xFFFF0099));
+			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(0xffff0099));
 			iph->protocol = IPPROTO_UDP;
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
@@ -2437,7 +2437,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				l4 = (void *)iph + iph->ihl * 4;
 				iph->tot_len = htons(nskb->len);
 				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
-				set_byte4(l4 + sizeof(struct udphdr), default_protocol == 1 ? __constant_htonl(0xFFFD0099) : __constant_htonl(0xFFFE0099));
+				set_byte4(l4 + sizeof(struct udphdr), default_protocol == 1 ? __constant_htonl(0xfffd0099) : __constant_htonl(0xfffe0099));
 				if (dns_server == 0 || ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53)) {
 					set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 					set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
@@ -2483,7 +2483,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
 				skb->len += off;
 				skb->tail += off;
-				set_byte4(l4 + sizeof(struct udphdr), default_protocol == 1 ? __constant_htonl(0xFFFD0099) : __constant_htonl(0xFFFE0099));
+				set_byte4(l4 + sizeof(struct udphdr), default_protocol == 1 ? __constant_htonl(0xfffd0099) : __constant_htonl(0xfffe0099));
 				if (dns_server == 0 || ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53)) {
 					set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 					set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
@@ -2543,14 +2543,14 @@ static inline int get_rdata(const unsigned char *src_ptr, int src_len, int src_p
 	int dst_len = 0;
 	unsigned int v;
 	while (dst_len < dst_size && pos < src_len && (v = get_byte1(src_ptr + pos)) != 0) {
-		if (v > 0x3F) {
+		if (v > 0x3f) {
 			if (pos + 1 >= src_len) {
 				return -1;
 			}
 			if (++ptr_count >= ptr_limit) {
 				return -2;
 			}
-			pos = ntohs(get_byte2(src_ptr + pos)) & 0x3FFF;
+			pos = ntohs(get_byte2(src_ptr + pos)) & 0x3fff;
 			continue;
 		} else {
 			if (pos + v >= src_len) {
@@ -2915,7 +2915,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				}
 
 				while (pos < len && ((v = get_byte1(p + pos)) != 0)) {
-					if (v > 0x3F) {
+					if (v > 0x3f) {
 						pos++;
 						break;
 					} else {
@@ -2961,7 +2961,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				}
 
 				while (pos < len && ((v = get_byte1(p + pos)) != 0)) {
-					if (v > 0x3F) {
+					if (v > 0x3f) {
 						pos++;
 						break;
 					} else {

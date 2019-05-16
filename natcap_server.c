@@ -116,14 +116,14 @@ static inline int natcap_auth(const struct net_device *in,
 			ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
 			memcpy(eth->h_source, old_mac, ETH_ALEN);
 			if (ret <= 0) {
-				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth failed\n",
+				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed\n",
 						__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
 						tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
 						tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
 						ntohl(tcpopt->all.data.u_hash));
 				return E_NATCAP_AUTH_FAIL;
 			}
-			NATCAP_DEBUG("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
+			NATCAP_DEBUG("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth ok\n",
 					__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
 					tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
 					tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
@@ -141,14 +141,14 @@ static inline int natcap_auth(const struct net_device *in,
 			ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
 			memcpy(eth->h_source, old_mac, ETH_ALEN);
 			if (ret <= 0) {
-				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth failed\n",
+				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed\n",
 						__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
 						tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
 						tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
 						ntohl(tcpopt->user.data.u_hash));
 				return E_NATCAP_AUTH_FAIL;
 			}
-			NATCAP_DEBUG("(%s)" DEBUG_FMT_TCP ": client=%02X:%02X:%02X:%02X:%02X:%02X u_hash=%u auth ok\n",
+			NATCAP_DEBUG("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth ok\n",
 					__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
 					tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
 					tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
@@ -208,11 +208,11 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
 	niph->protocol = oiph->protocol;
-	niph->id = __constant_htons(0xDEAD);
+	niph->id = __constant_htons(0xdead);
 	niph->frag_off = 0x0;
 
 	nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
-	set_byte4((void *)nudph + sizeof(struct udphdr), __constant_htonl(0xFFFE009A));
+	set_byte4((void *)nudph + sizeof(struct udphdr), __constant_htonl(0xffffe009a));
 	nudph->source = oudph->dest;
 	nudph->dest = oudph->source;
 	nudph->len = ntohs(nskb->len - niph->ihl * 4);
@@ -280,7 +280,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
 	niph->protocol = protocol;
-	niph->id = __constant_htons(0xDEAD);
+	niph->id = __constant_htons(0xdead);
 	niph->frag_off = 0x0;
 
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
@@ -288,7 +288,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	ntcph->dest = ct->tuplehash[dir].tuple.src.u.tcp.port;
 	if (protocol == IPPROTO_UDP) {
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(0xFFFF0099));
+		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(0xffff0099));
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		ntcph = (struct tcphdr *)((char *)ntcph + 8);
 	}
@@ -371,7 +371,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
 	niph->protocol = protocol;
-	niph->id = __constant_htons(0xDEAD);
+	niph->id = __constant_htons(0xdead);
 	niph->frag_off = 0x0;
 
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
@@ -379,7 +379,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
 	if (protocol == IPPROTO_UDP) {
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(0xFFFF0099));
+		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(0xffff0099));
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		ntcph = (struct tcphdr *)((char *)ntcph + 8);
 	}
@@ -463,7 +463,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
 	niph->protocol = protocol;
-	niph->id = __constant_htons(0xDEAD);
+	niph->id = __constant_htons(0xdead);
 	niph->frag_off = 0x0;
 
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
@@ -471,7 +471,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
 	if (protocol == IPPROTO_UDP) {
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(0xFFFF0099));
+		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(0xffff0099));
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		ntcph = (struct tcphdr *)((char *)ntcph + 8);
 	}
@@ -588,7 +588,7 @@ static inline int natcap_auth_tcp_to_rst(struct sk_buff *skb)
 	tcph->urg_ptr = 0;
 
 	iph->tot_len = htons(skb->len);
-	iph->id = __constant_htons(0xDEAD);
+	iph->id = __constant_htons(0xdead);
 	iph->frag_off = 0;
 
 	skb_rcsum_tcpudp(skb);
@@ -676,7 +676,7 @@ static inline void natcap_confusion_tcp_reply_ack(const struct net_device *dev, 
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
 	niph->protocol = protocol;
-	niph->id = __constant_htons(0xDEAD);
+	niph->id = __constant_htons(0xdead);
 	niph->frag_off = 0x0;
 
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
@@ -885,8 +885,8 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
-				(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099) ||
-				 get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFD0099))) {
+				(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffe0099) ||
+				 get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffd0099))) {
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 			set_bit(IPS_NATCAP_SERVER_BIT, &ct->status);
@@ -1068,7 +1068,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 
 			if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
-				NATCAP_INFO("(SPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT " u_hash=0x%08X(%u)\n",
+				NATCAP_INFO("(SPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT " u_hash=0x%08x(%u)\n",
 						DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server), ns->n.u_hash, ns->n.u_hash);
 
 				if (server.encryption) {
@@ -1120,9 +1120,9 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if ((skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
-					get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099)) ||
+					get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffe0099)) ||
 				(skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24) &&
-				 get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFD0099))) {
+				 get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffd0099))) {
 			int off = 12;
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
@@ -1153,7 +1153,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			server.ip = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4);
 			server.port = get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 8);
 
-			if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFD0099)) {
+			if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffd0099)) {
 				unsigned int u_hash = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 12);
 				ns->n.u_hash = ntohl(u_hash);
 				off = 24;
@@ -1164,7 +1164,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				if (server.port == __constant_htons(53)) {
 					dns_server_node_random_select(&server.ip);
 				}
-				NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT " u_hash=0x%08X(%u)\n",
+				NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT " u_hash=0x%08x(%u)\n",
 						DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server), ns->n.u_hash, ns->n.u_hash);
 				if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
@@ -1312,8 +1312,8 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 				return NF_STOLEN;
 			}
 		} else if (iph->protocol == IPPROTO_UDP) {
-			if ((get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFE0099) ||
-						get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFD0099)) &&
+			if ((get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffe0099) ||
+						get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffd0099)) &&
 					NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TYPE1) {
 				ret = nf_conntrack_confirm(skb);
 				if (ret != NF_ACCEPT) {
@@ -1396,7 +1396,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			UDPH(l4)->check = CSUM_MANGLED_0;
 			skb->len += 8;
 			skb->tail += 8;
-			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(0xFFFF0099));
+			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(0xffff0099));
 			iph->protocol = IPPROTO_UDP;
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
@@ -1498,7 +1498,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xFFFF) ^ (ntohl(TCPH(l4)->ack_seq) & 0xFFFF)) ) {
+		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xffff) ^ (ntohl(TCPH(l4)->ack_seq) & 0xffff)) ) {
 			unsigned int tcphdr_len = TCPH(l4)->doff * 4;
 			unsigned int foreign_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - tcphdr_len + !!TCPH(l4)->syn;
 
@@ -1595,7 +1595,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
 
-	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xFFFF0099)) {
+	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xffff0099)) {
 		int offlen;
 
 		if (!inet_is_local(in, iph->daddr)) {

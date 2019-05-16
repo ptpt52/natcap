@@ -52,7 +52,7 @@
 
 struct natcap_TCPOPT_header {
 	u8 opcode;
-#define TCPOPT_PEER 0x9A
+#define TCPOPT_PEER 0x9a
 #define TCPOPT_NATCAP 0x99
 	u8 opsize;
 	u8 type;
@@ -102,7 +102,7 @@ struct natcap_TCPOPT_peer {
 #define NATCAP_TCPOPT_SPROXY (1<<5)
 #define NATCAP_TCPOPT_CONFUSION (1<<4)
 
-#define NATCAP_TCPOPT_TYPE_MASK (0x0F)
+#define NATCAP_TCPOPT_TYPE_MASK (0x0f)
 #define NATCAP_TCPOPT_TYPE(t) ((t) & NATCAP_TCPOPT_TYPE_MASK)
 
 struct natcap_TCPOPT {
@@ -267,7 +267,7 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 }
 
 #define XT_MARK_NATCAP 0x99
-#define XT_MARK_NATCAP_MASK 0xFF
+#define XT_MARK_NATCAP_MASK 0xff
 #define xt_mark_natcap_set(mark, at) *(unsigned int *)(at) = ((*(unsigned int *)(at)) & (~XT_MARK_NATCAP_MASK)) | ((mark) & XT_MARK_NATCAP_MASK)
 #define xt_mark_natcap_get(at) ((*(unsigned int *)(at)) & XT_MARK_NATCAP_MASK)
 
@@ -307,8 +307,8 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_SYN2_BIT 31
 #define IPS_NATCAP_SYN2 (1 << IPS_NATCAP_SYN2_BIT)
 
-#define NATCAP_UDP_GET_TYPE(x) (__constant_htons(0x00FF) & (x))
-#define NATCAP_UDP_GET_ENC(x) (__constant_htons(0xFF00) & (x))
+#define NATCAP_UDP_GET_TYPE(x) (__constant_htons(0x00ff) & (x))
+#define NATCAP_UDP_GET_ENC(x) (__constant_htons(0xff00) & (x))
 
 #define NATCAP_UDP_TYPE1 __constant_htons(0x0001)
 #define NATCAP_UDP_TYPE2 __constant_htons(0x0002)
