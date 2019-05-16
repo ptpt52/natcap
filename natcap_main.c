@@ -85,9 +85,9 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"# Info:\n"
 				"#    mode=%s(%u)\n"
 				"#    current_server=" TUPLE_FMT "\n"
-				"#    default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n"
-				"#    u_hash=0x%08X(%u)\n"
-				"#    u_mask=0x%08X\n"
+				"#    default_mac_addr=%02x:%02x:%02x:%02x:%02x:%02x\n"
+				"#    u_hash=0x%08x(%u)\n"
+				"#    u_mask=0x%08x\n"
 				"#    protocol=%u\n"
 				"#    server_seed=%u\n"
 				"#    auth_enabled=%u\n"
@@ -533,7 +533,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	} else if (strncmp(data, "default_mac_addr=", 17) == 0) {
 		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == PEER_MODE) {
 			unsigned int a, b, c, d, e, f;
-			n = sscanf(data, "default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n", &a, &b, &c, &d, &e, &f);
+			n = sscanf(data, "default_mac_addr=%02x:%02x:%02x:%02x:%02x:%02x\n", &a, &b, &c, &d, &e, &f);
 			if ( n == 6 &&
 					((a & 0xff) == a) &&
 					((b & 0xff) == b) &&

@@ -93,7 +93,7 @@ extern char htp_confusion_rsp[1024];
 extern char htp_confusion_host[64];
 
 #define htp_confusion_req_format "" \
-		"GET /%08X HTTP/1.1\r\n" \
+		"GET /%08x HTTP/1.1\r\n" \
 		"Host: %s\r\n" \
 		"Connection: keep-alive\r\n" \
 		"Pragma: no-cache\r\n" \
@@ -178,7 +178,7 @@ extern char htp_confusion_host[64];
 	ntohl(((struct tcphdr *)(t))->seq), \
 	ntohl(((struct tcphdr *)(t))->ack_seq)
 
-#define UDP_ST_FMT "UL:%u,UC:%04X"
+#define UDP_ST_FMT "UL:%u,UC:%04x"
 #define UDP_ST_ARG(u) ntohs(((struct udphdr *)(u))->len), ntohs(((struct udphdr *)(u))->check)
 #define ICMP_ST_FMT "T:%u,C:%u,ID:%u:SEQ:%u"
 #define ICMP_ST_ARG(m) ((struct icmphdr *)(m))->type, ((struct icmphdr *)(m))->code, ntohs(((struct icmphdr *)(m))->un.echo.id), ntohs(((struct icmphdr *)(m))->un.echo.sequence)
@@ -186,13 +186,13 @@ extern char htp_confusion_host[64];
 #define DEBUG_FMT_PREFIX "(%s:%u)"
 #define DEBUG_ARG_PREFIX __FUNCTION__, __LINE__
 
-#define DEBUG_FMT_TCP "[" IP_TCPUDP_FMT "|ID:%04X,IL:%u|" TCP_ST_FMT "]"
+#define DEBUG_FMT_TCP "[" IP_TCPUDP_FMT "|ID:%04x,IL:%u|" TCP_ST_FMT "]"
 #define DEBUG_ARG_TCP(i, t) IP_TCPUDP_ARG(i,t), ntohs(((struct iphdr *)(i))->id), ntohs(((struct iphdr *)(i))->tot_len), TCP_ST_ARG(t)
 
-#define DEBUG_FMT_UDP "[" IP_TCPUDP_FMT "|ID:%04X,IL:%u|" UDP_ST_FMT "]"
+#define DEBUG_FMT_UDP "[" IP_TCPUDP_FMT "|ID:%04x,IL:%u|" UDP_ST_FMT "]"
 #define DEBUG_ARG_UDP(i, u) IP_TCPUDP_ARG(i,u), ntohs((i)->id), ntohs((i)->tot_len), UDP_ST_ARG(u)
 
-#define DEBUG_FMT_ICMP "[%pI4->%pI4|ID:%04X,IL:%u|" ICMP_ST_FMT "]"
+#define DEBUG_FMT_ICMP "[%pI4->%pI4|ID:%04x,IL:%u|" ICMP_ST_FMT "]"
 #define DEBUG_ARG_ICMP(i, m) &(i)->saddr, &(i)->daddr, ntohs((i)->id), ntohs((i)->tot_len), ICMP_ST_ARG(m)
 
 #define DEBUG_TCP_FMT "[%s]" DEBUG_FMT_PREFIX DEBUG_FMT_TCP

@@ -301,7 +301,7 @@ static void peer_timer_flush(struct timer_list *ignore)
 			if (after(jiffies, ue->last_active + peer_port_map_timeout * HZ)) {
 				set_byte4(client_mac, get_byte4((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip));
 				set_byte2(client_mac + 4, get_byte2((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all));
-				NATCAP_INFO(DEBUG_FMT_PREFIX "C[%02X:%02X:%02X:%02X:%02X:%02X,%pI4,%pI4] P=%u [AS %ds] timeout drop\n", DEBUG_ARG_PREFIX,
+				NATCAP_INFO(DEBUG_FMT_PREFIX "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] timeout drop\n", DEBUG_ARG_PREFIX,
 						client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 						&ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 						);
@@ -559,7 +559,7 @@ struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport
 	iph->tot_len = htons(PEER_USKB_SIZE);
 	iph->ttl=255;
 	iph->protocol = IPPROTO_UDP;
-	iph->id = __constant_htons(0xDEAD);
+	iph->id = __constant_htons(0xdead);
 	iph->frag_off = 0;
 	iph->check = 0;
 	iph->check = ip_fast_csum(iph, iph->ihl);
@@ -663,7 +663,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	iph->tot_len = htons(PEER_USKB_SIZE);
 	iph->ttl=255;
 	iph->protocol = IPPROTO_UDP;
-	iph->id = __constant_htons(0xDEAD);
+	iph->id = __constant_htons(0xdead);
 	iph->frag_off = 0;
 	iph->check = 0;
 	iph->check = ip_fast_csum(iph, iph->ihl);
@@ -681,14 +681,14 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	user = nf_ct_get(uskb, &ctinfo);
 
 	if (!user) {
-		NATCAP_ERROR("user [%02X:%02X:%02X:%02X:%02X:%02X] ct[%pI4:%u->%pI4:%u] failed\n",
+		NATCAP_ERROR("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] failed\n",
 				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 				&saddr, ntohs(sport), &daddr, ntohs(dport));
 		return NULL;
 	}
 
 	if (!user->ext) {
-		NATCAP_ERROR("user [%02X:%02X:%02X:%02X:%02X:%02X] ct[%pI4:%u->%pI4:%u] failed, user->ext is NULL\n",
+		NATCAP_ERROR("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] failed, user->ext is NULL\n",
 				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 				&saddr, ntohs(sport), &daddr, ntohs(dport));
 		skb_nfct_reset(uskb);
@@ -698,7 +698,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 		newoff = ALIGN(user->ext->len, __ALIGN_64BITS);
 		new = __krealloc(user->ext, newoff + sizeof(struct user_expect), GFP_ATOMIC);
 		if (!new) {
-			NATCAP_ERROR("user [%02X:%02X:%02X:%02X:%02X:%02X] ct[%pI4:%u->%pI4:%u] failed, realloc user->ext failed\n",
+			NATCAP_ERROR("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] failed, realloc user->ext failed\n",
 					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 					&saddr, ntohs(sport), &daddr, ntohs(dport));
 			skb_nfct_reset(uskb);
@@ -747,7 +747,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 		spin_unlock_bh(&ue->lock);
 
 		if (user != peer_port_map[ntohs(ue->map_port)]) {
-			NATCAP_WARN("user [%02X:%02X:%02X:%02X:%02X:%02X] ct[%pI4:%u->%pI4:%u] alloc map_port fail\n",
+			NATCAP_WARN("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] alloc map_port fail\n",
 					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 					&saddr, ntohs(sport), &daddr, ntohs(dport));
 			nf_ct_put(user);
@@ -783,7 +783,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 		}
 		if (pt) {
 			spin_lock_bh(&ue->lock);
-			NATCAP_INFO("user [%02X:%02X:%02X:%02X:%02X:%02X] @map_port=%u use new-ct[%pI4:%u->%pI4:%u] replace old-ct[%pI4:%u->%pI4:%u] time=%u,%u\n",
+			NATCAP_INFO("user [%02x:%02x:%02x:%02x:%02x:%02x] @map_port=%u use new-ct[%pI4:%u->%pI4:%u] replace old-ct[%pI4:%u->%pI4:%u] time=%u,%u\n",
 					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 					ntohs(ue->map_port), &saddr, ntohs(sport), &daddr, ntohs(dport),
 					&pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport), pt->last_active, (unsigned int)last_jiffies);
@@ -1614,7 +1614,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			unsigned char x = data[data_len];
 			data[data_len] = 0;
 			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got tls sni: %s\n", DEBUG_TCP_ARG(iph,l4), data);
-			n = sscanf(data, "m-%02X%02X%02X%02X%02X%02X.", &a, &b, &c, &d, &e, &f);
+			n = sscanf(data, "m-%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
 			data[data_len] = x;
 			if (n != 6) {
 				consume_skb(skb);
@@ -1675,7 +1675,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					}
 				}
 				if (pt == NULL) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping for user[%02X:%02X:%02X:%02X:%02X:%02X]\n",
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
 							DEBUG_TCP_ARG(iph,l4),
 							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
 							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
@@ -1692,7 +1692,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				//re-check-in-lock
 				if (pt->sip == 0) {
 					spin_unlock_bh(&ue->lock);
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping for user[%02X:%02X:%02X:%02X:%02X:%02X]\n",
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
 							DEBUG_TCP_ARG(iph,l4),
 							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
 							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
@@ -2550,7 +2550,7 @@ knock:
 			}
 
 			if (pt == NULL) {
-				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping for user[%02X:%02X:%02X:%02X:%02X:%02X]\n",
+				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
 						DEBUG_TCP_ARG(iph,l4),
 						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
 						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
@@ -2567,7 +2567,7 @@ knock:
 			//re-check-in-lock
 			if (pt->sip == 0) {
 				spin_unlock_bh(&ue->lock);
-				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping for user[%02X:%02X:%02X:%02X:%02X:%02X]\n",
+				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
 						DEBUG_TCP_ARG(iph,l4),
 						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
 						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
@@ -2942,7 +2942,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 				"#    local_target=%pI4:%u\n"
 				"#    peer_conn_timeout=%us\n"
 				"#    peer_port_map_timeout=%us\n"
-				"#    KN=%pI4:%u MAC=%02X:%02X:%02X:%02X:%02X:%02X LP=%u\n"
+				"#    KN=%pI4:%u MAC=%02x:%02x:%02x:%02x:%02x:%02x LP=%u\n"
 				"#    peer_sni_listen=%pI4:%u\n"
 				"#    peer_sni_auth=%u\n"
 				"#\n"
@@ -2997,7 +2997,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			spin_lock_bh(&ue->lock);
 			n = snprintf(natcap_peer_ctl_buffer,
 					PAGE_SIZE - 1,
-					"C[%02X:%02X:%02X:%02X:%02X:%02X,%pI4,%pI4] P=%u [AS %ds]\n",
+					"C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds]\n",
 					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 					&ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 					);
@@ -3111,7 +3111,7 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 	} else if (strncmp(data, "KN=", 3) == 0) {
 		unsigned int a, b, c, d, e, f;
 		unsigned int x0, x1, x2, x3, x4, x5;
-		n = sscanf(data, "KN=%u.%u.%u.%u:%u MAC=%02X:%02X:%02X:%02X:%02X:%02X LP=%u\n",
+		n = sscanf(data, "KN=%u.%u.%u.%u:%u MAC=%02x:%02x:%02x:%02x:%02x:%02x LP=%u\n",
 				&a, &b, &c, &d, &e,
 				&x0, &x1, &x2, &x3, &x4, &x5,
 				&f);
