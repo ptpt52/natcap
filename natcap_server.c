@@ -884,17 +884,27 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
-		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
-				(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffe0099) ||
-				 get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffd0099))) {
+
+		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12)) {
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
-			set_bit(IPS_NATCAP_SERVER_BIT, &ct->status);
-			if (!inet_is_local(in, iph->daddr)) {
-				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+
+			if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffe0099) ||
+					(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffd0099) &&
+					 skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
+				iph = ip_hdr(skb);
+				l4 = (void *)iph + iph->ihl * 4;
+
+				set_bit(IPS_NATCAP_SERVER_BIT, &ct->status);
+				if (!inet_is_local(in, iph->daddr)) {
+					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				}
+				return NF_ACCEPT;
 			}
-			return NF_ACCEPT;
 		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+
 	}
 
 	return NF_ACCEPT;
@@ -1119,80 +1129,83 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if ((skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
-					get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffe0099)) ||
-				(skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24) &&
-				 get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffd0099))) {
-			int off = 12;
+		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12)) {
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 
-			if (skb->ip_summed == CHECKSUM_NONE) {
-				if (skb_rcsum_verify(skb) != 0) {
-					NATCAP_WARN("(SPCI)" DEBUG_UDP_FMT ": skb_rcsum_verify fail\n", DEBUG_UDP_ARG(iph,l4));
-					return NF_DROP;
+			if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffe0099) ||
+					(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffd0099) &&
+					 skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
+				int off = 12;
+				iph = ip_hdr(skb);
+				l4 = (void *)iph + iph->ihl * 4;
+
+				if (skb->ip_summed == CHECKSUM_NONE) {
+					if (skb_rcsum_verify(skb) != 0) {
+						NATCAP_WARN("(SPCI)" DEBUG_UDP_FMT ": skb_rcsum_verify fail\n", DEBUG_UDP_ARG(iph,l4));
+						return NF_DROP;
+					}
+					skb->csum = 0;
+					skb->ip_summed = CHECKSUM_UNNECESSARY;
 				}
-				skb->csum = 0;
-				skb->ip_summed = CHECKSUM_UNNECESSARY;
-			}
 
-			ns = natcap_session_in(ct);
-			if (NULL == ns) {
-				NATCAP_WARN("(SPCI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
-				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-				return NF_ACCEPT;
-			}
-
-			NATCAP_DEBUG("(SPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
-			if (NATCAP_UDP_GET_ENC(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_ENC) {
-				short_set_bit(NS_NATCAP_ENC_BIT, &ns->n.status);
-			}
-			//reply ACK pkt
-			natcap_udp_reply_cfm(in, skb, ct);
-
-			server.ip = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4);
-			server.port = get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 8);
-
-			if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffd0099)) {
-				unsigned int u_hash = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 12);
-				ns->n.u_hash = ntohl(u_hash);
-				off = 24;
-			}
-
-			if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
-				//XXX overwrite DNS server
-				if (server.port == __constant_htons(53)) {
-					dns_server_node_random_select(&server.ip);
-				}
-				NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT " u_hash=0x%08x(%u)\n",
-						DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server), ns->n.u_hash, ns->n.u_hash);
-				if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
-					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+				ns = natcap_session_in(ct);
+				if (NULL == ns) {
+					NATCAP_WARN("(SPCI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-					return NF_DROP;
+					return NF_ACCEPT;
 				}
-			}
 
-			if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TYPE1) {
-				flow_total_rx_bytes += skb->len;
-				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
-				user_mark_natcap_set(ns->n.u_hash, &skb->mark);
-				if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
-				return NF_ACCEPT;
-			} else if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TYPE2) {
-				int offlen;
+				NATCAP_DEBUG("(SPCI)" DEBUG_UDP_FMT ": pass ctrl decode\n", DEBUG_UDP_ARG(iph,l4));
+				if (NATCAP_UDP_GET_ENC(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_ENC) {
+					short_set_bit(NS_NATCAP_ENC_BIT, &ns->n.status);
+				}
+				//reply ACK pkt
+				natcap_udp_reply_cfm(in, skb, ct);
 
-				offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct udphdr) - off;
-				BUG_ON(offlen < 0);
-				memmove((void *)UDPH(l4) + sizeof(struct udphdr), (void *)UDPH(l4) + sizeof(struct udphdr) + off, offlen);
-				iph->tot_len = htons(ntohs(iph->tot_len) - off);
-				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
-				skb->len -= off;
-				skb->tail -= off;
-				skb_rcsum_tcpudp(skb);
+				server.ip = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4);
+				server.port = get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 8);
+
+				if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffd0099)) {
+					unsigned int u_hash = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 12);
+					ns->n.u_hash = ntohl(u_hash);
+					off = 24;
+				}
+
+				if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
+					//XXX overwrite DNS server
+					if (server.port == __constant_htons(53)) {
+						dns_server_node_random_select(&server.ip);
+					}
+					NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT " u_hash=0x%08x(%u)\n",
+							DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server), ns->n.u_hash, ns->n.u_hash);
+					if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
+						NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+						set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+						return NF_DROP;
+					}
+				}
+
+				if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TYPE1) {
+					flow_total_rx_bytes += skb->len;
+					xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+					user_mark_natcap_set(ns->n.u_hash, &skb->mark);
+					if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
+					return NF_ACCEPT;
+				} else if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TYPE2) {
+					int offlen;
+
+					offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct udphdr) - off;
+					BUG_ON(offlen < 0);
+					memmove((void *)UDPH(l4) + sizeof(struct udphdr), (void *)UDPH(l4) + sizeof(struct udphdr) + off, offlen);
+					iph->tot_len = htons(ntohs(iph->tot_len) - off);
+					UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
+					skb->len -= off;
+					skb->tail -= off;
+					skb_rcsum_tcpudp(skb);
+				}
 			}
 		}
-
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 

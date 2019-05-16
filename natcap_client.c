@@ -810,18 +810,24 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if (hooknum == NF_INET_PRE_ROUTING && !nf_ct_is_confirmed(ct)) {
-			if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12) &&
-					(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffe0099) ||
-					get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffd0099))) {
+			if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12)) {
 				iph = ip_hdr(skb);
 				l4 = (void *)iph + iph->ihl * 4;
-				NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": first packet is already encoded, bypass\n", DEBUG_UDP_ARG(iph,l4));
-				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-				return NF_ACCEPT;
+
+				if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffe0099) ||
+						(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xfffd0099) &&
+						 skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
+					iph = ip_hdr(skb);
+					l4 = (void *)iph + iph->ihl * 4;
+					NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": first packet is already encoded, bypass\n", DEBUG_UDP_ARG(iph,l4));
+					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+					return NF_ACCEPT;
+				}
 			}
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
+
 			if (inet_is_local(in, iph->daddr)) {
 				NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": target is local, no encoded header, not client in\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
