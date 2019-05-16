@@ -1217,6 +1217,13 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 
 			if ((NS_NATCAP_ENC & ns->n.status)) {
+				if (skb_unclone(skb, GFP_ATOMIC)) {
+					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": skb_unclone() failed\n", DEBUG_UDP_ARG(iph,l4));
+					return NF_DROP;
+				}
+				iph = ip_hdr(skb);
+				l4 = (void *)iph + iph->ihl * 4;
+
 				skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_decode);
 				skb_rcsum_tcpudp(skb);
 			}
@@ -1424,6 +1431,13 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	} else if (iph->protocol == IPPROTO_UDP) {
 		NATCAP_DEBUG("(SPO)" DEBUG_UDP_FMT ": pass data reply\n", DEBUG_UDP_ARG(iph,l4));
 		if ((NS_NATCAP_ENC & ns->n.status)) {
+			if (skb_unclone(skb, GFP_ATOMIC)) {
+				NATCAP_ERROR("(SPO)" DEBUG_UDP_FMT ": skb_unclone() failed\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_DROP;
+			}
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
+
 			skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode);
 			skb_rcsum_tcpudp(skb);
 		}
