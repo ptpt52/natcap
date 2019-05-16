@@ -1217,8 +1217,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 
 			if ((NS_NATCAP_ENC & ns->n.status)) {
-				if (skb_unclone(skb, GFP_ATOMIC)) {
-					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": skb_unclone() failed\n", DEBUG_UDP_ARG(iph,l4));
+				if (!skb_make_writable(skb, skb->len)) {
+					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": skb_make_writable() failed\n", DEBUG_UDP_ARG(iph,l4));
 					return NF_DROP;
 				}
 				iph = ip_hdr(skb);
@@ -1431,8 +1431,8 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	} else if (iph->protocol == IPPROTO_UDP) {
 		NATCAP_DEBUG("(SPO)" DEBUG_UDP_FMT ": pass data reply\n", DEBUG_UDP_ARG(iph,l4));
 		if ((NS_NATCAP_ENC & ns->n.status)) {
-			if (skb_unclone(skb, GFP_ATOMIC)) {
-				NATCAP_ERROR("(SPO)" DEBUG_UDP_FMT ": skb_unclone() failed\n", DEBUG_UDP_ARG(iph,l4));
+			if (!skb_make_writable(skb, skb->len)) {
+				NATCAP_ERROR("(SPO)" DEBUG_UDP_FMT ": skb_make_writable() failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
 			iph = ip_hdr(skb);
