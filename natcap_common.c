@@ -38,6 +38,7 @@
 #include <linux/netfilter/xt_set.h>
 #include "natcap_common.h"
 #include "natcap_client.h"
+#include "natcap_server.h"
 
 unsigned int natcap_touch_timeout = 32;
 
@@ -422,6 +423,10 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			}
 			short_set_bit(NS_NATCAP_AUTH_BIT, &ns->n.status);
 			return 0;
+		}
+		if (user_mark_natcap_mask != 0) {
+			/* we need u_hash in first packet */
+			return -1;
 		}
 		size = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst) + add_len, sizeof(unsigned int));
 		if (tcph->doff * 4 + size <= 60) {

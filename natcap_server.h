@@ -21,6 +21,9 @@
 #ifndef _NATCAP_SERVER_H_
 #define _NATCAP_SERVER_H_
 
+
+extern unsigned int user_mark_natcap_mask;
+
 extern int dns_server_node_add(__be32 ip);
 extern void dns_server_node_clean(void);
 
