@@ -191,6 +191,7 @@ struct natcap_session {
 			__be16 new_source;
 			__be16 target_port;
 			__be32 target_ip;
+			unsigned int u_hash;
 			union {
 				int tcp_seq_offset; //used on HTTP confusion
 				unsigned int current_seq; //used on UDP pack to TCP

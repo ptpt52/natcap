@@ -38,6 +38,10 @@
 #include "natcap_common.h"
 #include "natcap_server.h"
 
+unsigned int user_mark_natcap_mask = 0x00000000;
+#define user_mark_natcap_set(mark, at) *(unsigned int *)(at) = ((*(unsigned int *)(at)) & (~user_mark_natcap_mask)) | ((mark) & user_mark_natcap_mask)
+#define user_mark_natcap_get(at) ((*(unsigned int *)(at)) & user_mark_natcap_mask)
+
 #define MAX_DNS_SERVER_NODE 32
 static __be32 dns_server_node[MAX_DNS_SERVER_NODE];
 static int dns_server_number = 0;
@@ -75,17 +79,19 @@ static inline int natcap_auth(const struct nf_hook_state *state,
 		const struct net_device *out,
 		struct sk_buff *skb,
 		struct nf_conn *ct,
+		struct natcap_session *ns,
 		const struct natcap_TCPOPT *tcpopt,
 		struct tuple *server)
-#define NATCAP_AUTH(state, in, out, skb, ct, tcpopt, server) natcap_auth(state, in, out, skb, ct, tcpopt, server)
+#define NATCAP_AUTH(state, in, out, skb, ct, ns, tcpopt, server) natcap_auth(state, in, out, skb, ct, ns, tcpopt, server)
 #else
 static inline int natcap_auth(const struct net_device *in,
 		const struct net_device *out,
 		struct sk_buff *skb,
 		struct nf_conn *ct,
+		struct natcap_session *ns,
 		const struct natcap_TCPOPT *tcpopt,
 		struct tuple *server)
-#define NATCAP_AUTH(state, in, out, skb, ct, tcpopt, server) natcap_auth(in, out, skb, ct, tcpopt, server)
+#define NATCAP_AUTH(state, in, out, skb, ct, ns, tcpopt, server) natcap_auth(in, out, skb, ct, ns, tcpopt, server)
 #endif
 {
 	int ret;
@@ -123,6 +129,7 @@ static inline int natcap_auth(const struct net_device *in,
 					tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
 					ntohl(tcpopt->all.data.u_hash));
 		}
+		ns->n.u_hash = ntohl(tcpopt->all.data.u_hash);
 	} else if (NATCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_USER) {
 		if (server) {
 			return E_NATCAP_INVAL;
@@ -961,6 +968,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		if ((IPS_NATCAP & ct->status)) {
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+			user_mark_natcap_set(ns->n.u_hash, &skb->mark);
 			if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 		}
 		return NF_ACCEPT;
@@ -1004,7 +1012,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				consume_skb(skb);
 				return NF_STOLEN;
 			}
-			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, NULL);
+			ret = NATCAP_AUTH(state, in, out, skb, ct, ns, &tcpopt, NULL);
 			if (ret != E_NATCAP_OK) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				if (ret == E_NATCAP_AUTH_FAIL) {
@@ -1043,7 +1051,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				short_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->n.status);
 			}
 
-			ret = NATCAP_AUTH(state, in, out, skb, ct, &tcpopt, &server);
+			ret = NATCAP_AUTH(state, in, out, skb, ct, ns, &tcpopt, &server);
 			if (ret != E_NATCAP_OK) {
 				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": natcap_auth() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				if (ret == E_NATCAP_AUTH_FAIL) {
@@ -1060,7 +1068,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 
 			if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
-				NATCAP_INFO("(SPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+				NATCAP_INFO("(SPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT " u_hash=0x%08X(%u)\n",
+						DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server), ns->n.u_hash, ns->n.u_hash);
 
 				if (server.encryption) {
 					short_set_bit(NS_NATCAP_ENC_BIT, &ns->n.status);
@@ -1099,6 +1108,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 		flow_total_rx_bytes += skb->len;
 		xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+		user_mark_natcap_set(ns->n.u_hash, &skb->mark);
 		if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 
 		NATCAP_DEBUG("(SPCI)" DEBUG_TCP_FMT ": after decode\n", DEBUG_TCP_ARG(iph,l4));
@@ -1116,10 +1126,6 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			int off = 12;
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
-
-			if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFD0099)) {
-				off = 24;
-			}
 
 			if (skb->ip_summed == CHECKSUM_NONE) {
 				if (skb_rcsum_verify(skb) != 0) {
@@ -1147,12 +1153,19 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			server.ip = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4);
 			server.port = get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 8);
 
+			if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(0xFFFD0099)) {
+				unsigned int u_hash = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 12);
+				ns->n.u_hash = ntohl(u_hash);
+				off = 24;
+			}
+
 			if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
 				//XXX overwrite DNS server
 				if (server.port == __constant_htons(53)) {
 					dns_server_node_random_select(&server.ip);
 				}
-				NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+				NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT " u_hash=0x%08X(%u)\n",
+						DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server), ns->n.u_hash, ns->n.u_hash);
 				if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -1163,6 +1176,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TYPE1) {
 				flow_total_rx_bytes += skb->len;
 				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+				user_mark_natcap_set(ns->n.u_hash, &skb->mark);
 				if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 				return NF_ACCEPT;
 			} else if (NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TYPE2) {
@@ -1196,6 +1210,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 			flow_total_rx_bytes += skb->len;
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+			user_mark_natcap_set(ns->n.u_hash, &skb->mark);
 			if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 			return NF_ACCEPT;
 		} else {

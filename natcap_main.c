@@ -86,7 +86,8 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    mode=%s(%u)\n"
 				"#    current_server=" TUPLE_FMT "\n"
 				"#    default_mac_addr=%02X:%02X:%02X:%02X:%02X:%02X\n"
-				"#    u_hash=%u\n"
+				"#    u_hash=0x%08X(%u)\n"
+				"#    u_mask=0x%08X\n"
 				"#    protocol=%u\n"
 				"#    server_seed=%u\n"
 				"#    auth_enabled=%u\n"
@@ -124,6 +125,8 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				TUPLE_ARG(natcap_server_info_current()),
 				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 				ntohl(default_u_hash),
+				ntohl(default_u_hash),
+				user_mark_natcap_mask,
 				default_protocol,
 				server_seed, auth_enabled,
 				natcap_tx_speed_get(),
@@ -311,6 +314,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		n = sscanf(data, "disabled=%u", &d);
 		if (n == 1) {
 			disabled = d;
+			goto done;
+		}
+	} else if (strncmp(data, "u_mask=", 7) == 0) {
+		unsigned int d;
+		n = sscanf(data, "u_mask=%u", &d);
+		if (n == 1) {
+			user_mark_natcap_mask = d;
 			goto done;
 		}
 	} else if (strncmp(data, "u_hash=", 7) == 0) {
