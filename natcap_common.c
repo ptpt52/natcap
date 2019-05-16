@@ -500,6 +500,12 @@ int natcap_tcp_encode(struct nf_conn *ct, struct sk_buff *skb, const struct natc
 
 do_encode:
 	if (tcpopt->header.encryption) {
+		if (skb_unclone(skb, GFP_ATOMIC)) {
+			return -3;
+		}
+		iph = ip_hdr(skb);
+		tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+
 		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
 	}
 	if (tcpopt->header.encryption || NATCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_TYPE_NONE) {
@@ -548,6 +554,12 @@ int natcap_tcp_decode(struct nf_conn *ct, struct sk_buff *skb, struct natcap_TCP
 
 do_decode:
 	if (tcpopt->header.encryption) {
+		if (skb_unclone(skb, GFP_ATOMIC)) {
+			return -3;
+		}
+		iph = ip_hdr(skb);
+		tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
+
 		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_decode);
 	}
 	if (tcpopt->header.encryption || NATCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_TYPE_NONE) {
