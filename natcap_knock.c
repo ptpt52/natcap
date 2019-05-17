@@ -217,6 +217,9 @@ static unsigned int natcap_knock_post_out_hook(void *priv,
 
 	ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 	if (ret == 0) {
+		if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
+			tcpopt.header.type |= NATCAP_TCPOPT_TARGET;
+		}
 		ret = natcap_tcp_encode(ct, skb, &tcpopt, IP_CT_DIR_ORIGINAL);
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
