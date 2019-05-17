@@ -39,6 +39,8 @@
 #include "natcap_common.h"
 #include "natcap_client.h"
 #include "natcap_server.h"
+#include "natcap_knock.h"
+#include "natcap_peer.h"
 
 unsigned int natcap_touch_timeout = 32;
 
@@ -422,6 +424,9 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 				tcpopt->header.type |= NATCAP_TCPOPT_CONFUSION;
 			}
 			short_set_bit(NS_NATCAP_AUTH_BIT, &ns->n.status);
+			if (iph->daddr == ip && knock_flood) {
+				tcpopt->all.data.ip = PEER_XSYN_MASK_ADDR;
+			}
 			return 0;
 		}
 		if (user_mark_natcap_mask != 0) {
@@ -438,6 +443,9 @@ int natcap_tcpopt_setup(unsigned long status, struct sk_buff *skb, struct nf_con
 			if (add_len == sizeof(unsigned int)) {
 				set_byte4((unsigned char *)tcpopt + size - add_len, htonl(ns->n.tcp_seq_offset));
 				tcpopt->header.type |= NATCAP_TCPOPT_CONFUSION;
+			}
+			if (iph->daddr == ip && knock_flood) {
+				tcpopt->dst.data.ip = PEER_XSYN_MASK_ADDR;
 			}
 			return 0;
 		}

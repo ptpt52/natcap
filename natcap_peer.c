@@ -175,9 +175,8 @@ static unsigned int peer_sni_auth = 0;
 static __be32 peer_sni_ip = __constant_htonl(0);
 static __be16 peer_sni_port = __constant_htons(991);
 
-#define PEER_XSYN_MASK_ADDR __constant_htonl(0xffffffff)
 static void *peer_xsyn_last_dev = NULL;
-static inline __be32 peer_xsyn_enumerate_addr(void)
+__be32 peer_xsyn_enumerate_addr(void)
 {
 	__be32 ip;
 	struct net_device *dev;
