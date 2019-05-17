@@ -37,6 +37,7 @@
 #include "natcap.h"
 #include "natcap_common.h"
 #include "natcap_server.h"
+#include "natcap_peer.h"
 
 unsigned int user_mark_natcap_mask = 0x00000000;
 #define user_mark_natcap_set(mark, at) *(unsigned int *)(at) = ((*(unsigned int *)(at)) & (~user_mark_natcap_mask)) | ((mark) & user_mark_natcap_mask)
@@ -105,7 +106,9 @@ static inline int natcap_auth(const struct net_device *in,
 			server->ip = tcpopt->all.data.ip;
 			server->port = tcpopt->all.data.port;
 			server->encryption = tcpopt->header.encryption;
-			if ((tcpopt->header.type & NATCAP_TCPOPT_TARGET)) {
+			if (server->ip == PEER_XSYN_MASK_ADDR) {
+				server->ip = peer_xsyn_enumerate_addr();
+			} else if ((tcpopt->header.type & NATCAP_TCPOPT_TARGET)) {
 				server->ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 			}
 		}
@@ -159,7 +162,9 @@ static inline int natcap_auth(const struct net_device *in,
 			server->ip = tcpopt->dst.data.ip;
 			server->port = tcpopt->dst.data.port;
 			server->encryption = tcpopt->header.encryption;
-			if ((tcpopt->header.type & NATCAP_TCPOPT_TARGET)) {
+			if (server->ip == PEER_XSYN_MASK_ADDR) {
+				server->ip = peer_xsyn_enumerate_addr();
+			} else if ((tcpopt->header.type & NATCAP_TCPOPT_TARGET)) {
 				server->ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 			}
 		} else if (!tcph->syn || tcph->ack) {

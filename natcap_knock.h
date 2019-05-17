@@ -26,6 +26,7 @@
 #include "natcap.h"
 
 extern unsigned short knock_port;
+extern unsigned int knock_flood;
 
 extern void natcap_knock_info_select(__be32 ip, __be16 port, struct tuple *dst);
 

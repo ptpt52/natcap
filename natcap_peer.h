@@ -129,4 +129,7 @@ static inline struct natcap_TCPOPT *natcap_peer_decode_header(struct tcphdr *tcp
 int natcap_peer_init(void);
 void natcap_peer_exit(void);
 
+#define PEER_XSYN_MASK_ADDR __constant_htonl(0xffffffff)
+extern __be32 peer_xsyn_enumerate_addr(void);
+
 #endif /* _NATCAP_PEER_H_ */
