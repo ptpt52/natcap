@@ -36,9 +36,20 @@
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_nat.h>
-#include <net/netfilter/nf_nat_core.h>
 #include <linux/inetdevice.h>
 #include "natcap.h"
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
+#include <net/netfilter/nf_nat_core.h>
+#else
+static inline int nf_nat_used_tuple(const struct nf_conntrack_tuple *tuple, const struct nf_conn *ignored_conntrack)
+{
+	struct nf_conntrack_tuple reply;
+
+	nf_ct_invert_tuple(&reply, tuple);
+	return nf_conntrack_tuple_taken(&reply, ignored_conntrack);
+}
+#endif
 
 enum {
 	CLIENT_MODE = 0,
