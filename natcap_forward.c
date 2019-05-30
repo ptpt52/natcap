@@ -29,7 +29,6 @@
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_nat.h>
-#include <net/netfilter/nf_nat_core.h>
 #include "natcap.h"
 #include "natcap_common.h"
 #include "natcap_forward.h"

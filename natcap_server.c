@@ -31,7 +31,6 @@
 #include <net/netfilter/nf_conntrack_zones.h>
 #include "net/netfilter/nf_conntrack_seqadj.h"
 #include <net/netfilter/nf_nat.h>
-#include <net/netfilter/nf_nat_core.h>
 #include <net/ip.h>
 #include <net/tcp.h>
 #include "natcap.h"

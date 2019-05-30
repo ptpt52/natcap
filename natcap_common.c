@@ -32,7 +32,6 @@
 #include <net/netfilter/nf_conntrack_extend.h>
 #include "net/netfilter/nf_conntrack_seqadj.h"
 #include <net/netfilter/nf_nat.h>
-#include <net/netfilter/nf_nat_core.h>
 #include <linux/netfilter/ipset/ip_set.h>
 #include <linux/netfilter/x_tables.h>
 #include <linux/netfilter/xt_set.h>
