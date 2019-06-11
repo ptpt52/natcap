@@ -45,6 +45,23 @@
 #include "natcap_knock.h"
 #include "natcap_peer.h"
 
+unsigned int server_index_natcap_mask = 0x00000000;
+#define server_index_natcap_set(index, at) *(unsigned int *)(at) = ((*(unsigned int *)(at)) & (~server_index_natcap_mask)) | ((index) & server_index_natcap_mask)
+static inline int server_index_natcap_get(unsigned int *at)
+{
+	unsigned int idx;
+	unsigned int val;
+	unsigned int mask = server_index_natcap_mask;
+
+	if (mask == 0)
+		return -1;
+
+	idx = ffs(mask) - 1;
+
+	val = ((*(unsigned int *)(at)) & mask);
+	return (val >> idx);
+}
+
 unsigned int dns_proxy_drop = 0;
 unsigned int server_persist_lock = 0;
 unsigned int server_persist_timeout = 0;
@@ -395,7 +412,7 @@ void natcap_server_in_touch(__be32 ip)
 	}
 }
 
-void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
+void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst)
 {
 	static atomic_t server_port = ATOMIC_INIT(0);
 	struct natcap_server_info *nsi = &natcap_server_info;
@@ -415,7 +432,10 @@ void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst)
 
 	hash = server_index % count;
 
-	if (server_persist_lock || nsi->last_dir[hash] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[hash]) <= natcap_touch_timeout * HZ) {
+	if ((i = server_index_natcap_get(&skb->mark)) != -1) {
+		hash = i % count;
+		found = 1;
+	} else if (server_persist_lock || nsi->last_dir[hash] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[hash]) <= natcap_touch_timeout * HZ) {
 		found = 1;
 	} else {
 		unsigned int oldhash = hash;
@@ -733,7 +753,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 					return NF_ACCEPT;
 				}
 			}
-			natcap_server_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
+			natcap_server_info_select(skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -776,7 +796,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 					return NF_ACCEPT;
 				}
 
-				natcap_server_info_select(iph->daddr, TCPH(l4)->dest, &server);
+				natcap_server_info_select(skb, iph->daddr, TCPH(l4)->dest, &server);
 				if (server.ip == 0) {
 					NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -859,7 +879,7 @@ natcap_dual_out:
 					return NF_ACCEPT;
 				}
 
-				natcap_server_info_select(iph->daddr, UDPH(l4)->dest, &server);
+				natcap_server_info_select(skb, iph->daddr, UDPH(l4)->dest, &server);
 				if (server.ip == 0) {
 					NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -897,7 +917,7 @@ natcap_dual_out:
 				IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0 ||
 				UDPH(l4)->dest == __constant_htons(443) ||
 				UDPH(l4)->dest == __constant_htons(80)) {
-			natcap_server_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
+			natcap_server_info_select(skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);

@@ -162,7 +162,7 @@ __do_dnat:
 		}
 
 		if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in */
-			natcap_server_info_select(iph->daddr, TCPH(l4)->dest, &server);
+			natcap_server_info_select(skb, iph->daddr, TCPH(l4)->dest, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(FPCI)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -210,7 +210,7 @@ __do_dnat:
 				}
 
 				if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in */
-					natcap_server_info_select(iph->daddr, UDPH(l4)->dest, &server);
+					natcap_server_info_select(skb, iph->daddr, UDPH(l4)->dest, &server);
 					if (server.ip == 0) {
 						NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
 						set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -259,7 +259,7 @@ __do_dnat:
 				}
 
 				if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in */
-					natcap_server_info_select(iph->daddr, UDPH(l4)->dest, &server);
+					natcap_server_info_select(skb, iph->daddr, UDPH(l4)->dest, &server);
 					if (server.ip == 0) {
 						NATCAP_DEBUG("(FPCI)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
 						set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
