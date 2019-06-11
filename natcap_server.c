@@ -117,6 +117,8 @@ static inline int natcap_auth(const struct net_device *in,
 			memcpy(eth->h_source, tcpopt->all.data.mac_addr, ETH_ALEN);
 			ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
 			memcpy(eth->h_source, old_mac, ETH_ALEN);
+			if (ret > 0)
+				ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
 			if (ret <= 0) {
 				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed\n",
 						__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
@@ -142,6 +144,8 @@ static inline int natcap_auth(const struct net_device *in,
 			memcpy(eth->h_source, tcpopt->user.data.mac_addr, ETH_ALEN);
 			ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
 			memcpy(eth->h_source, old_mac, ETH_ALEN);
+			if (ret > 0)
+				ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
 			if (ret <= 0) {
 				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed\n",
 						__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
