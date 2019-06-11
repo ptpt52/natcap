@@ -40,7 +40,20 @@
 
 unsigned int user_mark_natcap_mask = 0x00000000;
 #define user_mark_natcap_set(mark, at) *(unsigned int *)(at) = ((*(unsigned int *)(at)) & (~user_mark_natcap_mask)) | ((mark) & user_mark_natcap_mask)
-#define user_mark_natcap_get(at) ((*(unsigned int *)(at)) & user_mark_natcap_mask)
+static inline int user_mark_natcap_get(unsigned int *at)
+{
+	unsigned int idx;
+	unsigned int val;
+	unsigned int mask = user_mark_natcap_mask;
+
+	if (mask == 0)
+		return -1;
+
+	idx = ffs(mask) - 1;
+
+	val = ((*(unsigned int *)(at)) & mask);
+	return (val >> idx);
+}
 
 #define MAX_DNS_SERVER_NODE 32
 static __be32 dns_server_node[MAX_DNS_SERVER_NODE];
