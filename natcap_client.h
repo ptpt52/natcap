@@ -25,6 +25,9 @@
 #include <linux/if_ether.h>
 #include "natcap.h"
 
+
+extern unsigned int server_index_natcap_mask;
+
 extern unsigned int cnipwhitelist_mode;
 
 enum {
@@ -61,7 +64,7 @@ int natcap_server_info_add(const struct tuple *dst);
 int natcap_server_info_delete(const struct tuple *dst);
 void *natcap_server_info_get(loff_t idx);
 void natcap_server_in_touch(__be32 ip);
-void natcap_server_info_select(__be32 ip, __be16 port, struct tuple *dst);
+void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst);
 
 const struct tuple *natcap_server_info_current(void);
 
