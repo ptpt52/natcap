@@ -47,6 +47,7 @@
 
 unsigned int server_index_natcap_mask = 0x00000000;
 #define server_index_natcap_set(index, at) *(unsigned int *)(at) = ((*(unsigned int *)(at)) & (~server_index_natcap_mask)) | ((index) & server_index_natcap_mask)
+/* return 0: no index set */
 static inline int server_index_natcap_get(unsigned int *at)
 {
 	unsigned int idx;
@@ -54,7 +55,7 @@ static inline int server_index_natcap_get(unsigned int *at)
 	unsigned int mask = server_index_natcap_mask;
 
 	if (mask == 0)
-		return -1;
+		return 0;
 
 	idx = ffs(mask) - 1;
 
@@ -432,8 +433,8 @@ void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, stru
 
 	hash = server_index % count;
 
-	if ((i = server_index_natcap_get(&skb->mark)) != -1) {
-		hash = i % count;
+	if ((i = server_index_natcap_get(&skb->mark)) != 0) {
+		hash = (i - 1) % count;
 		found = 1;
 	} else if (server_persist_lock || nsi->last_dir[hash] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[hash]) <= natcap_touch_timeout * HZ) {
 		found = 1;
