@@ -2381,15 +2381,17 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				flow_total_tx_bytes += skb2->len;
 				NF_OKFN(skb2);
 			}
-			if (nf_ct_seq_adjust(skb, master, ctinfo, ip_hdrlen(skb))) { /* we have to handle seqadj for DAUL skb */
-				flow_total_tx_bytes += skb->len;
-				NF_OKFN(skb);
-			} else {
-				consume_skb(skb);
-			}
 			if (skb_htp) {
-				flow_total_tx_bytes += skb_htp->len;
+				flow_total_tx_bytes += skb->len + skb_htp->len;
+				NF_OKFN(skb);
 				NF_OKFN(skb_htp);
+			} else {
+				if (nf_ct_seq_adjust(skb, master, ctinfo, ip_hdrlen(skb))) { /* we have to handle seqadj for DAUL skb */
+					flow_total_tx_bytes += skb->len;
+					NF_OKFN(skb);
+				} else {
+					consume_skb(skb);
+				}
 			}
 			goto out;
 		}
