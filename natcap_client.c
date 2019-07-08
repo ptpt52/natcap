@@ -1678,7 +1678,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			tcpopt->header.opsize = size;
 			tcpopt->header.encryption = 0;
 			memcpy((void *)tcpopt + size, htp_confusion_req, ns->n.tcp_seq_offset);
-			skb->ip_summed = CHECKSUM_UNNECESSARY;
+			skb_htp->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb_htp);
 
 			nf_ct_seqadj_init(ct, ctinfo, ns->n.tcp_seq_offset);
@@ -2337,7 +2337,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			int offset, add_len;
 			int size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
 
-			offset = iph->ihl * 4 + sizeof(struct tcphdr) + size + ns->n.tcp_seq_offset - (skb_headlen(skb) + skb_tailroom(skb));
+			offset = iph->ihl * 4 + sizeof(struct tcphdr) + size + master_ns->n.tcp_seq_offset - (skb_headlen(skb) + skb_tailroom(skb));
 			add_len = offset < 0 ? 0 : offset;
 			offset += skb_tailroom(skb);
 			skb_htp = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
@@ -2350,7 +2350,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				goto out;
 			}
 			skb_htp->tail += offset;
-			skb_htp->len = iph->ihl * 4 + sizeof(struct tcphdr) + size + ns->n.tcp_seq_offset;;
+			skb_htp->len = iph->ihl * 4 + sizeof(struct tcphdr) + size + master_ns->n.tcp_seq_offset;;
 
 			iph = ip_hdr(skb_htp);
 			l4 = (void *)iph + iph->ihl * 4;
@@ -2362,8 +2362,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			tcpopt->header.opcode = TCPOPT_NATCAP;
 			tcpopt->header.opsize = size;
 			tcpopt->header.encryption = 0;
-			memcpy((void *)tcpopt + size, htp_confusion_req, ns->n.tcp_seq_offset);
-			skb->ip_summed = CHECKSUM_UNNECESSARY;
+			memcpy((void *)tcpopt + size, htp_confusion_req, master_ns->n.tcp_seq_offset);
+			skb_htp->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb_htp);
 
 			nf_ct_seqadj_init(master, ctinfo, master_ns->n.tcp_seq_offset);
