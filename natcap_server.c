@@ -124,13 +124,13 @@ static inline int natcap_auth(const struct net_device *in,
 				server->ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 			}
 		}
-		if (auth_enabled) {
+		if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
 			eth = eth_hdr(skb);
 			memcpy(old_mac, eth->h_source, ETH_ALEN);
 			memcpy(eth->h_source, tcpopt->all.data.mac_addr, ETH_ALEN);
 			ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
 			memcpy(eth->h_source, old_mac, ETH_ALEN);
-			if (ret > 0)
+			if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
 				ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
 			if (ret <= 0) {
 				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed\n",
@@ -151,13 +151,13 @@ static inline int natcap_auth(const struct net_device *in,
 		if (server) {
 			return E_NATCAP_INVAL;
 		}
-		if (auth_enabled) {
+		if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
 			eth = eth_hdr(skb);
 			memcpy(old_mac, eth->h_source, ETH_ALEN);
 			memcpy(eth->h_source, tcpopt->user.data.mac_addr, ETH_ALEN);
 			ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
 			memcpy(eth->h_source, old_mac, ETH_ALEN);
-			if (ret > 0)
+			if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
 				ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
 			if (ret <= 0) {
 				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed\n",
