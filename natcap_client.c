@@ -908,7 +908,7 @@ natcap_dual_out:
 		}
 
 		if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
-				IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
+				(!cnipwhitelist_mode && IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) ||
 				IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
