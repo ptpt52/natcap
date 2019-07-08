@@ -88,6 +88,8 @@ extern unsigned short natcap_client_redirect_port;
 extern unsigned long long flow_total_tx_bytes;
 extern unsigned long long flow_total_rx_bytes;
 
+#define NATCAP_AUTH_MATCH_MAC 0x01
+#define NATCAP_AUTH_MATCH_IP 0x02
 extern unsigned int auth_enabled;
 extern unsigned int mode;
 extern const char *const mode_str[];
