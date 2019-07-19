@@ -487,10 +487,15 @@ extern int natcap_common_init(void);
 
 extern void natcap_common_exit(void);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
+#define __RT_GATEWAY rt_gateway
+#else
+#define __RT_GATEWAY rt_gw4
+#endif
 #define NF_GW_REROUTE(skb) do { \
 	struct dst_entry *dst = skb_dst(skb); \
 	struct rtable *rt = (struct rtable *)dst; \
-	if (!rt || !rt->rt_gateway) { \
+	if (!rt || !rt->__RT_GATEWAY) { \
 		struct net *net = dst ? dev_net(dst->dev) : skb->dev ? dev_net(skb->dev) : &init_net; \
 		rt = ip_route_output(net, iph->daddr, 0, RT_TOS(iph->tos), 0); \
 		if (!IS_ERR(rt)) { \
