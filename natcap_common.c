@@ -1383,14 +1383,14 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	}
 #endif
 
-	if (cone_nat_array && IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
-		//alloc natcap_session
-		ns = natcap_session_in(ct);
-		if (!ns) {
-			NATCAP_WARN("(CCI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
-			return NF_ACCEPT;
-		}
+	//alloc natcap_session
+	ns = natcap_session_in(ct);
+	if (!ns) {
+		NATCAP_WARN("(CCI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+		return NF_ACCEPT;
+	}
 
+	if (cone_nat_array && IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 		memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->dest)], sizeof(cns));
 		if (cns.ip != 0 && cns.port != 0) {
 			if (natcap_dnat_setup(ct, cns.ip, cns.port) != NF_ACCEPT) {
