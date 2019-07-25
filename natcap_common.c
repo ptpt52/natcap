@@ -1383,6 +1383,10 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	}
 #endif
 
+	if (ipv4_is_loopback(iph->daddr) || ipv4_is_multicast(iph->daddr) || ipv4_is_lbcast(iph->daddr) || ipv4_is_zeronet(iph->daddr)) {
+		return NF_ACCEPT;
+	}
+
 	//alloc natcap_session
 	ns = natcap_session_in(ct);
 	if (!ns) {
