@@ -1390,7 +1390,7 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	//alloc natcap_session
 	ns = natcap_session_in(ct);
 	if (!ns) {
-		NATCAP_WARN("(CCI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+		NATCAP_DEBUG("(CCI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
 
