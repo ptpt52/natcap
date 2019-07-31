@@ -658,7 +658,7 @@ static inline int inet_is_local(const struct net_device *dev, __be32 ip)
 		rcu_read_unlock();
 		return 0;
 	}
-	for_primary_ifa(in_dev) {
+	for_ifa(in_dev) {
 		if (ifa->ifa_local == ip) {
 			rcu_read_unlock();
 			return 1;
