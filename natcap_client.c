@@ -1817,6 +1817,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			if (skb->len > 1280) {
 				struct sk_buff *nskb;
 				int offset, add_len;
+				unsigned short uflag = NATCAP_UDP_TYPE1;
 
 				offset = iph->ihl * 4 + sizeof(struct udphdr) + off - (skb_headlen(skb) + skb_tailroom(skb));
 				add_len = offset < 0 ? 0 : offset;
@@ -1836,11 +1837,14 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				set_byte4(l4 + sizeof(struct udphdr), default_protocol == 1 ? __constant_htonl(0xfffd0099) : __constant_htonl(0xfffe0099));
 				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
-				if ((NS_NATCAP_ENC & ns->n.status)) {
-					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_ENC | NATCAP_UDP_TYPE1);
-				} else {
-					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_TYPE1);
+				if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
+					uflag |= NATCAP_UDP_TARGET;
 				}
+				if ((NS_NATCAP_ENC & ns->n.status)) {
+					uflag |= NATCAP_UDP_ENC;
+				}
+				set_byte2(l4 + sizeof(struct udphdr) + 10, uflag);
+
 				if (default_protocol == 1) {
 					set_byte4(l4 + sizeof(struct udphdr) + 12, default_u_hash);
 					set_byte6(l4 + sizeof(struct udphdr) + 16, default_mac_addr);
@@ -1858,6 +1862,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				NF_OKFN(nskb);
 			} else {
 				int offlen;
+				unsigned short uflag = NATCAP_UDP_TYPE2;
 
 				if (skb_tailroom(skb) < off && pskb_expand_head(skb, 0, off, GFP_ATOMIC)) {
 					NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
@@ -1876,11 +1881,15 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				set_byte4(l4 + sizeof(struct udphdr), default_protocol == 1 ? __constant_htonl(0xfffd0099) : __constant_htonl(0xfffe0099));
 				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
-				if ((NS_NATCAP_ENC & ns->n.status)) {
-					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_ENC | NATCAP_UDP_TYPE2);
-				} else {
-					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_TYPE2);
+
+				if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
+					uflag |= NATCAP_UDP_TARGET;
 				}
+				if ((NS_NATCAP_ENC & ns->n.status)) {
+					uflag |= NATCAP_UDP_ENC;
+				}
+				set_byte2(l4 + sizeof(struct udphdr) + 10, uflag);
+
 				if (default_protocol == 1) {
 					set_byte4(l4 + sizeof(struct udphdr) + 12, default_u_hash);
 					set_byte6(l4 + sizeof(struct udphdr) + 16, default_mac_addr);
@@ -2492,6 +2501,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			if (skb->len > 1280) {
 				struct sk_buff *nskb;
 				int offset, add_len;
+				unsigned short uflag = NATCAP_UDP_TYPE1;
 
 				offset = iph->ihl * 4 + sizeof(struct udphdr) + off - (skb_headlen(skb) + skb_tailroom(skb));
 				add_len = offset < 0 ? 0 : offset;
@@ -2520,11 +2530,14 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 						if (!(IPS_NATCAP_ACK & master->status)) set_bit(IPS_NATCAP_ACK_BIT, &master->status);
 					}
 				}
-				if ((NS_NATCAP_ENC & master_ns->n.status)) {
-					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_ENC | NATCAP_UDP_TYPE1);
-				} else {
-					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_TYPE1);
+				if (iph->daddr == get_byte4(l4 + sizeof(struct udphdr) + 4)) {
+					uflag |= NATCAP_UDP_TARGET;
 				}
+				if ((NS_NATCAP_ENC & master_ns->n.status)) {
+					uflag |= NATCAP_UDP_ENC;
+				}
+				set_byte2(l4 + sizeof(struct udphdr) + 10, uflag);
+
 				if (default_protocol == 1) {
 					set_byte4(l4 + sizeof(struct udphdr) + 12, default_u_hash);
 					set_byte6(l4 + sizeof(struct udphdr) + 16, default_mac_addr);
@@ -2542,6 +2555,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				NF_OKFN(nskb);
 			} else {
 				int offlen;
+				unsigned short uflag = NATCAP_UDP_TYPE2;
 
 				if (skb_tailroom(skb) < off && pskb_expand_head(skb, 0, off, GFP_ATOMIC)) {
 					NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
@@ -2569,11 +2583,14 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 						if (!(IPS_NATCAP_ACK & master->status)) set_bit(IPS_NATCAP_ACK_BIT, &master->status);
 					}
 				}
-				if ((NS_NATCAP_ENC & master_ns->n.status)) {
-					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_ENC | NATCAP_UDP_TYPE2);
-				} else {
-					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_TYPE2);
+				if (iph->daddr == get_byte4(l4 + sizeof(struct udphdr) + 4)) {
+					uflag |= NATCAP_UDP_TARGET;
 				}
+				if ((NS_NATCAP_ENC & master_ns->n.status)) {
+					uflag |= NATCAP_UDP_ENC;
+				}
+				set_byte2(l4 + sizeof(struct udphdr) + 10, uflag);
+
 				if (default_protocol == 1) {
 					set_byte4(l4 + sizeof(struct udphdr) + 12, default_u_hash);
 					set_byte6(l4 + sizeof(struct udphdr) + 16, default_mac_addr);
