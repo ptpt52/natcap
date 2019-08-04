@@ -429,6 +429,14 @@ void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, stru
 	if (count == 0)
 		return;
 
+	for (i = 0; i < count; i++) {
+		if (nsi->server[m][i].ip == ip) {
+			hash = i;
+			found = 1;
+			goto found;
+		}
+	}
+
 	natcap_server_info_change(0);
 
 	hash = server_index % count;
@@ -474,6 +482,7 @@ void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, stru
 		}
 	}
 
+found:
 	if (nsi->last_dir[hash] == NATCAP_SERVER_IN || !found) {
 		nsi->last_dir[hash] = NATCAP_SERVER_OUT;
 		nsi->last_active[hash] = jiffies; /* ticks start */
@@ -863,7 +872,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			}
 		}
 
-		if (UDPH(l4)->dest == __constant_htons(53)) {
+		if (UDPH(l4)->dest == __constant_htons(53) && !is_natcap_server(iph->daddr)) {
 natcap_dual_out:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			if (!nf_ct_is_confirmed(ct)) {
@@ -923,7 +932,8 @@ natcap_dual_out:
 				IP_SET_test_dst_ip(state, in, out, skb, "udproxylist") > 0 ||
 				IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0 ||
 				UDPH(l4)->dest == __constant_htons(443) ||
-				UDPH(l4)->dest == __constant_htons(80)) {
+				UDPH(l4)->dest == __constant_htons(80) ||
+				is_natcap_server(iph->daddr)) {
 			natcap_server_info_select(skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
