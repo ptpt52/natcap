@@ -1193,6 +1193,10 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					off = 24;
 				}
 
+				if (NATCAP_UDP_GET_TARGET(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TARGET) {
+					server.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+				}
+
 				if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
 					//XXX overwrite DNS server
 					if (server.port == __constant_htons(53)) {
