@@ -896,7 +896,11 @@ natcap_dual_out:
 					return NF_ACCEPT;
 				}
 
-				natcap_server_info_select(skb, iph->daddr, UDPH(l4)->dest, &server);
+				if (is_natcap_server(dns_server)) {
+					natcap_server_info_select(skb, dns_server, UDPH(l4)->dest, &server);
+				} else {
+					natcap_server_info_select(skb, iph->daddr, UDPH(l4)->dest, &server);
+				}
 				if (server.ip == 0) {
 					NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -2512,6 +2516,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				} else {
 					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_server);
 					set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
+					if (iph->daddr == dns_server) {
+						if (!(IPS_NATCAP_ACK & master->status)) set_bit(IPS_NATCAP_ACK_BIT, &master->status);
+					}
 				}
 				if ((NS_NATCAP_ENC & master_ns->n.status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_ENC | NATCAP_UDP_TYPE1);
@@ -2558,6 +2565,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				} else {
 					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_server);
 					set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
+					if (iph->daddr == dns_server) {
+						if (!(IPS_NATCAP_ACK & master->status)) set_bit(IPS_NATCAP_ACK_BIT, &master->status);
+					}
 				}
 				if ((NS_NATCAP_ENC & master_ns->n.status)) {
 					set_byte2(l4 + sizeof(struct udphdr) + 10, NATCAP_UDP_ENC | NATCAP_UDP_TYPE2);
