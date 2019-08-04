@@ -203,6 +203,7 @@ static remote_t *connect_to_remote(EV_P_ struct addrinfo *res, struct sockaddr *
 #endif
 
 	int opt = 1;
+	setsockopt(sockfd, SOL_IP, SO_NATCAP_MARK, NULL, 0);
 	setsockopt(sockfd, SOL_TCP, TCP_NODELAY, &opt, sizeof(opt));
 #ifdef SO_NOSIGPIPE
 	setsockopt(sockfd, SOL_SOCKET, SO_NOSIGPIPE, &opt, sizeof(opt));

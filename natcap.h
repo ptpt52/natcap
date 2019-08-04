@@ -322,7 +322,11 @@ enum {
 
 #endif /* __KERNEL__ */
 
+#define SO_NATCAP_MARK 151
 #define SO_NATCAP_DST 153
+
+/* SOCK_NATCAP_MARK should not conflict with `enum sock_flags` in include/net/sock.h */
+#define SOCK_NATCAP_MARK 31
 
 static inline int short_test_bit(int nr, const unsigned short *addr)
 {

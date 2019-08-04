@@ -675,12 +675,10 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 	}
 
 	/* natcapd server local out bypass */
-	if (iph->protocol == IPPROTO_TCP &&
-			natcap_redirect_port != 0 &&
-			hooknum == NF_INET_LOCAL_OUT &&
-			IP_SET_test_dst_ip(state, in, out, skb, "knocklist") <= 0) {
+	if (iph->protocol == IPPROTO_TCP && hooknum == NF_INET_LOCAL_OUT && skb->sk && sock_flag(skb->sk, SOCK_NATCAP_MARK)) {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+		NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": natcapd server local out bypass\n", DEBUG_TCP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
 
