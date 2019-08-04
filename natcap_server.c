@@ -1836,6 +1836,20 @@ static struct nf_sockopt_ops so_natcap_dst = {
 	.owner = THIS_MODULE,
 };
 
+static int set_natcap_mark(struct sock *sk, int optval, void __user *user, unsigned int len)
+{
+	sock_set_flag(sk, SOCK_NATCAP_MARK);
+	return 0;
+}
+
+static struct nf_sockopt_ops so_natcap_mark = {
+	.pf = PF_INET,
+	.set_optmin = SO_NATCAP_MARK,
+	.set_optmax = SO_NATCAP_MARK + 1,
+	.set = set_natcap_mark,
+	.owner = THIS_MODULE,
+};
+
 int natcap_server_init(void)
 {
 	int ret = 0;
@@ -1848,13 +1862,21 @@ int natcap_server_init(void)
 		return ret;
 	}
 
+	ret = nf_register_sockopt(&so_natcap_mark);
+	if (ret < 0) {
+		NATCAP_ERROR("Unable to register netfilter socket option\n");
+		goto cleanup_sockopt;
+	}
+
 	ret = nf_register_hooks(server_hooks, ARRAY_SIZE(server_hooks));
 	if (ret != 0) {
 		NATCAP_ERROR("nf_register_hooks fail, ret=%d\n", ret);
-		goto cleanup_sockopt;
+		goto cleanup_sockopt1;
 	}
 	return ret;
 
+cleanup_sockopt1:
+	nf_unregister_sockopt(&so_natcap_mark);
 cleanup_sockopt:
 	nf_unregister_sockopt(&so_natcap_dst);
 	return ret;
@@ -1873,5 +1895,6 @@ void natcap_server_exit(void)
 		kfree(tmp);
 	}
 
+	nf_unregister_sockopt(&so_natcap_mark);
 	nf_unregister_sockopt(&so_natcap_dst);
 }
