@@ -407,7 +407,7 @@ static unsigned int natcap_forward_post_out_hook(void *priv,
 	} else if (iph->protocol == IPPROTO_TCP) {
 		if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
 			if (TCPH(l4)->syn) {
-				natcap_tcpmss_adjust(skb, TCPH(l4), -8);
+				natcap_tcpmss_adjust(skb, TCPH(l4), -8, natcap_max_pmtu - 40);
 				return NF_ACCEPT;
 			}
 			return NF_ACCEPT;

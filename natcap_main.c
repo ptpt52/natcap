@@ -103,6 +103,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    knock_flood=%u\n"
 				"#    natcap_redirect_port=%u\n"
 				"#    natcap_client_redirect_port=%u\n"
+				"#    natcap_max_pmtu=%u\n"
 				"#    natcap_touch_timeout=%u\n"
 				"#    flow_total_tx_bytes=%llu\n"
 				"#    flow_total_rx_bytes=%llu\n"
@@ -137,7 +138,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				tx_pkts_threshold,
 				rx_pkts_threshold,
 				http_confusion, encode_http_only, sproxy, ntohs(knock_port), knock_flood,
-				ntohs(natcap_redirect_port), ntohs(natcap_client_redirect_port), natcap_touch_timeout,
+				ntohs(natcap_redirect_port), ntohs(natcap_client_redirect_port), natcap_touch_timeout, natcap_max_pmtu,
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
 				htp_confusion_host,
@@ -513,6 +514,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		n = sscanf(data, "natcap_touch_timeout=%u", &d);
 		if (n == 1) {
 			natcap_touch_timeout = d;
+			goto done;
+		}
+	} else if (strncmp(data, "natcap_max_pmtu=", 16) == 0) {
+		unsigned int d;
+		n = sscanf(data, "natcap_max_pmtu=%u", &d);
+		if (n == 1 && d >= NATCAP_MIN_PMTU && d <= NATCAP_MAX_PMTU) {
+			natcap_max_pmtu = d;
 			goto done;
 		}
 	} else if (strncmp(data, "auth_http_redirect_url=", 23) == 0) {

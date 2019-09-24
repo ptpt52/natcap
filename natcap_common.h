@@ -80,6 +80,11 @@ static inline void natcap_tuple_to_ns(struct natcap_session *ns, const struct tu
 extern struct cone_nat_session *cone_nat_array;
 extern struct cone_snat_session *cone_snat_array;
 
+#define NATCAP_MIN_PMTU 68
+#define NATCAP_MAX_PMTU 9000
+
+extern unsigned int natcap_max_pmtu;
+
 extern unsigned int natcap_touch_timeout;
 
 extern unsigned short natcap_redirect_port;
@@ -356,7 +361,7 @@ static inline int natcap_tcpmss_set(struct sk_buff *skb, struct tcphdr *tcph, u1
 	return -1;
 }
 
-static inline int natcap_tcpmss_adjust(struct sk_buff *skb, struct tcphdr *tcph, int delta) {
+static inline int natcap_tcpmss_adjust(struct sk_buff *skb, struct tcphdr *tcph, int delta, unsigned int max_mss) {
 	u16 oldmss, newmss;
 	unsigned int i;
 	int tcp_hdrlen;
@@ -374,6 +379,9 @@ static inline int natcap_tcpmss_adjust(struct sk_buff *skb, struct tcphdr *tcph,
 			newmss = oldmss + delta;
 			if (oldmss <= newmss) {
 				return -1;
+			}
+			if (newmss > max_mss) {
+				newmss = max_mss;
 			}
 
 			opt[i+2] = (newmss & 0xff00) >> 8;

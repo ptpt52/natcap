@@ -1345,7 +1345,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 				}
 			}
 			if ((NS_NATCAP_TCPUDPENC & ns->n.status) && TCPH(l4)->syn) {
-				natcap_tcpmss_adjust(skb, TCPH(l4), -8);
+				natcap_tcpmss_adjust(skb, TCPH(l4), -8, natcap_max_pmtu - 40);
 				return NF_ACCEPT;
 			}
 			if ((TCPH(l4)->syn && !TCPH(l4)->ack) && TCPH(l4)->seq == TCPOPT_NATCAP && TCPH(l4)->ack_seq == TCPOPT_NATCAP) {
