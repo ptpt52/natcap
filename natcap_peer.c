@@ -2930,7 +2930,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			skb_rcsum_tcpudp(skb);
 
 			if ((NS_PEER_TCPUDPENC & ns->p.status)) {
-				natcap_tcpmss_adjust(skb, TCPH(l4), -8);
+				natcap_tcpmss_adjust(skb, TCPH(l4), -8, peer_max_pmtu - 40);
 			}
 		}
 		return NF_ACCEPT;
@@ -3000,7 +3000,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			skb_rcsum_tcpudp(skb);
 
 			if ((NS_PEER_TCPUDPENC & ns->p.status)) {
-				natcap_tcpmss_adjust(skb, TCPH(l4), -8);
+				natcap_tcpmss_adjust(skb, TCPH(l4), -8, peer_max_pmtu - 40);
 			}
 		}
 	} // end dir IP_CT_DIR_ORIGINAL
@@ -3504,7 +3504,7 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 	} else if (strncmp(data, "peer_max_pmtu=", 14) == 0) {
 		unsigned int d;
 		n = sscanf(data, "peer_max_pmtu=%u", &d);
-		if (n == 1) {
+		if (n == 1 && d >= NATCAP_MIN_PMTU && d <= NATCAP_MAX_PMTU) {
 			peer_max_pmtu = d;
 			goto done;
 		}

@@ -41,6 +41,8 @@
 #include "natcap_knock.h"
 #include "natcap_peer.h"
 
+unsigned int natcap_max_pmtu = 1440;
+
 unsigned int natcap_touch_timeout = 32;
 
 unsigned short natcap_redirect_port = 0;
