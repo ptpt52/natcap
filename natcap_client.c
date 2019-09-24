@@ -1425,7 +1425,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 		}
 
-		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4)) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4 + 8)) {
 			return NF_DROP;
 		}
 		iph = ip_hdr(skb);
