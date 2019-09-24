@@ -52,7 +52,10 @@ struct natcap_route {
 struct fakeuser_expect {
 #define FUE_STATE_INIT 0
 #define FUE_STATE_CONNECTED 1
-	unsigned short state;
+	unsigned char state;
+#define FUE_MODE_TCP 0
+#define FUE_MODE_UDP 1
+	unsigned char mode;
 	unsigned short mss;
 	unsigned int pmi;
 	unsigned int local_seq;
@@ -74,7 +77,10 @@ struct peer_tuple {
 	__be16 sport;
 	__be16 dport;
 	unsigned short mss;
-	unsigned short connected;
+	unsigned char connected;
+#define PT_MODE_TCP 0
+#define PT_MODE_UDP 1
+	unsigned char mode;
 	unsigned int last_active;
 };
 

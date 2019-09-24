@@ -184,6 +184,8 @@ struct natcap_session {
 #define NS_PEER_SSYN (1 << NS_PEER_SSYN_BIT)
 #define NS_PEER_KNOCK_BIT 12
 #define NS_PEER_KNOCK (1 << NS_PEER_KNOCK_BIT)
+#define NS_PEER_TCPUDPENC_BIT NS_NATCAP_TCPUDPENC_BIT
+#define NS_PEER_TCPUDPENC NS_NATCAP_TCPUDPENC
 	union {
 		struct {
 			unsigned short status;
