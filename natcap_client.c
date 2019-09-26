@@ -938,7 +938,7 @@ natcap_dual_out:
 				IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0 ||
 				UDPH(l4)->dest == __constant_htons(443) ||
 				UDPH(l4)->dest == __constant_htons(80) ||
-				is_natcap_server(iph->daddr)) {
+				(is_natcap_server(iph->daddr) && UDPH(l4)->dest == __constant_htons(53))) {
 			natcap_server_info_select(skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
