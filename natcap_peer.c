@@ -526,7 +526,7 @@ void natcap_user_timeout_touch(struct nf_conn *ct, unsigned long timeout)
 #endif
 }
 
-struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, int pmi)
+struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, int pmi)
 {
 	struct fakeuser_expect *fue;
 	struct nf_conn *user;
@@ -588,7 +588,12 @@ struct nf_conn *peer_fakeuser_expect_in(__be32 saddr, __be32 daddr, __be16 sport
 		skb_nfct_reset(uskb);
 		return NULL;
 	}
-	if (!nf_ct_is_confirmed(user) && !(IPS_NATCAP_PEER & user->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &user->status)) {
+	if (nf_ct_is_confirmed(user)) {
+		skb_nfct_reset(uskb);
+		NATCAP_WARN("fakeuser create for ct[%pI4:%u->%pI4:%u] failed, user nf_ct_is_confirmed\n", &saddr, ntohs(sport), &daddr, ntohs(dport));
+		return NULL;
+	}
+	if (!(IPS_NATCAP_PEER & user->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &user->status)) {
 		newoff = ALIGN(user->ext->len, __ALIGN_64BITS);
 		new = __krealloc(user->ext, newoff + sizeof(struct fakeuser_expect), GFP_ATOMIC);
 		if (!new) {
@@ -979,7 +984,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		__be16 dport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
 		__be32 saddr = (ops != NULL) ? oiph->daddr : oiph->saddr;
 		__be32 daddr = (ops != NULL) ? oiph->saddr : oiph->daddr;
-		user = peer_fakeuser_expect_in(saddr, daddr, sport, dport, pmi);
+		user = peer_fakeuser_expect_new(saddr, daddr, sport, dport, pmi);
 	}
 	if (user == NULL) {
 		spin_unlock_bh(&ps->lock);
