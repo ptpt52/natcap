@@ -138,7 +138,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				tx_pkts_threshold,
 				rx_pkts_threshold,
 				http_confusion, encode_http_only, sproxy, ntohs(knock_port), knock_flood,
-				ntohs(natcap_redirect_port), ntohs(natcap_client_redirect_port), natcap_touch_timeout, natcap_max_pmtu,
+				ntohs(natcap_redirect_port), ntohs(natcap_client_redirect_port), natcap_max_pmtu, natcap_touch_timeout,
 				flow_total_tx_bytes, flow_total_rx_bytes,
 				auth_http_redirect_url,
 				htp_confusion_host,
