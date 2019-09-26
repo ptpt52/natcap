@@ -1,4 +1,5 @@
 # natcap
+A code very difficult to read, an implementation of transparent proxy protocol to break through the firewall.
 
 TCP flow establishing connection
 --------------------------------
