@@ -561,6 +561,9 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == PEER_MODE) {
 			unsigned int a, b, c, d, e, f;
 			n = sscanf(data, "default_mac_addr=%02x:%02x:%02x:%02x:%02x:%02x\n", &a, &b, &c, &d, &e, &f);
+			if (n != 6) {
+				n = sscanf(data, "default_mac_addr=%02x-%02x-%02x-%02x-%02x-%02x\n", &a, &b, &c, &d, &e, &f);
+			}
 			if ( n == 6 &&
 					((a & 0xff) == a) &&
 					((b & 0xff) == b) &&
