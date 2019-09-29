@@ -3455,6 +3455,12 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 				&a, &b, &c, &d, &e,
 				&x0, &x1, &x2, &x3, &x4, &x5,
 				&f);
+		if (n != 12) {
+			n = sscanf(data, "KN=%u.%u.%u.%u:%u MAC=%02x-%02x-%02x-%02x-%02x-%02x LP=%u\n",
+					&a, &b, &c, &d, &e,
+					&x0, &x1, &x2, &x3, &x4, &x5,
+					&f);
+		}
 		if ( (n == 12 && e <= 0xffff) &&
 				((a & 0xff) == a) &&
 				((b & 0xff) == b) &&
