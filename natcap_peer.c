@@ -2342,6 +2342,7 @@ syn_out:
 						break;
 					case SUBTYPE_PEER_SSYN:
 						if (!(ue->status & PEER_SUBTYPE_SSYN)) short_set_bit(PEER_SUBTYPE_SSYN_BIT, &ue->status);
+						/* fall through */
 					case SUBTYPE_PEER_SYN:
 						if (pt->local_seq != 0 &&
 								pt->remote_seq != 0 &&

@@ -653,6 +653,13 @@ static inline unsigned int nf_conntrack_in_compat(struct net *net, u_int8_t pf, 
 #define need_conntrack() do {} while (0)
 #endif
 
+#ifndef for_ifa
+#define for_ifa(in_dev) { struct in_ifaddr *ifa; \
+	in_dev_for_each_ifa_rcu(ifa, in_dev)
+
+#define endfor_ifa(in_dev) }
+#endif
+
 static inline int inet_is_local(const struct net_device *dev, __be32 ip)
 {
 	struct in_device *in_dev;
@@ -676,5 +683,9 @@ static inline int inet_is_local(const struct net_device *dev, __be32 ip)
 
 	return 0;
 }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+#define skb_make_writable !skb_ensure_writable
+#endif
 
 #endif /* _NATCAP_COMMON_H_ */
