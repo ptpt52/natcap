@@ -51,6 +51,7 @@
 
 static unsigned int peer_mode = 0;
 static unsigned int peer_max_pmtu = 1440;
+static unsigned int peer_sni_ban = 0;
 
 struct peer_cache_node {
 	struct nf_conn *user;
@@ -1092,7 +1093,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 	tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
 	tcpopt->header.opcode = TCPOPT_PEER;
 	tcpopt->header.opsize = header_len;
-	tcpopt->header.encryption = 0;
+	tcpopt->header.encryption = !!peer_sni_ban; //use encryption to carry peer_sni_ban
 	tcpopt->header.subtype = SUBTYPE_PEER_SYN;
 	if (ops != NULL) {
 		set_byte2((void *)&tcpopt->peer.data.icmp_id, 0); //__constant_htons(0)
@@ -1769,17 +1770,24 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 		if (data && data_len > 15 && data[14] == '.') { //m-0b1a29384756.xxx.com
 			int n;
+			int sni_type = 0;
 			unsigned int a, b, c, d, e, f;
 			unsigned char client_mac[ETH_ALEN];
 			unsigned char x = data[data_len];
 			data[data_len] = 0;
 			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got tls sni: %s\n", DEBUG_TCP_ARG(iph,l4), data);
 			n = sscanf(data, "m-%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
-			data[data_len] = x;
 			if (n != 6) {
-				consume_skb(skb);
-				return NF_STOLEN;
+				n = sscanf(data, "x-%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
+				if (n != 6) {
+					data[data_len] = x;
+					consume_skb(skb);
+					return NF_STOLEN;
+				}
+				sni_type = 1;
 			}
+			data[data_len] = x;
+
 			client_mac[0] = a;
 			client_mac[1] = b;
 			client_mac[2] = c;
@@ -1844,6 +1852,10 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
 							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
 							);
+					nf_ct_put(user);
+					goto sni_out;
+				}
+				if (pt->sni_ban && sni_type == 0) {
 					nf_ct_put(user);
 					goto sni_out;
 				}
@@ -2166,6 +2178,9 @@ sni_out:
 				goto syn_out;
 			}
 
+			if (pt->sni_ban != tcpopt->header.encryption)
+				pt->sni_ban = tcpopt->header.encryption;
+
 			if (!pt->connected) {
 				if (pt->remote_seq == 0) {
 					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, new, sending pong(synack) SYNACK back\n", DEBUG_TCP_ARG(iph,l4));
@@ -2312,6 +2327,9 @@ syn_out:
 				spin_unlock_bh(&ue->lock);
 				goto ack_out;
 			}
+
+			if (pt->sni_ban != tcpopt->header.encryption)
+				pt->sni_ban = tcpopt->header.encryption;
 
 			if (!pt->connected) {
 				switch (tcpopt->header.subtype) {
@@ -3284,6 +3302,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 				"#    peer_sni_auth=%u\n"
 				"#    peer_mode=%u\n"
 				"#    peer_max_pmtu=%u\n"
+				"#    peer_sni_ban=%u\n"
 				"#\n"
 				"\n",
 				&peer_local_ip, ntohs(peer_local_port),
@@ -3294,7 +3313,8 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 				&peer_sni_ip, ntohs(peer_sni_port),
 				peer_sni_auth,
 				peer_mode,
-				peer_max_pmtu
+				peer_max_pmtu,
+				peer_sni_ban
 				);
 		natcap_peer_ctl_buffer[n] = 0;
 		return natcap_peer_ctl_buffer;
@@ -3518,6 +3538,13 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 		n = sscanf(data, "peer_max_pmtu=%u", &d);
 		if (n == 1 && d >= NATCAP_MIN_PMTU && d <= NATCAP_MAX_PMTU) {
 			peer_max_pmtu = d;
+			goto done;
+		}
+	} else if (strncmp(data, "peer_sni_ban=", 13) == 0) {
+		unsigned int d;
+		n = sscanf(data, "peer_sni_ban=%u", &d);
+		if (n == 1) {
+			peer_sni_ban = d;
 			goto done;
 		}
 	}
