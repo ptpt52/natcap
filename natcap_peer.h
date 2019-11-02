@@ -77,7 +77,8 @@ struct peer_tuple {
 	__be16 sport;
 	__be16 dport;
 	unsigned short mss;
-	unsigned char connected;
+	unsigned char connected:7,
+	              sni_ban:1;
 #define PT_MODE_TCP 0
 #define PT_MODE_UDP 1
 	unsigned char mode;
