@@ -524,7 +524,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			goto done;
 		}
 	} else if (strncmp(data, "auth_http_redirect_url=", 23) == 0) {
-		if (mode == SERVER_MODE) {
+		if (mode == SERVER_MODE || mode == MIXING_MODE) {
 			char *tmp = NULL;
 			tmp = kmalloc(2048, GFP_KERNEL);
 			if (!tmp)
