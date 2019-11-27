@@ -604,7 +604,7 @@ static inline void get_byte6(const unsigned char *p, unsigned char *pv)
 	memcpy(pv, p, 6);
 }
 
-#ifndef SKB_NFCT_PTRMASK
+#if !defined(SKB_NFCT_PTRMASK) && !defined(NFCT_PTRMASK)
 static inline struct nf_conntrack *skb_nfct(const struct sk_buff *skb)
 {
 	return (void *)skb->nfct;
@@ -614,12 +614,18 @@ static inline struct nf_conntrack *skb_nfct(const struct sk_buff *skb)
 static inline void skb_nfct_reset(struct sk_buff *skb)
 {
 	nf_conntrack_put(skb_nfct(skb));
-#ifndef SKB_NFCT_PTRMASK
+#if !defined(SKB_NFCT_PTRMASK) && !defined(NFCT_PTRMASK)
 	skb->nfct = NULL;
 #else
 	skb->_nfct = 0;
 #endif
 }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+#define nf_reset nf_reset_ct
+#else
+#define skb_frag_off(f) (f)->page_offset
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
 static inline int nf_register_hooks(struct nf_hook_ops *reg, unsigned int n)

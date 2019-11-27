@@ -188,7 +188,7 @@ void skb_data_hook(struct sk_buff *skb, int offset, int len, void (*update)(unsi
 			if (copy > len)
 				copy = len;
 			skb_frag_foreach_page(frag,
-					frag->page_offset + offset - start,
+					skb_frag_off(frag) + offset - start,
 					copy, p, p_off, p_len, copied) {
 				vaddr = kmap_atomic(p);
 				update(vaddr + p_off, p_len);
