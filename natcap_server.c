@@ -250,7 +250,7 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
 
-	nf_reset(nskb);
+	skb_nfct_reset(nskb);
 	dev_queue_xmit(nskb);
 }
 
@@ -326,7 +326,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	skb_rcsum_tcpudp(nskb);
 
 	/*FIXME make TCP state happy */
-	nf_reset(nskb);
+	skb_nfct_reset(nskb);
 	niph->saddr = ct->tuplehash[!dir].tuple.src.u3.ip;
 	niph->daddr = ct->tuplehash[!dir].tuple.dst.u3.ip;
 	ntcph->source = ct->tuplehash[!dir].tuple.src.u.tcp.port;
@@ -341,7 +341,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
 
-	nf_reset(nskb);
+	skb_nfct_reset(nskb);
 	dev_queue_xmit(nskb);
 }
 
@@ -417,7 +417,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	skb_rcsum_tcpudp(nskb);
 
 	/*FIXME make TCP state happy */
-	nf_reset(nskb);
+	skb_nfct_reset(nskb);
 	niph->saddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
 	niph->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip;
 	ntcph->source = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.tcp.port;
@@ -432,7 +432,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
 
-	nf_reset(nskb);
+	skb_nfct_reset(nskb);
 	dev_queue_xmit(nskb);
 }
 
@@ -515,7 +515,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	skb_rcsum_tcpudp(nskb);
 
 	/*FIXME make TCP state happy */
-	nf_reset(nskb);
+	skb_nfct_reset(nskb);
 	niph->saddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
 	niph->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip;
 	ntcph->source = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.tcp.port;
@@ -530,7 +530,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
 
-	nf_reset(nskb);
+	skb_nfct_reset(nskb);
 	dev_queue_xmit(nskb);
 }
 
@@ -726,7 +726,7 @@ static inline void natcap_confusion_tcp_reply_ack(const struct net_device *dev, 
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
 
-	nf_reset(nskb);
+	skb_nfct_reset(nskb);
 	dev_queue_xmit(nskb);
 }
 

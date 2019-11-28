@@ -1452,7 +1452,7 @@ static inline void sni_ack_pass_back(struct sk_buff *oskb, struct sk_buff *cache
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
-	nf_reset(nskb);
+	skb_nfct_reset(nskb);
 
 	nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, nskb);
 	nf_conntrack_confirm(nskb);
@@ -1485,7 +1485,7 @@ static inline void sni_ack_pass_back(struct sk_buff *oskb, struct sk_buff *cache
 
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
-	nf_reset(nskb);
+	skb_nfct_reset(nskb);
 	dev_queue_xmit(nskb);
 }
 
@@ -1539,7 +1539,7 @@ static inline void sni_cache_skb_pass_back(struct sk_buff *oskb, struct sk_buff 
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
-	nf_reset(nskb);
+	skb_nfct_reset(nskb);
 
 	nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, nskb);
 	nf_conntrack_confirm(nskb);
@@ -1572,7 +1572,7 @@ static inline void sni_cache_skb_pass_back(struct sk_buff *oskb, struct sk_buff 
 
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
-	nf_reset(nskb);
+	skb_nfct_reset(nskb);
 	dev_queue_xmit(nskb);
 }
 

@@ -613,11 +613,10 @@ static inline struct nf_conntrack *skb_nfct(const struct sk_buff *skb)
 
 static inline void skb_nfct_reset(struct sk_buff *skb)
 {
-	nf_conntrack_put(skb_nfct(skb));
-#if !defined(SKB_NFCT_PTRMASK) && !defined(NFCT_PTRMASK)
-	skb->nfct = NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+	nf_reset_ct(skb);
 #else
-	skb->_nfct = 0;
+	nf_reset(skb);
 #endif
 }
 
