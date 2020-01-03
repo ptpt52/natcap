@@ -1799,8 +1799,16 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				return NF_STOLEN;
 			} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(0x00000002)) {
 				//get PEER_ECHO_REPLY
+				int i;
+				for (i = 0; i < PEER_PUB_NUM; i++) {
+					if (peer_pub_ip[i] == iph->saddr) {
+						consume_skb(skb);
+						return NF_STOLEN;
+					}
+				}
 				peer_pub_ip[peer_pub_idx] = iph->saddr;
 				peer_pub_idx = (peer_pub_idx + 1) % PEER_PUB_NUM;
+
 				consume_skb(skb);
 				return NF_STOLEN;
 			}
