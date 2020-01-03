@@ -52,6 +52,7 @@
 
 struct natcap_TCPOPT_header {
 	u8 opcode;
+#define TCPOPT_PEER_V2 0x9b
 #define TCPOPT_PEER 0x9a
 #define TCPOPT_NATCAP 0x99
 	u8 opsize;

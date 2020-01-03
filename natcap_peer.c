@@ -66,6 +66,10 @@ static unsigned short peer_cache_next_to_use = 0;
 static struct peer_cache_node peer_cache[MAX_PEER_CACHE];
 #define PEER_CACHE_TIMEOUT 4
 
+#define PEER_PUB_NUM 256
+__be32 peer_pub_ip[PEER_PUB_NUM];
+unsigned int peer_pub_idx = 0;
+
 static inline void peer_cache_init(void)
 {
 	spin_lock_bh(&peer_cache_lock);
@@ -814,6 +818,126 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	return user;
 }
 
+static inline void natcap_peer_echo_request(const struct net_device *dev, struct sk_buff *oskb)
+{
+	struct sk_buff *nskb;
+	struct ethhdr *neth, *oeth;
+	struct iphdr *niph, *oiph;
+	int offset, add_len;
+	void *l4;
+
+	oeth = (struct ethhdr *)skb_mac_header(oskb);
+	oiph = ip_hdr(oskb);
+
+	offset = sizeof(struct iphdr) + sizeof(struct udphdr) + 8 - (skb_headlen(oskb) + skb_tailroom(oskb));
+	add_len = offset < 0 ? 0 : offset;
+	offset += skb_tailroom(oskb);
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
+	if (!nskb) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		return;
+	}
+	nskb->tail += offset;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct udphdr) + 8;
+
+	neth = eth_hdr(nskb);
+	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+	//neth->h_proto = htons(ETH_P_IP);
+
+	niph = ip_hdr(nskb);
+	memset(niph, 0, sizeof(struct iphdr));
+	niph->saddr = oiph->daddr;
+	niph->daddr = oiph->saddr;
+	niph->version = oiph->version;
+	niph->ihl = sizeof(struct iphdr) / 4;
+	niph->tos = 0;
+	niph->tot_len = htons(nskb->len);
+	niph->ttl = 255;
+	niph->protocol = IPPROTO_UDP;
+	niph->id = __constant_htons(jiffies);
+	niph->frag_off = 0x0;
+
+	l4 = (void *)niph + niph->ihl * 4;
+	UDPH(l4)->source = prandom_u32() % (65536 - 1024) + 1024;
+	UDPH(l4)->dest = prandom_u32() % (65536 - 1024) + 1024;
+	UDPH(l4)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
+	UDPH(l4)->check = CSUM_MANGLED_0;
+
+	l4 += sizeof(struct udphdr);
+	set_byte4(l4, __constant_htonl(0xfffa0099));
+	set_byte4(l4 + 4, __constant_htonl(0x00000001)); //PEER_ECHO_REQUEST
+
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(nskb);
+
+	skb_push(nskb, (char *)niph - (char *)neth);
+	nskb->dev = (struct net_device *)dev;
+
+	dev_queue_xmit(nskb);
+}
+
+static inline void natcap_peer_echo_reply(const struct net_device *dev, struct sk_buff *oskb)
+{
+	struct sk_buff *nskb;
+	struct ethhdr *neth, *oeth;
+	struct iphdr *niph, *oiph;
+	struct udphdr *oudph;
+	int offset, add_len;
+	void *l4;
+
+	oeth = (struct ethhdr *)skb_mac_header(oskb);
+	oiph = ip_hdr(oskb);
+	oudph = (struct udphdr *)((void *)oiph + oiph->ihl * 4);
+
+	offset = sizeof(struct iphdr) + sizeof(struct udphdr) + 8 - (skb_headlen(oskb) + skb_tailroom(oskb));
+	add_len = offset < 0 ? 0 : offset;
+	offset += skb_tailroom(oskb);
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
+	if (!nskb) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		return;
+	}
+	nskb->tail += offset;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct udphdr) + 8;
+
+	neth = eth_hdr(nskb);
+	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+	//neth->h_proto = htons(ETH_P_IP);
+
+	niph = ip_hdr(nskb);
+	memset(niph, 0, sizeof(struct iphdr));
+	niph->saddr = oiph->daddr;
+	niph->daddr = oiph->saddr;
+	niph->version = oiph->version;
+	niph->ihl = sizeof(struct iphdr) / 4;
+	niph->tos = 0;
+	niph->tot_len = htons(nskb->len);
+	niph->ttl = 255;
+	niph->protocol = IPPROTO_UDP;
+	niph->id = __constant_htons(jiffies);
+	niph->frag_off = 0x0;
+
+	l4 = (void *)niph + niph->ihl * 4;
+	UDPH(l4)->source = oudph->dest;
+	UDPH(l4)->dest = oudph->source;
+	UDPH(l4)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
+	UDPH(l4)->check = CSUM_MANGLED_0;
+
+	l4 += sizeof(struct udphdr);
+	set_byte4(l4, __constant_htonl(0xfffa0099));
+	set_byte4(l4 + 4, __constant_htonl(0x00000002)); //PEER_ECHO_REPLY
+
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(nskb);
+
+	skb_push(nskb, (char *)niph - (char *)neth);
+	nskb->dev = (struct net_device *)dev;
+
+	dev_queue_xmit(nskb);
+}
+
 static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk_buff *oskb, __be16 map_port, struct peer_tuple *pt, int ssyn)
 {
 	struct sk_buff *nskb;
@@ -823,7 +947,9 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 	struct natcap_TCPOPT *tcpopt;
 	int offset, add_len;
 	int header_len = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
+	int ext_header_len = 0;
 	u8 protocol = IPPROTO_TCP;
+	u8 opcode = TCPOPT_PEER;
 
 	if (pt == NULL)
 		return;
@@ -835,12 +961,16 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 	if (tcpopt->header.opsize > header_len) {
 		header_len = tcpopt->header.opsize;
 	}
+	if (pt->connected && tcpopt->header.opcode == TCPOPT_PEER_V2) {
+		opcode = TCPOPT_PEER_V2;
+		ext_header_len = sizeof(peer_pub_ip);
+	}
 	if (pt->mode == PT_MODE_UDP) {
 		protocol = IPPROTO_UDP;
 		header_len += 8;
 	}
 
-	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len + TCPOLEN_MSS - (skb_headlen(oskb) + skb_tailroom(oskb));
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len + TCPOLEN_MSS + ext_header_len - (skb_headlen(oskb) + skb_tailroom(oskb));
 	add_len = offset < 0 ? 0 : offset;
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
@@ -849,7 +979,14 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 		return;
 	}
 	nskb->tail += offset;
-	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len + TCPOLEN_MSS;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len + TCPOLEN_MSS + ext_header_len;
+	if (ext_header_len > 0) {
+		ext_header_len = header_len + TCPOLEN_MSS;
+		if (!skb_make_writable(nskb, nskb->len)) {
+			consume_skb(nskb);
+			return;
+		}
+	}
 
 	if (pt->local_seq == 0) {
 		pt->local_seq = ntohl(gen_seq_number());
@@ -900,7 +1037,7 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 
 	tcpopt = (struct natcap_TCPOPT *)((void *)ntcph + sizeof(struct tcphdr));
 	tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
-	tcpopt->header.opcode = TCPOPT_PEER;
+	tcpopt->header.opcode = opcode;
 	tcpopt->header.opsize = header_len;
 	tcpopt->header.encryption = 0;
 	tcpopt->header.subtype = pt->connected ? SUBTYPE_PEER_FSYNACK : SUBTYPE_PEER_SYNACK;
@@ -910,6 +1047,10 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 	set_byte1((void *)tcpopt + header_len + 0, TCPOPT_MSS);
 	set_byte1((void *)tcpopt + header_len + 1, TCPOLEN_MSS);
 	set_byte2((void *)tcpopt + header_len + 2, ntohs(TCP_MSS_DEFAULT)); //just set a fake mss
+
+	if (ext_header_len > 0) {
+		memcpy((char *)ip_hdr(nskb) + sizeof(struct iphdr) + sizeof(struct tcphdr) + ext_header_len, peer_pub_ip, sizeof(peer_pub_ip));
+	}
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
@@ -1091,7 +1232,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 
 	tcpopt = (struct natcap_TCPOPT *)((void *)ntcph + sizeof(struct tcphdr));
 	tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
-	tcpopt->header.opcode = TCPOPT_PEER;
+	tcpopt->header.opcode = TCPOPT_PEER_V2;
 	tcpopt->header.opsize = header_len;
 	tcpopt->header.encryption = !!peer_sni_ban; //use encryption to carry peer_sni_ban
 	tcpopt->header.subtype = SUBTYPE_PEER_SYN;
@@ -1634,6 +1775,39 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if (iph->protocol == IPPROTO_UDP) {
+		if (skb->len < iph->ihl * 4 + sizeof(struct udphdr) + 8) {
+			return NF_ACCEPT;
+		}
+		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct udphdr) + 8)) {
+			return NF_ACCEPT;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+
+		if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xfffa0099)) {
+			if (!inet_is_local(in, iph->daddr)) {
+				int ret = nf_conntrack_in_compat(net, pf, hooknum, skb);
+				if (ret != NF_ACCEPT) {
+					return ret;
+				}
+				return NF_ACCEPT;
+			}
+			if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(0x00000001)) {
+				//get PEER_ECHO_REQUEST
+				natcap_peer_echo_reply(in, skb);
+				consume_skb(skb);
+				return NF_STOLEN;
+			} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(0x00000002)) {
+				//get PEER_ECHO_REPLY
+				peer_pub_ip[peer_pub_idx] = iph->saddr;
+				peer_pub_idx = (peer_pub_idx + 1) % PEER_PUB_NUM;
+				consume_skb(skb);
+				return NF_STOLEN;
+			}
+
+			return NF_ACCEPT;
+		}
+
 		if (skb->len < iph->ihl * 4 + sizeof(struct tcphdr) + 8) {
 			return NF_ACCEPT;
 		}
@@ -2079,6 +2253,19 @@ sni_out:
 				}
 				nf_ct_put(user);
 
+				if (tcpopt->header.opcode == TCPOPT_PEER_V2) {
+					if (skb->len >= iph->ihl * 4 + TCPH(l4)->doff * 4 + sizeof(peer_pub_ip)) {
+						if (!pskb_may_pull(skb, skb->len)) {
+							return NF_DROP;
+						}
+						iph = ip_hdr(skb);
+						l4 = (void *)iph + iph->ihl * 4;
+						tcpopt = natcap_peer_decode_header(TCPH(l4));
+
+						memcpy(peer_pub_ip, l4 + TCPH(l4)->doff * 4, sizeof(peer_pub_ip));
+					}
+				}
+
 				//pass up to icmp
 				do {
 					int offset, add_len;
@@ -2206,6 +2393,10 @@ sni_out:
 				pt->mode = PT_MODE_UDP;
 			}
 			natcap_peer_pong_send(in, skb, ue->map_port, pt, (ue->status & PEER_SUBTYPE_SSYN));
+			if (tcpopt->header.opcode == TCPOPT_PEER_V2 && uintdiff(jiffies, ue->last_active_peer) >= 120 * HZ) {
+				ue->last_active_peer = jiffies;
+				natcap_peer_echo_request(in, skb);
+			}
 			spin_unlock_bh(&ue->lock);
 		}
 
@@ -2406,6 +2597,10 @@ syn_out:
 				goto ack_out;
 			}
 			natcap_peer_pong_send(in, skb, ue->map_port, pt, (ue->status & PEER_SUBTYPE_SSYN));
+			if (tcpopt->header.opcode == TCPOPT_PEER_V2 && uintdiff(jiffies, ue->last_active_peer) >= 120 * HZ) {
+				ue->last_active_peer = jiffies;
+				natcap_peer_echo_request(in, skb);
+			}
 			spin_unlock_bh(&ue->lock);
 		}
 
@@ -2934,7 +3129,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			tcpopt = (void *)l4 + sizeof(struct tcphdr);
 			tcpopt = (struct natcap_TCPOPT *)((void *)l4 + sizeof(struct tcphdr));
 			tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
-			tcpopt->header.opcode = TCPOPT_PEER;
+			tcpopt->header.opcode = TCPOPT_PEER_V2;
 			tcpopt->header.opsize = add_len;
 			tcpopt->header.encryption = 0;
 			tcpopt->header.subtype = SUBTYPE_PEER_FACK;
@@ -2997,7 +3192,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 
 			tcpopt = (struct natcap_TCPOPT *)((void *)l4 + sizeof(struct tcphdr));
 			tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
-			tcpopt->header.opcode = TCPOPT_PEER;
+			tcpopt->header.opcode = TCPOPT_PEER_V2;
 			tcpopt->header.opsize = add_len;
 			tcpopt->header.encryption = 0;
 			tcpopt->header.subtype = SUBTYPE_PEER_FSYN;
@@ -3367,6 +3562,21 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			natcap_peer_ctl_buffer[n] = 0;
 			return natcap_peer_ctl_buffer;
 		}
+
+		while ((*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP < PEER_PUB_NUM) {
+			if (peer_pub_ip[(*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP] == 0) {
+				(*pos)++;
+				continue;
+			}
+			natcap_peer_ctl_buffer[0] = 0;
+			n = snprintf(natcap_peer_ctl_buffer,
+					PAGE_SIZE - 1,
+					"peer=%pI4\n",
+					&peer_pub_ip[(*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP]
+					);
+			natcap_peer_ctl_buffer[n] = 0;
+			return natcap_peer_ctl_buffer;
+		}
 	}
 
 	return NULL;
@@ -3649,6 +3859,8 @@ int natcap_peer_init(void)
 	if (mode != CLIENT_MODE) {
 		default_mac_addr_init();
 	}
+
+	memset(peer_pub_ip, 0, sizeof(peer_pub_ip));
 
 	peer_cache_init();
 	memset(peer_server, 0, sizeof(peer_server));

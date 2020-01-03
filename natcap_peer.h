@@ -88,6 +88,7 @@ struct peer_tuple {
 struct user_expect {
 	spinlock_t lock;
 	unsigned int last_active;
+	unsigned int last_active_peer;
 	__be32 local_ip;
 	__be32 ip;
 	__be16 map_port;
@@ -109,7 +110,7 @@ static inline struct natcap_TCPOPT *natcap_peer_decode_header(struct tcphdr *tcp
 	if (
 			!(
 				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int)) &&
-				 opt->header.opcode == TCPOPT_PEER &&
+				 (opt->header.opcode == TCPOPT_PEER || opt->header.opcode == TCPOPT_PEER_V2) &&
 				 (opt->header.subtype == SUBTYPE_PEER_SYN ||
 				  opt->header.subtype == SUBTYPE_PEER_SSYN ||
 				  opt->header.subtype == SUBTYPE_PEER_SYNACK ||
@@ -117,11 +118,11 @@ static inline struct natcap_TCPOPT *natcap_peer_decode_header(struct tcphdr *tcp
 				  opt->header.subtype == SUBTYPE_PEER_FSYNACK) &&
 				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int))) ||
 				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)) &&
-				 opt->header.opcode == TCPOPT_PEER &&
+				 (opt->header.opcode == TCPOPT_PEER || opt->header.opcode == TCPOPT_PEER_V2) &&
 				 (opt->header.subtype == SUBTYPE_PEER_FSYN || opt->header.subtype == SUBTYPE_PEER_FACK) &&
 				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int))) ||
 				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int)) &&
-				 opt->header.opcode == TCPOPT_PEER &&
+				 (opt->header.opcode == TCPOPT_PEER || opt->header.opcode == TCPOPT_PEER_V2) &&
 				 opt->header.subtype == SUBTYPE_PEER_XSYN &&
 				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int)))
 			 )
