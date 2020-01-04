@@ -33,6 +33,14 @@
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_core.h>
 
+#define NATCAP_F_MAGIC 0xffff0099
+#define NATCAP_E_MAGIC 0xfffe0099
+#define NATCAP_E_MAGIC_A 0xfffe009a /* UDP CFM A */
+#define NATCAP_D_MAGIC 0xfffd0099
+#define NATCAP_C_MAGIC 0xfffc0099
+#define NATCAP_B_MAGIC 0xfffb0099 /* KTUN_P_MAGIC */
+#define NATCAP_A_MAGIC 0xfffa0099
+
 #pragma pack(push)
 #pragma pack(1)
 
