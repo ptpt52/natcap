@@ -865,7 +865,7 @@ static inline void natcap_peer_echo_request(const struct net_device *dev, struct
 	UDPH(l4)->check = CSUM_MANGLED_0;
 
 	l4 += sizeof(struct udphdr);
-	set_byte4(l4, __constant_htonl(0xfffa0099));
+	set_byte4(l4, __constant_htonl(NATCAP_A_MAGIC));
 	set_byte4(l4 + 4, __constant_htonl(0x00000001)); //PEER_ECHO_REQUEST
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -926,7 +926,7 @@ static inline void natcap_peer_echo_reply(const struct net_device *dev, struct s
 	UDPH(l4)->check = CSUM_MANGLED_0;
 
 	l4 += sizeof(struct udphdr);
-	set_byte4(l4, __constant_htonl(0xfffa0099));
+	set_byte4(l4, __constant_htonl(NATCAP_A_MAGIC));
 	set_byte4(l4 + 4, __constant_htonl(0x00000002)); //PEER_ECHO_REPLY
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -1019,7 +1019,7 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 		BUG_ON(offlen < 0);
 		memmove((void *)UDPH(ntcph) + 4 + 8, (void *)UDPH(ntcph) + 4, offlen);
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(0xfffc0099));
+		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_C_MAGIC));
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		ntcph = (struct tcphdr *)((char *)ntcph + 8);
 		header_len -= 8;
@@ -1216,7 +1216,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 	ntcph->dest = user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all;
 	if (protocol == IPPROTO_UDP) {
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(0xfffc0099));
+		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_C_MAGIC));
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		ntcph = (struct tcphdr *)((char *)ntcph + 8);
 		header_len -= 8;
@@ -1619,7 +1619,7 @@ static inline void sni_ack_pass_back(struct sk_buff *oskb, struct sk_buff *cache
 		nskb->len += 8;
 		nskb->tail += 8;
 		niph->protocol = IPPROTO_UDP;
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(0xfffc0099));
+		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_C_MAGIC));
 	}
 
 	skb_rcsum_tcpudp(nskb);
@@ -1706,7 +1706,7 @@ static inline void sni_cache_skb_pass_back(struct sk_buff *oskb, struct sk_buff 
 		nskb->len += 8;
 		nskb->tail += 8;
 		niph->protocol = IPPROTO_UDP;
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(0xfffc0099));
+		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_C_MAGIC));
 	}
 
 	skb_rcsum_tcpudp(nskb);
@@ -1784,7 +1784,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xfffa0099)) {
+		if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_A_MAGIC)) {
 			if (!inet_is_local(in, iph->daddr)) {
 				int ret = nf_conntrack_in_compat(net, pf, hooknum, skb);
 				if (ret != NF_ACCEPT) {
@@ -1825,7 +1825,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(0xfffc0099)) {
+		if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_C_MAGIC)) {
 			int offlen;
 			if (!inet_is_local(in, iph->daddr)) {
 				int ret = nf_conntrack_in_compat(net, pf, hooknum, skb);
@@ -3380,7 +3380,7 @@ static unsigned int natcap_peer_push_out_hook(void *priv,
 		UDPH(l4)->check = CSUM_MANGLED_0;
 		skb->len += 8;
 		skb->tail += 8;
-		set_byte4((void *)UDPH(l4) + 8, __constant_htonl(0xfffc0099));
+		set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_C_MAGIC));
 		iph->protocol = IPPROTO_UDP;
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 		skb_rcsum_tcpudp(skb);
