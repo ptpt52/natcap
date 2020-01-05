@@ -41,6 +41,14 @@
 #define NATCAP_B_MAGIC 0xfffb0099 /* KTUN_P_MAGIC */
 #define NATCAP_A_MAGIC 0xfffa0099
 
+#define NATCAP_9_MAGIC 0xfff90099 /* server <-forward-> client ctrl cmd */
+#define NATCAP_9_MAGIC_TYPE1 0x00000001 /* server --> client carry tuple back */
+#define NATCAP_9_MAGIC_TYPE2 0x00000002 /* client --> forward carry tuple request */
+#define NATCAP_9_MAGIC_TYPE3 0x00000003 /* forward --> server carry tuple request */
+#define NATCAP_9_MAGIC_TYPE4 0x00000004 /* server --> forward reply */
+
+#define NATCAP_8_MAGIC 0xfff80099 /* client --> forward --> server pass data */
+
 #pragma pack(push)
 #pragma pack(1)
 
@@ -224,6 +232,14 @@ struct natcap_session {
 			int tcp_seq_offset;
 		} p;
 	};
+
+#define MAX_PEER_NUM 16
+	unsigned short peer_mark;
+	unsigned char peer_idx;
+	unsigned char peer_cnt:5,
+				  peer_req_cnt:3;
+	__be32 peer_ip[MAX_PEER_NUM];
+	__be16 peer_port[MAX_PEER_NUM];
 };
 
 #define NATCAP_MAGIC 0x43415099

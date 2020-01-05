@@ -1392,17 +1392,16 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
 	if (skb_is_gso(skb)) {
 		NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": skb_is_gso\n", DEBUG_UDP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
 
-	if (skb->len < iph->ihl * 4 + sizeof(struct tcphdr) + 8) {
+	if (skb->len < iph->ihl * 4 + sizeof(struct udphdr) + 8) {
 		return NF_ACCEPT;
 	}
-	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 8)) {
+	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct udphdr) + 8)) {
 		return NF_ACCEPT;
 	}
 	iph = ip_hdr(skb);
@@ -1410,6 +1409,15 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_F_MAGIC)) {
 		int offlen;
+
+		if (skb->len < iph->ihl * 4 + sizeof(struct tcphdr) + 8) {
+			return NF_ACCEPT;
+		}
+		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 8)) {
+			return NF_ACCEPT;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
 
 		if (!inet_is_local(in, iph->daddr)) {
 			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
@@ -1471,6 +1479,358 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
 			short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->n.status);
 		}
+
+		/* safe to set IPS_NATCAP_DUAL here, this master only run in this hook */
+		if (!(IPS_NATCAP_DUAL & master->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &master->status)) {
+			nf_conntrack_get(&ct->ct_general);
+			master->master = ct;
+		}
+		return NF_ACCEPT;
+
+	} else if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_9_MAGIC)) {
+		if (skb->len < iph->ihl * 4 + sizeof(struct udphdr) + 8 + 16 + 4) {
+			return NF_ACCEPT;
+		}
+		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct udphdr) + 8 + 16 + 4)) {
+			return NF_ACCEPT;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+
+		if (!inet_is_local(in, iph->daddr)) {
+			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
+			return NF_ACCEPT;
+		}
+
+		if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(NATCAP_9_MAGIC_TYPE1)) {
+			__be32 sip, dip;
+
+			ct = master->master;
+			if (!ct) {
+				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": master->master == NULL\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_DROP;
+			}
+			ns = natcap_session_get(ct);
+			if (ns == NULL) {
+				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": natcap_session_get failed\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_DROP;
+			}
+
+			sip = get_byte4((void *)UDPH(l4) + 8 + 4 + 4);
+			dip = iph->saddr;
+
+			set_byte4((void *)UDPH(l4) + 8 + 4, __constant_htonl(NATCAP_9_MAGIC_TYPE2));
+			set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2, UDPH(l4)->source);
+			set_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2 + 2, iph->saddr);
+			iph->saddr = iph->daddr;
+			UDPH(l4)->source = UDPH(l4)->dest;
+			UDPH(l4)->check = CSUM_MANGLED_0;
+
+			if (ns->peer_cnt < MAX_PEER_NUM) {
+				int i, j, idx;
+				__be32 ip;
+				int off = prandom_u32();
+				for (i = 0; i < PEER_PUB_NUM; i++) {
+					idx = (i + off) % PEER_PUB_NUM;
+					ip = peer_pub_ip[idx];
+					if (ip != 0 && ip != sip && ip != dip) {
+						for (j = 0; j < MAX_PEER_NUM; j++)
+							if (ns->peer_ip[j] == ip)
+								break;
+
+						if (j == MAX_PEER_NUM)
+							for (j = 0; j < MAX_PEER_NUM; j++)
+								if (ns->peer_ip[j] == 0) {
+									ns->peer_ip[j] = ip;
+									ns->peer_port[j] = prandom_u32() % (65536 - 1024) + 1024;
+									ns->peer_cnt++;
+									break;
+								}
+					}
+				}
+			}
+
+			if (ns->peer_cnt > 0) {
+				int i, ret;
+				struct ethhdr *neth;
+				struct sk_buff *nskb;
+				for (i = 0; i < MAX_PEER_NUM; i++) {
+					if (ns->peer_ip[i] == 0)
+						break;
+					if (short_test_bit(i, &ns->peer_mark))
+						continue;
+
+					nskb = skb_copy(skb, GFP_ATOMIC);
+					if (nskb == NULL)
+						break;
+
+					neth = eth_hdr(nskb);
+					if (neth->h_proto == htons(ETH_P_IP)) {
+						unsigned char mac[ETH_ALEN];
+						memcpy(mac, neth->h_source, ETH_ALEN);
+						memcpy(neth->h_source, neth->h_dest, ETH_ALEN);
+						memcpy(neth->h_dest, mac, ETH_ALEN);
+					}
+
+					iph = ip_hdr(nskb);
+					l4 = (void *)iph + iph->ihl * 4;
+					iph->id = __constant_htons(jiffies);
+					iph->daddr = ns->peer_ip[i];
+					UDPH(l4)->dest = ns->peer_port[i];
+
+					nskb->ip_summed = CHECKSUM_UNNECESSARY;
+					skb_rcsum_tcpudp(nskb);
+
+					if (in)
+						net = dev_net(in);
+					else if (out)
+						net = dev_net(out);
+					ret = nf_conntrack_in_compat(net, pf, NF_INET_PRE_ROUTING, nskb);
+					if (ret != NF_ACCEPT) {
+						consume_skb(nskb);
+						break;
+					}
+					ret = nf_conntrack_confirm(nskb);
+					if (ret != NF_ACCEPT) {
+						consume_skb(nskb);
+						break;
+					}
+					ct = nf_ct_get(skb, &ctinfo);
+					if (!ct) {
+						consume_skb(nskb);
+						break;
+					}
+					if (!(IPS_NATCAP_DUAL & ct->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &ct->status)) {
+						nf_conntrack_get(&master->master->ct_general);
+						ct->master = master->master;
+					}
+
+					skb_push(nskb, (char *)iph - (char *)neth);
+					dev_queue_xmit(nskb);
+				}
+			}
+
+			consume_skb(skb);
+			return NF_STOLEN;
+		} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(NATCAP_9_MAGIC_TYPE2)) {
+			__be32 dip;
+			__be16 dport;
+
+			dip = get_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2 + 2);
+			dport = prandom_u32() % (65536 - 1024) + 1024;
+
+			set_byte4((void *)UDPH(l4) + 8 + 4, __constant_htonl(NATCAP_9_MAGIC_TYPE3));
+			UDPH(l4)->check = CSUM_MANGLED_0;
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+			skb_rcsum_tcpudp(skb);
+
+			if (!nf_ct_is_confirmed(master)) {
+				if (natcap_dnat_setup(master, dip, dport) != NF_ACCEPT) {
+					return NF_DROP;
+				}
+			}
+
+			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+			set_bit(IPS_NATCAP_BYPASS_BIT, &master->status);
+			set_bit(IPS_NATCAP_ACK_BIT, &master->status);
+			if (!(IPS_NATFLOW_FF_STOP & master->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &master->status);
+
+			return NF_ACCEPT;
+		} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(NATCAP_9_MAGIC_TYPE3)) {
+			int i, ret;
+			unsigned int tmp;
+			struct ethhdr *eth;
+			if (!nf_ct_is_confirmed(master) && !master->master) {
+				struct nf_conntrack_tuple tuple;
+				struct nf_conntrack_tuple_hash *h;
+
+				memset(&tuple, 0, sizeof(tuple));
+				tuple.src.u3.ip = get_byte4((void *)UDPH(l4) + 8 + 4 + 4);
+				tuple.src.u.udp.port = get_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4);
+				tuple.dst.u3.ip = get_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4);
+				tuple.dst.u.udp.port = get_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2);
+				tuple.src.l3num = PF_INET;
+				tuple.dst.protonum = get_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+				h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
+				h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
+				if (h) {
+					struct nf_conn *ct = nf_ct_tuplehash_to_ctrack(h);
+					if (!(IPS_NATCAP & ct->status)) {
+						nf_ct_put(ct);
+						return NF_DROP;
+					}
+					ns = natcap_session_get(ct);
+					if (ns == NULL) {
+						NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": natcap_session_get failed\n", DEBUG_UDP_ARG(iph,l4));
+						nf_ct_put(ct);
+						return NF_DROP;
+					}
+
+					if (ns->peer_mark != 0xffff) {
+						for (i = 0; i < MAX_PEER_NUM; i++) {
+							if (ns->peer_ip[i] == 0) {
+								ns->peer_ip[i] = iph->saddr;
+								ns->peer_port[i] = UDPH(l4)->source;
+								short_set_bit(i, &ns->peer_mark);
+								ns->peer_cnt++;
+								break;
+							}
+						}
+					}
+
+					if (!(IPS_NATCAP_DUAL & master->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &master->status)) {
+						nf_conntrack_get(&ct->ct_general);
+						master->master = ct;
+					}
+					nf_ct_put(ct);
+				}
+			}
+
+			/* XXX I just confirm it first  */
+			ret = nf_conntrack_confirm(skb);
+			if (ret != NF_ACCEPT) {
+				return ret;
+			}
+			skb_nfct_reset(skb);
+
+			eth = eth_hdr(skb);
+			if (eth->h_proto == htons(ETH_P_IP)) {
+				unsigned char mac[ETH_ALEN];
+				memcpy(mac, eth->h_source, ETH_ALEN);
+				memcpy(eth->h_source, eth->h_dest, ETH_ALEN);
+				memcpy(eth->h_dest, mac, ETH_ALEN);
+			}
+
+			iph->id = __constant_htons(jiffies);
+
+			tmp = iph->daddr;
+			iph->daddr = iph->saddr;
+			iph->saddr = tmp;
+
+			set_byte4((void *)UDPH(l4) + 8 + 4, __constant_htonl(NATCAP_9_MAGIC_TYPE4));
+			tmp = UDPH(l4)->dest;
+			UDPH(l4)->dest = UDPH(l4)->source;
+			UDPH(l4)->source = tmp;
+			UDPH(l4)->check = CSUM_MANGLED_0;
+
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+			skb_rcsum_tcpudp(skb);
+
+			if (in)
+				net = dev_net(in);
+			else if (out)
+				net = dev_net(out);
+			ret = nf_conntrack_in_compat(net, pf, NF_INET_PRE_ROUTING, skb);
+			if (ret != NF_ACCEPT) {
+				return ret;
+			}
+			ret = nf_conntrack_confirm(skb);
+			if (ret != NF_ACCEPT) {
+				return ret;
+			}
+
+			skb_push(skb, (char *)iph - (char *)eth);
+			dev_queue_xmit(skb);
+
+			return NF_STOLEN;
+		} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(NATCAP_9_MAGIC_TYPE4)) {
+			int i, ret;
+			if (!master->master) {
+				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+				return NF_ACCEPT;
+			}
+			ct = master->master;
+			ns = natcap_session_get(ct);
+			if (ns == NULL) {
+				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": natcap_session_get failed\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_DROP;
+			}
+
+			for (i = 0; i < MAX_PEER_NUM; i++) {
+				if (ns->peer_ip[i] == iph->saddr && ns->peer_port[i] == UDPH(l4)->source) {
+					if (!short_test_bit(i, &ns->peer_mark)) short_set_bit(i, &ns->peer_mark);
+					break;
+				}
+			}
+
+			/* XXX I just confirm it first  */
+			ret = nf_conntrack_confirm(skb);
+			if (ret != NF_ACCEPT) {
+				return ret;
+			}
+
+			consume_skb(skb);
+			return NF_STOLEN;
+		}
+		return NF_ACCEPT;
+
+	} else if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_8_MAGIC)) {
+		int i, offlen;
+		int dir = CTINFO2DIR(ctinfo);
+		if (!inet_is_local(in, iph->daddr)) {
+			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
+			return NF_ACCEPT;
+		}
+
+		if (!master->master) {
+			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+			return NF_ACCEPT;
+		}
+		ct = master->master;
+		ns = natcap_session_get(ct);
+		if (ns == NULL) {
+			NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": natcap_session_get failed\n", DEBUG_UDP_ARG(iph,l4));
+			return NF_DROP;
+		}
+
+		for (i = 0; i < MAX_PEER_NUM; i++) {
+			if (ns->peer_ip[i] == iph->saddr && ns->peer_port[i] == UDPH(l4)->source) {
+				short_set_bit(i, &ns->peer_mark);
+				break;
+			}
+		}
+
+		/* XXX I just confirm it first  */
+		ret = nf_conntrack_confirm(skb);
+		if (ret != NF_ACCEPT) {
+			return ret;
+		}
+		skb_nfct_reset(skb);
+
+		iph->saddr = ct->tuplehash[dir].tuple.src.u3.ip;
+		iph->daddr = ct->tuplehash[dir].tuple.dst.u3.ip;
+		UDPH(l4)->source = ct->tuplehash[dir].tuple.src.u.tcp.port;
+		UDPH(l4)->dest = ct->tuplehash[dir].tuple.dst.u.tcp.port;
+		UDPH(l4)->check = CSUM_MANGLED_0;
+
+		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4 - 8;
+		BUG_ON(offlen < 0);
+		memmove((void *)UDPH(l4) + 4, (void *)UDPH(l4) + 4 + 8, offlen);
+		iph->tot_len = htons(ntohs(iph->tot_len) - 8);
+		skb->len -= 8;
+		skb->tail -= 8;
+		iph->protocol = IPPROTO_TCP;
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
+		skb_rcsum_tcpudp(skb);
+
+		if (in)
+			net = dev_net(in);
+		else if (out)
+			net = dev_net(out);
+		ret = nf_conntrack_in_compat(net, pf, hooknum, skb);
+		if (ret != NF_ACCEPT) {
+			return ret;
+		}
+		ct = nf_ct_get(skb, &ctinfo);
+		if (!ct) {
+			return NF_DROP;
+		}
+		natcap_clone_timeout(master, ct);
+
+		return NF_ACCEPT;
 	} else {
 		set_bit(IPS_NATCAP_PRE_BIT, &master->status);
 		return NF_ACCEPT;
