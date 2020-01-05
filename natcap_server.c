@@ -1443,6 +1443,25 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			skb->tail += 8;
 			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_F_MAGIC));
 			iph->protocol = IPPROTO_UDP;
+			if (ns->peer_mark) {
+				int i, idx;
+				for (i = 0; i < MAX_PEER_NUM + 1; i++) {
+					idx = (i + ns->peer_idx) % (MAX_PEER_NUM + 1);
+					if (idx >= MAX_PEER_NUM) {
+						ns->peer_idx = (idx + 1) % (MAX_PEER_NUM + 1);
+						break;
+					}
+					if (ns->peer_tuple3[idx].dip != 0 && short_test_bit(idx, &ns->peer_mark)) {
+						iph->daddr = ns->peer_tuple3[idx].dip;
+						UDPH(l4)->dest = ns->peer_tuple3[idx].dport;
+						UDPH(l4)->source = ns->peer_tuple3[idx].sport;
+						set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_8_MAGIC));
+						ns->peer_idx = (idx + 1) % (MAX_PEER_NUM + 1);
+						break;
+					}
+				}
+			}
+
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
 
@@ -2065,10 +2084,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		skb_nfct_reset(skb);
 
 		iph->saddr = ct->tuplehash[dir].tuple.src.u3.ip;
-		iph->daddr = ct->tuplehash[dir].tuple.dst.u3.ip;
+		//iph->daddr = ct->tuplehash[dir].tuple.dst.u3.ip;
 		UDPH(l4)->source = ct->tuplehash[dir].tuple.src.u.tcp.port;
 		UDPH(l4)->dest = ct->tuplehash[dir].tuple.dst.u.tcp.port;
-		UDPH(l4)->check = CSUM_MANGLED_0;
+		//UDPH(l4)->check = CSUM_MANGLED_0;
 
 		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4 - 8;
 		BUG_ON(offlen < 0);
