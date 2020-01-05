@@ -2147,6 +2147,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			skb->tail += 8;
 			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_F_MAGIC));
 			iph->protocol = IPPROTO_UDP;
+			skb->next = NULL;
+
 			if (ns->peer_mark) {
 				int i, idx;
 				for (i = 0; i < MAX_PEER_NUM + 1; i++) {
@@ -2168,8 +2170,6 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
-
-			skb->next = NULL;
 
 			NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 
@@ -2851,9 +2851,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			skb->tail += 8;
 			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_F_MAGIC));
 			iph->protocol = IPPROTO_UDP;
+			skb->next = NULL;
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
-			skb->next = NULL;
 
 			NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 

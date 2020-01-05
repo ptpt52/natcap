@@ -1421,6 +1421,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 		do {
 			int offlen;
+			struct sk_buff *pcskb = NULL;
 			struct sk_buff *nskb = skb->next;
 
 			if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
@@ -1443,6 +1444,32 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			skb->tail += 8;
 			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_F_MAGIC));
 			iph->protocol = IPPROTO_UDP;
+			skb->next = NULL;
+
+			if (nskb == NULL && ns->peer_mark != 0xffff && ns->peer_req_cnt < 3) {
+				pcskb = natcap_peer_ctrl_alloc(skb);
+				if (pcskb) {
+					iph = ip_hdr(pcskb);
+					l4 = (void *)iph + iph->ihl * 4;
+
+					set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_9_MAGIC));
+					set_byte4((void *)UDPH(l4) + 8 + 4, __constant_htonl(NATCAP_9_MAGIC_TYPE1));
+					set_byte4((void *)UDPH(l4) + 8 + 4 + 4, iph->daddr); //sip
+					set_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4, iph->saddr); //dip
+					set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4, UDPH(l4)->dest); //sport
+					set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2, UDPH(l4)->source); //dport
+					set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2, iph->protocol); //protocol
+
+					pcskb->ip_summed = CHECKSUM_UNNECESSARY;
+					skb_rcsum_tcpudp(pcskb);
+					ns->peer_req_cnt++;
+
+					/* restore iph/l4 */
+					iph = ip_hdr(skb);
+					l4 = (void *)iph + iph->ihl * 4;
+				}
+			}
+
 			if (ns->peer_mark) {
 				int i, idx;
 				for (i = 0; i < MAX_PEER_NUM + 1; i++) {
@@ -1465,31 +1492,11 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
 
-			skb->next = NULL;
-			if (nskb == NULL && ns->peer_mark != 0xffff && ns->peer_req_cnt < 3) {
-				struct sk_buff *pcskb = natcap_peer_ctrl_alloc(skb);
+			NATCAP_DEBUG("(SPO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 
-				//send skb first
-				NF_OKFN(skb);
-
-				if (pcskb) {
-					iph = ip_hdr(pcskb);
-					l4 = (void *)iph + iph->ihl * 4;
-
-					set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_9_MAGIC));
-					set_byte4((void *)UDPH(l4) + 8 + 4, __constant_htonl(NATCAP_9_MAGIC_TYPE1));
-					set_byte4((void *)UDPH(l4) + 8 + 4 + 4, iph->daddr); //sip
-					set_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4, iph->saddr); //dip
-					set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4, UDPH(l4)->dest); //sport
-					set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2, UDPH(l4)->source); //dport
-					set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2, iph->protocol); //protocol
-
-					skb_rcsum_tcpudp(pcskb);
-					NF_OKFN(pcskb);
-				}
-				ns->peer_req_cnt++;
-			} else {
-				NF_OKFN(skb);
+			NF_OKFN(skb);
+			if (pcskb) {
+				NF_OKFN(pcskb);
 			}
 
 			skb = nskb;
