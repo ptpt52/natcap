@@ -66,7 +66,6 @@ static unsigned short peer_cache_next_to_use = 0;
 static struct peer_cache_node peer_cache[MAX_PEER_CACHE];
 #define PEER_CACHE_TIMEOUT 4
 
-#define PEER_PUB_NUM 256
 __be32 peer_pub_ip[PEER_PUB_NUM];
 unsigned int peer_pub_idx = 0;
 

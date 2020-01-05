@@ -693,4 +693,33 @@ static inline int inet_is_local(const struct net_device *dev, __be32 ip)
 #define skb_make_writable !skb_ensure_writable
 #endif
 
+static inline struct sk_buff *natcap_peer_ctrl_alloc(struct sk_buff *oskb)
+{
+	struct sk_buff *nskb;
+	struct iphdr *niph;
+	int offset, add_len;
+	void *l4;
+
+	offset = sizeof(struct iphdr) + sizeof(struct udphdr) + 8 + 16 + 4 - (skb_headlen(oskb) + skb_tailroom(oskb));
+	add_len = offset < 0 ? 0 : offset;
+	offset += skb_tailroom(oskb);
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
+	if (!nskb) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		return NULL;
+	}
+	nskb->tail += offset;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct udphdr) + 8 + 16 + 4;
+
+	niph = ip_hdr(nskb);
+	niph->tot_len = htons(nskb->len);
+	niph->id = __constant_htons(jiffies);
+
+	l4 = (void *)niph + niph->ihl * 4;
+	UDPH(l4)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
+	UDPH(l4)->check = CSUM_MANGLED_0;
+
+	return nskb;
+}
+
 #endif /* _NATCAP_COMMON_H_ */

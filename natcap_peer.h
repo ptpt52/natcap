@@ -140,4 +140,7 @@ void natcap_peer_exit(void);
 #define PEER_XSYN_MASK_ADDR __constant_htonl(0xffffffff)
 extern __be32 peer_xsyn_enumerate_addr(void);
 
+#define PEER_PUB_NUM 256
+extern __be32 peer_pub_ip[PEER_PUB_NUM];
+
 #endif /* _NATCAP_PEER_H_ */
