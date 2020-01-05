@@ -170,6 +170,12 @@ struct tuple {
 	__be32 ip;
 };
 
+struct tuple3 {
+	__be32 dip;
+	__be16 dport;
+	__be16 sport;
+};
+
 struct natcap_session {
 	unsigned int magic;
 #define NS_NATCAP_CONFUSION_BIT 0
@@ -238,8 +244,7 @@ struct natcap_session {
 	unsigned char peer_idx;
 	unsigned char peer_cnt:5,
 				  peer_req_cnt:3;
-	__be32 peer_ip[MAX_PEER_NUM];
-	__be16 peer_port[MAX_PEER_NUM];
+	struct tuple3 peer_tuple3[MAX_PEER_NUM];
 };
 
 #define NATCAP_MAGIC 0x43415099
