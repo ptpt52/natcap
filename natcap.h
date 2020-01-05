@@ -177,7 +177,6 @@ struct tuple3 {
 };
 
 struct natcap_session {
-	unsigned int magic;
 #define NS_NATCAP_CONFUSION_BIT 0
 #define NS_NATCAP_CONFUSION (1 << NS_NATCAP_CONFUSION_BIT)
 #define NS_NATCAP_DST_BIT 1
@@ -248,6 +247,12 @@ struct natcap_session {
 };
 
 #define NATCAP_MAGIC 0x43415099
+/*XXX don't change */
+struct nat_key_t {
+	unsigned int magic;
+	unsigned int ext_magic;
+	unsigned int len;
+};
 
 /*XXX refer to drivers/nos/src/nos.h */
 #define IPS_NATFLOW_FF_STOP_BIT 18

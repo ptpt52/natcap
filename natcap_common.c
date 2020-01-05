@@ -30,7 +30,8 @@
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_conntrack_extend.h>
-#include "net/netfilter/nf_conntrack_seqadj.h"
+#include <net/netfilter/nf_conntrack_seqadj.h>
+#include <net/netfilter/nf_conntrack_synproxy.h>
 #include <net/netfilter/nf_nat.h>
 #include <linux/netfilter/ipset/ip_set.h>
 #include <linux/netfilter/x_tables.h>
@@ -1112,13 +1113,15 @@ u32 cone_snat_hash(__be32 ip, __be16 port, __be32 wan_ip)
 	return jhash_3words(ip, port, wan_ip, cone_snat_hashrnd);
 }
 
+#define NATFLOW_MAX_OFF 512u
 #define __ALIGN_64BITS 8
+#define NATFLOW_FACTOR (__ALIGN_64BITS * 2)
 
 int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 {
+	struct nat_key_t *nk;
 	struct natcap_session *ns;
 	struct nf_ct_ext *old, *new;
-	struct nf_conn_nat *nat = NULL;
 	unsigned int newoff, newlen = 0;
 	size_t alloc_size;
 	size_t var_alloc_len = ALIGN(sizeof(struct natcap_session), __ALIGN_64BITS);
@@ -1130,79 +1133,71 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 	if (nf_ct_is_confirmed(ct)) {
 		return -1;
 	}
-	if (ct->ext && !!ct->ext->offset[NF_CT_EXT_NAT]) {
+	nf_ct_ext_add(ct, NF_CT_EXT_NAT, gfp);
+	nfct_seqadj_ext_add(ct);
+	nfct_synproxy_ext_add(ct);
+
+	if (!ct->ext) {
 		return -1;
 	}
-	if (!nfct_seqadj(ct) && !nfct_seqadj_ext_add(ct)) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "seqadj_ext add failed\n", DEBUG_ARG_PREFIX);
+
+	old = ct->ext;
+	newoff = ALIGN(old->len, NATFLOW_FACTOR);
+
+	if (newoff > NATFLOW_MAX_OFF) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "realloc ct->ext->len > %u not supported!\n", DEBUG_ARG_PREFIX, NATFLOW_MAX_OFF);
 		return -1;
 	}
 
-	if (ct->ext) {
-		old = ct->ext;
-		newoff = ALIGN(old->len, __ALIGN_64BITS);
-		newlen = ALIGN(newoff + var_alloc_len, __ALIGN_64BITS);
-		alloc_size = ALIGN(newlen + sizeof(struct nf_conn_nat), __ALIGN_64BITS);
+	newlen = ALIGN(newoff + ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS) + var_alloc_len, NATFLOW_FACTOR);
+	alloc_size = ALIGN(newlen, __ALIGN_64BITS);
 
-		if (newlen > 255u) {
-			NATCAP_ERROR(DEBUG_FMT_PREFIX "ct->ext no space left (old->len=%u, newlen=%u)\n", DEBUG_ARG_PREFIX, old->len, newlen);
-			return -1;
-		}
+	new = __krealloc(old, alloc_size, gfp);
+	if (!new) {
+		return -1;
+	}
+	memset((void *)new + newoff, 0, newlen - newoff);
 
-		new = __krealloc(old, alloc_size, gfp);
-		if (!new) {
-			return -1;
-		}
-		new->len = newlen;
-		memset((void *)new + newoff, 0, newlen - newoff);
-
-		if (new != old) {
-			kfree_rcu(old, rcu);
-			rcu_assign_pointer(ct->ext, new);
-		}
-
-		nat = nf_ct_ext_add(ct, NF_CT_EXT_NAT, gfp);
-		if (nat == NULL) {
-			return -1;
-		}
-	} else {
-		newoff = ALIGN(sizeof(struct nf_ct_ext), __ALIGN_64BITS);
-		newlen = ALIGN(newoff + var_alloc_len, __ALIGN_64BITS);
-		alloc_size = ALIGN(newlen + sizeof(struct nf_conn_nat), __ALIGN_64BITS);
-
-		new = kzalloc(alloc_size, gfp);
-		if (!new) {
-			return -1;
-		}
-		new->len = newlen;
+	if (new != old) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
+		kfree_rcu(old, rcu);
 		ct->ext = new;
-
-		nat = nf_ct_ext_add(ct, NF_CT_EXT_NAT, gfp);
-		if (nat == NULL) {
-			return -1;
-		}
+#else
+		kfree_rcu(old, rcu);
+		rcu_assign_pointer(ct->ext, new);
+#endif
 	}
 
-	ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), __ALIGN_64BITS));
-	ns->magic = NATCAP_MAGIC;
+	new->len = newoff / NATFLOW_FACTOR;
+	nk = (struct nat_key_t *)((void *)new + newoff);
+	nk->magic = NATCAP_MAGIC;
+	nk->ext_magic = (unsigned long)ct & 0xffffffff;
+	nk->len = newlen;
+
+	ns = (struct natcap_session *)((void *)nk + ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS));
 
 	return 0;
 }
 
 struct natcap_session *natcap_session_get(struct nf_conn *ct)
 {
-	struct nf_conn_nat *nat;
+	struct nat_key_t *nk;
 	struct natcap_session *ns = NULL;
 
-	nat = nfct_nat(ct);
-	if (!nat) {
+	if (!ct->ext) {
 		return NULL;
 	}
 
-	ns = (struct natcap_session *)((void *)nat - ALIGN(sizeof(struct natcap_session), __ALIGN_64BITS));
-	if (ns->magic != NATCAP_MAGIC)
+	if (ct->ext->len * NATFLOW_FACTOR > NATFLOW_MAX_OFF) {
 		return NULL;
+	}
 
+	nk = (struct nat_key_t *)((void *)ct->ext + ct->ext->len * NATFLOW_FACTOR);
+	if (nk->magic != NATCAP_MAGIC || nk->ext_magic != (((unsigned long)ct) & 0xffffffff)) {
+		return NULL;
+	}
+
+	ns = (struct natcap_session *)((void *)nk + ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS));
 	return ns;
 }
 
