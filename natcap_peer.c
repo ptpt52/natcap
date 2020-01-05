@@ -3136,7 +3136,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			tcpopt = (void *)l4 + sizeof(struct tcphdr);
 			tcpopt = (struct natcap_TCPOPT *)((void *)l4 + sizeof(struct tcphdr));
 			tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
-			tcpopt->header.opcode = TCPOPT_PEER_V2;
+			tcpopt->header.opcode = TCPOPT_PEER;
 			tcpopt->header.opsize = add_len;
 			tcpopt->header.encryption = 0;
 			tcpopt->header.subtype = SUBTYPE_PEER_FACK;
@@ -3199,7 +3199,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 
 			tcpopt = (struct natcap_TCPOPT *)((void *)l4 + sizeof(struct tcphdr));
 			tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
-			tcpopt->header.opcode = TCPOPT_PEER_V2;
+			tcpopt->header.opcode = TCPOPT_PEER;
 			tcpopt->header.opsize = add_len;
 			tcpopt->header.encryption = 0;
 			tcpopt->header.subtype = SUBTYPE_PEER_FSYN;
