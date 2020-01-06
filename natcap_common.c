@@ -1111,6 +1111,15 @@ u32 cone_snat_hash(__be32 ip, __be16 port, __be32 wan_ip)
 	return jhash_3words(ip, port, wan_ip, cone_snat_hashrnd);
 }
 
+#if defined(nf_ct_ext_add)
+void *compat_nf_ct_ext_add(struct nf_conn *ct, int id, gfp_t gfp)
+{
+	return __nf_ct_ext_add_length(ct, id, 0, gfp);
+}
+#else
+#define compat_nf_ct_ext_add nf_ct_ext_add
+#endif
+
 #define NATFLOW_MAX_OFF 512u
 #define __ALIGN_64BITS 8
 #define NATFLOW_FACTOR (__ALIGN_64BITS * 2)
@@ -1134,7 +1143,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 	}
 
 	for (i = 0; i < ARRAY_SIZE((((struct nf_ct_ext *)0)->offset)); i++) {
-		if (!nf_ct_ext_exist(ct, i)) nf_ct_ext_add(ct, i, gfp);
+		if (!nf_ct_ext_exist(ct, i)) compat_nf_ct_ext_add(ct, i, gfp);
 	}
 
 	if (!ct->ext) {
