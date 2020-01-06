@@ -1753,11 +1753,13 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				return NF_DROP;
 			}
 
-			for (i = 0; i < MAX_PEER_NUM; i++) {
-				if (ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
-					if (!short_test_bit(i, &ns->peer_mark)) short_set_bit(i, &ns->peer_mark);
-					break;
-				}
+			i = get_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2);
+			i = ntohs(i) % MAX_PEER_NUM;
+			if (!short_test_bit(i, &ns->peer_mark) &&
+					ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
+				short_set_bit(i, &ns->peer_mark);
+				NATCAP_INFO("(CPI)" DEBUG_UDP_FMT ": CFM:%u@%u-%pI4:%u peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4),
+						i, ntohs(ns->peer_tuple3[i].sport), &ns->peer_tuple3[i].dip, ntohs(ns->peer_tuple3[i].dport), ns->peer_mark);
 			}
 
 			/* XXX I just confirm it first  */
@@ -1790,12 +1792,13 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			return NF_DROP;
 		}
 
-		for (i = 0; i < MAX_PEER_NUM; i++) {
-			if (ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
-				if (!short_test_bit(i, &ns->peer_mark)) short_set_bit(i, &ns->peer_mark);
-				break;
-			}
-		}
+		if (ns->peer_mark != 0xff)
+			for (i = 0; i < MAX_PEER_NUM; i++)
+				if (!short_test_bit(i, &ns->peer_mark) &&
+						ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
+					short_set_bit(i, &ns->peer_mark);
+					break;
+				}
 
 		/* XXX I just confirm it first  */
 		ret = nf_conntrack_confirm(skb);
