@@ -30,8 +30,6 @@
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_conntrack_extend.h>
-#include <net/netfilter/nf_conntrack_seqadj.h>
-#include <net/netfilter/nf_conntrack_synproxy.h>
 #include <net/netfilter/nf_nat.h>
 #include <linux/netfilter/ipset/ip_set.h>
 #include <linux/netfilter/x_tables.h>
@@ -1119,6 +1117,7 @@ u32 cone_snat_hash(__be32 ip, __be16 port, __be32 wan_ip)
 
 int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 {
+	int i;
 	struct nat_key_t *nk;
 	struct natcap_session *ns;
 	struct nf_ct_ext *old, *new;
@@ -1133,9 +1132,10 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 	if (nf_ct_is_confirmed(ct)) {
 		return -1;
 	}
-	nf_ct_ext_add(ct, NF_CT_EXT_NAT, gfp);
-	nfct_seqadj_ext_add(ct);
-	nfct_synproxy_ext_add(ct);
+
+	for (i = 0; i < ARRAY_SIZE((((struct nf_ct_ext *)0)->offset)); i++) {
+		if (!nf_ct_ext_exist(ct, i)) nf_ct_ext_add(ct, i, gfp);
+	}
 
 	if (!ct->ext) {
 		return -1;
