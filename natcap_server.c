@@ -300,7 +300,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	niph->tos = 0;
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
-	niph->protocol = protocol;
+	niph->protocol = oiph->protocol;
 	niph->id = __constant_htons(0xdead);
 	niph->frag_off = 0x0;
 
@@ -399,7 +399,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	niph->tos = 0;
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
-	niph->protocol = protocol;
+	niph->protocol = oiph->protocol;
 	niph->id = __constant_htons(0xdead);
 	niph->frag_off = 0x0;
 
@@ -499,7 +499,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	niph->tos = 0;
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
-	niph->protocol = protocol;
+	niph->protocol = oiph->protocol;
 	niph->id = __constant_htons(0xdead);
 	niph->frag_off = 0x0;
 
