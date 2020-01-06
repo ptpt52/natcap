@@ -1525,7 +1525,6 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			set_byte4((void *)UDPH(l4) + 8 + 4, __constant_htonl(NATCAP_9_MAGIC_TYPE2));
 			set_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2 + 2, iph->saddr);
 			iph->saddr = iph->daddr;
-			UDPH(l4)->source = UDPH(l4)->dest;
 			UDPH(l4)->check = CSUM_MANGLED_0;
 
 			if (ns->peer_cnt < MAX_PEER_NUM) {
@@ -1600,7 +1599,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 						consume_skb(nskb);
 						break;
 					}
-					ct = nf_ct_get(skb, &ctinfo);
+					ct = nf_ct_get(nskb, &ctinfo);
 					if (!ct) {
 						consume_skb(nskb);
 						break;
