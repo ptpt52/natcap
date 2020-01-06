@@ -2151,7 +2151,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			iph->protocol = IPPROTO_UDP;
 			skb->next = NULL;
 
-			if (ns->peer_mark) {
+			if (ns->peer_ver == 1 && ns->peer_mark) {
 				int i, idx;
 				for (i = 0; i < MAX_PEER_NUM + 1; i++) {
 					idx = (i + ns->peer_idx) % (MAX_PEER_NUM + 1);
