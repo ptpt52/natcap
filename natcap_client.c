@@ -63,6 +63,7 @@ static inline int server_index_natcap_get(unsigned int *at)
 	return (val >> idx);
 }
 
+unsigned int peer_multipath = 1;
 unsigned int dns_proxy_drop = 0;
 unsigned int server_persist_lock = 0;
 unsigned int server_persist_timeout = 0;
@@ -1934,6 +1935,9 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 	ns = natcap_session_get(ct);
 	if (NULL == ns) {
 		return NF_ACCEPT;
+	}
+	if (peer_multipath == 1) {
+		if (ns->peer_ver != 1) ns->peer_ver = 1;
 	}
 
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {

@@ -43,6 +43,7 @@ extern const char *macfilter_acl_str[NATCAP_ACL_MAX];
 extern unsigned int ipfilter;
 extern const char *ipfilter_acl_str[NATCAP_ACL_MAX];
 
+extern unsigned int peer_multipath;
 extern unsigned int dns_proxy_drop;
 extern unsigned int server_persist_lock;
 extern unsigned int server_persist_timeout;
