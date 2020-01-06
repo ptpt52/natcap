@@ -1995,6 +1995,13 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						ns->peer_tuple3[i].dport = UDPH(l4)->source;
 						ns->peer_tuple3[i].sport = UDPH(l4)->dest;
 						ns->peer_cnt++;
+						NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4),
+								i,
+								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+								&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+								&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+								ns->peer_mark);
 					}
 
 					if (!(IPS_NATCAP_DUAL & master->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &master->status)) {
@@ -2056,6 +2063,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			int i, ret;
 			if (!master->master) {
 				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+				NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer pass forward: type4\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_ACCEPT;
 			}
 			ct = master->master;
@@ -2070,8 +2078,13 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			if (!short_test_bit(i, &ns->peer_mark) &&
 					ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
 				short_set_bit(i, &ns->peer_mark);
-				NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": CFM:%u@%u-%pI4:%u peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4),
-						i, ntohs(ns->peer_tuple3[i].sport), &ns->peer_tuple3[i].dip, ntohs(ns->peer_tuple3[i].dport), ns->peer_mark);
+				NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4),
+						i,
+						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+						ns->peer_mark);
 			}
 
 			/* XXX I just confirm it first  */
@@ -2095,6 +2108,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 		if (!master->master) {
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+			NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer pass forward: data\n", DEBUG_UDP_ARG(iph,l4));
 			return NF_ACCEPT;
 		}
 		ct = master->master;
@@ -2111,6 +2125,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					short_set_bit(i, &ns->peer_mark);
 					break;
 				}
+
+		NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer pass up: before\n", DEBUG_UDP_ARG(iph,l4));
 
 		/* XXX I just confirm it first  */
 		ret = nf_conntrack_confirm(skb);
@@ -2148,6 +2164,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			return NF_DROP;
 		}
 		natcap_clone_timeout(master, ct);
+
+		NATCAP_DEBUG("(SPI)" DEBUG_TCP_FMT ": peer pass up: after\n", DEBUG_TCP_ARG(iph,l4));
 
 		return NF_ACCEPT;
 	} else {
