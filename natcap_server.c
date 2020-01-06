@@ -1482,7 +1482,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 					set_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4, iph->saddr); //dip
 					set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4, UDPH(l4)->dest); //sport
 					set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2, UDPH(l4)->source); //dport
-					set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2, iph->protocol); //protocol
+					set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2, IPPROTO_TCP); //protocol
 
 					pcskb->ip_summed = CHECKSUM_UNNECESSARY;
 					skb_rcsum_tcpudp(pcskb);
