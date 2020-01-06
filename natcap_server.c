@@ -341,7 +341,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		nskb->len += 8;
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_F_MAGIC));
+		set_byte4((void *)UDPH(ntcph) + 8, ns->peer_ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
 		niph->protocol = IPPROTO_UDP;
 		skb_rcsum_tcpudp(nskb);
 	}
@@ -440,7 +440,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		nskb->len += 8;
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_F_MAGIC));
+		set_byte4((void *)UDPH(ntcph) + 8, ns->peer_ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
 		niph->protocol = IPPROTO_UDP;
 		skb_rcsum_tcpudp(nskb);
 	}
@@ -546,7 +546,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		nskb->len += 8;
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_F_MAGIC));
+		set_byte4((void *)UDPH(ntcph) + 8, ns->peer_ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
 		niph->protocol = IPPROTO_UDP;
 		skb_rcsum_tcpudp(nskb);
 	}
@@ -1466,7 +1466,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			UDPH(l4)->check = CSUM_MANGLED_0;
 			skb->len += 8;
 			skb->tail += 8;
-			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_F_MAGIC));
+			set_byte4((void *)UDPH(l4) + 8, ns->peer_ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
 			iph->protocol = IPPROTO_UDP;
 			skb->next = NULL;
 
@@ -1720,8 +1720,9 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
 
-	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_F_MAGIC)) {
+	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_F_MAGIC) || get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_7_MAGIC)) {
 		int offlen;
+		int peer_ver = (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_7_MAGIC));
 
 		if (skb->len < iph->ihl * 4 + sizeof(struct tcphdr) + 8) {
 			return NF_ACCEPT;
@@ -1792,6 +1793,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
 			short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->n.status);
 		}
+		if (ns->peer_ver != peer_ver) ns->peer_ver = peer_ver;
 
 		/* safe to set IPS_NATCAP_DUAL here, this master only run in this hook */
 		if (!(IPS_NATCAP_DUAL & master->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &master->status)) {
