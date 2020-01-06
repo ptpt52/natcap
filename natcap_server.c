@@ -1470,7 +1470,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			iph->protocol = IPPROTO_UDP;
 			skb->next = NULL;
 
-			if (nskb == NULL && ns->peer_mark != 0xffff && ns->peer_req_cnt < 3) {
+			if (nskb == NULL && ns->peer_ver == 1 && ns->peer_mark != 0xffff && ns->peer_req_cnt < 3) {
 				pcskb = natcap_peer_ctrl_alloc(skb);
 				if (pcskb) {
 					iph = ip_hdr(pcskb);
@@ -1494,7 +1494,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 				}
 			}
 
-			if (ns->peer_mark) {
+			if (ns->peer_ver == 1 && ns->peer_mark) {
 				int i, idx;
 				for (i = 0; i < MAX_PEER_NUM + 1; i++) {
 					idx = (i + ns->peer_idx) % (MAX_PEER_NUM + 1);
