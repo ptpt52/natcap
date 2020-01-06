@@ -284,7 +284,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 		return;
 	}
 	nskb->tail += offset;
-	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
 
 	neth = eth_hdr(nskb);
 	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
@@ -307,12 +307,6 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
 	ntcph->source = ct->tuplehash[dir].tuple.dst.u.tcp.port;
 	ntcph->dest = ct->tuplehash[dir].tuple.src.u.tcp.port;
-	if (protocol == IPPROTO_UDP) {
-		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_F_MAGIC));
-		UDPH(ntcph)->check = CSUM_MANGLED_0;
-		ntcph = (struct tcphdr *)((char *)ntcph + 8);
-	}
 	ntcph->seq = otcph->ack_seq;
 	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4 + 1);
 	tcp_flag_word(ntcph) = TCP_FLAG_RST;
@@ -337,6 +331,20 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	niph->daddr = ct->tuplehash[dir].tuple.src.u3.ip;
 	ntcph->source = ct->tuplehash[dir].tuple.dst.u.tcp.port;
 	ntcph->dest = ct->tuplehash[dir].tuple.src.u.tcp.port;
+
+	if (protocol == IPPROTO_UDP) {
+		int offlen;
+		offlen = skb_tail_pointer(nskb) - (unsigned char *)UDPH(ntcph) - 4;
+		BUG_ON(offlen < 0);
+		memmove((void *)UDPH(ntcph) + 4 + 8, (void *)UDPH(ntcph) + 4, offlen);
+		niph->tot_len = htons(ntohs(niph->tot_len) + 8);
+		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
+		UDPH(ntcph)->check = CSUM_MANGLED_0;
+		nskb->len += 8;
+		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_F_MAGIC));
+		niph->protocol = IPPROTO_UDP;
+		skb_rcsum_tcpudp(nskb);
+	}
 
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
@@ -375,7 +383,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 		return;
 	}
 	nskb->tail += offset;
-	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
 
 	neth = eth_hdr(nskb);
 	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
@@ -398,12 +406,6 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
 	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
 	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
-	if (protocol == IPPROTO_UDP) {
-		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_F_MAGIC));
-		UDPH(ntcph)->check = CSUM_MANGLED_0;
-		ntcph = (struct tcphdr *)((char *)ntcph + 8);
-	}
 	ntcph->seq = otcph->ack_seq;
 	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4 + 1);
 	tcp_flag_word(ntcph) = TCP_FLAG_RST | TCP_FLAG_ACK;
@@ -428,6 +430,20 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
 	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
+
+	if (protocol == IPPROTO_UDP) {
+		int offlen;
+		offlen = skb_tail_pointer(nskb) - (unsigned char *)UDPH(ntcph) - 4;
+		BUG_ON(offlen < 0);
+		memmove((void *)UDPH(ntcph) + 4 + 8, (void *)UDPH(ntcph) + 4, offlen);
+		niph->tot_len = htons(ntohs(niph->tot_len) + 8);
+		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
+		UDPH(ntcph)->check = CSUM_MANGLED_0;
+		nskb->len += 8;
+		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_F_MAGIC));
+		niph->protocol = IPPROTO_UDP;
+		skb_rcsum_tcpudp(nskb);
+	}
 
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
@@ -467,7 +483,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 		return;
 	}
 	nskb->tail += offset;
-	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len + header_len;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len;
 
 	neth = eth_hdr(nskb);
 	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
@@ -490,12 +506,6 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
 	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
 	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
-	if (protocol == IPPROTO_UDP) {
-		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_F_MAGIC));
-		UDPH(ntcph)->check = CSUM_MANGLED_0;
-		ntcph = (struct tcphdr *)((char *)ntcph + 8);
-	}
 	data = (char *)ntcph + sizeof(struct tcphdr);
 	memcpy(data, payload, payload_len);
 	ntcph->seq = otcph->ack_seq;
@@ -526,6 +536,20 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
 	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
+
+	if (protocol == IPPROTO_UDP) {
+		int offlen;
+		offlen = skb_tail_pointer(nskb) - (unsigned char *)UDPH(ntcph) - 4;
+		BUG_ON(offlen < 0);
+		memmove((void *)UDPH(ntcph) + 4 + 8, (void *)UDPH(ntcph) + 4, offlen);
+		niph->tot_len = htons(ntohs(niph->tot_len) + 8);
+		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
+		UDPH(ntcph)->check = CSUM_MANGLED_0;
+		nskb->len += 8;
+		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_F_MAGIC));
+		niph->protocol = IPPROTO_UDP;
+		skb_rcsum_tcpudp(nskb);
+	}
 
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
