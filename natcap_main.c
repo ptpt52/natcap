@@ -111,6 +111,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				"#    htp_confusion_host=%s\n"
 				"#    server_persist_lock=%u\n"
 				"#    dns_proxy_drop=%u\n"
+				"#    peer_multipath=%u\n"
 				"#    macfilter=%s(%u)\n"
 				"#    ipfilter=%s(%u)\n"
 				"#\n"
@@ -144,6 +145,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 				htp_confusion_host,
 				server_persist_lock,
 				dns_proxy_drop,
+				peer_multipath,
 				macfilter_acl_str[macfilter], macfilter,
 				ipfilter_acl_str[ipfilter], ipfilter,
 				disabled, debug, server_persist_timeout,
@@ -376,6 +378,15 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			n = sscanf(data, "dns_proxy_drop=%u", &d);
 			if (n == 1) {
 				dns_proxy_drop = !!d;
+				goto done;
+			}
+		}
+	} else if (strncmp(data, "peer_multipath=", 15) == 0) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			int d;
+			n = sscanf(data, "peer_multipath=%u", &d);
+			if (n == 1) {
+				peer_multipath = !!d;
 				goto done;
 			}
 		}
