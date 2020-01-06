@@ -48,6 +48,7 @@
 #define NATCAP_9_MAGIC_TYPE4 0x00000004 /* server --> forward reply */
 
 #define NATCAP_8_MAGIC 0xfff80099 /* client --> forward --> server pass data */
+#define NATCAP_7_MAGIC 0xfff70099 /* upgrade NATCAP_F_MAGIC */
 
 #pragma pack(push)
 #pragma pack(1)
@@ -240,7 +241,8 @@ struct natcap_session {
 
 #define MAX_PEER_NUM 16
 	unsigned short peer_mark;
-	unsigned char peer_idx;
+	unsigned char peer_ver:1,
+				  peer_idx:7;
 	unsigned char peer_cnt:5,
 				  peer_req_cnt:3;
 	struct tuple3 peer_tuple3[MAX_PEER_NUM];

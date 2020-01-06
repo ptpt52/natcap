@@ -574,7 +574,7 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	ntcph->dest = otcph->source;
 	if (protocol == IPPROTO_UDP) {
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
-		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_F_MAGIC));
+		set_byte4((void *)UDPH(ntcph) + 8, ns->peer_ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		ntcph = (struct tcphdr *)((char *)ntcph + 8);
 	}
@@ -1407,8 +1407,9 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
 
-	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_F_MAGIC)) {
+	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_F_MAGIC) || get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_7_MAGIC)) {
 		int offlen;
+		int peer_ver = (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_7_MAGIC));
 
 		if (skb->len < iph->ihl * 4 + sizeof(struct tcphdr) + 8) {
 			return NF_ACCEPT;
@@ -1479,6 +1480,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
 			short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->n.status);
 		}
+		if (ns->peer_ver != peer_ver) ns->peer_ver = peer_ver;
 
 		/* safe to set IPS_NATCAP_DUAL here, this master only run in this hook */
 		if (!(IPS_NATCAP_DUAL & master->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &master->status)) {
@@ -2145,7 +2147,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			UDPH(l4)->check = CSUM_MANGLED_0;
 			skb->len += 8;
 			skb->tail += 8;
-			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_F_MAGIC));
+			set_byte4((void *)UDPH(l4) + 8, ns->peer_ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
 			iph->protocol = IPPROTO_UDP;
 			skb->next = NULL;
 
@@ -2849,7 +2851,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			UDPH(l4)->check = CSUM_MANGLED_0;
 			skb->len += 8;
 			skb->tail += 8;
-			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_F_MAGIC));
+			set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_F_MAGIC)); //no multipath for this case
 			iph->protocol = IPPROTO_UDP;
 			skb->next = NULL;
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
