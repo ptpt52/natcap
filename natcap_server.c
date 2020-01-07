@@ -1869,7 +1869,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 										ns->peer_tuple3[j].dip = ip;
 										ns->peer_tuple3[j].dport = prandom_u32() % (65536 - 1024) + 1024;
 										ns->peer_tuple3[j].sport = prandom_u32() % (65536 - 1024) + 1024;
-										NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer%p select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
+										NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer%px select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
 												ntohs(ns->peer_tuple3[j].sport), &ns->peer_tuple3[j].dip, ntohs(ns->peer_tuple3[j].dport), j);
 										break;
 									}
