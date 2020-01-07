@@ -1470,7 +1470,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			iph->protocol = IPPROTO_UDP;
 			skb->next = NULL;
 
-			if (nskb == NULL && ns->peer_ver == 1 && ns->peer_mark != 0xffff && ns->peer_req_cnt < 3) {
+			if (nskb == NULL && ns->peer_ver == 1 && ns->peer_mark != 0xffff && ns->peer_req_cnt < 3 && uintdiff(ns->peer_jiffies, jiffies) > 1*HZ ) {
 				pcskb = natcap_peer_ctrl_alloc(skb);
 				if (pcskb) {
 					iph = ip_hdr(pcskb);
@@ -1799,6 +1799,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		if (!(IPS_NATCAP_DUAL & master->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &master->status)) {
 			nf_conntrack_get(&ct->ct_general);
 			master->master = ct;
+			ns->peer_jiffies = jiffies; //set peer_jiffies once init
 		}
 		return NF_ACCEPT;
 

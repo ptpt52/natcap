@@ -240,6 +240,7 @@ struct natcap_session {
 	};
 
 #define MAX_PEER_NUM 16
+	unsigned int peer_jiffies;
 	unsigned short peer_mark;
 	unsigned char peer_ver:1,
 				  peer_idx:7;
