@@ -521,7 +521,7 @@ extern void natcap_common_exit(void);
 		okfn(skb); \
 	} else { \
 		kfree_skb(skb); \
-		NATCAP_println("NF_OKFN is null, drop pkt=%p", skb); \
+		NATCAP_println("NF_OKFN is null, drop pkt=%px", skb); \
 	} \
 } while (0)
 
@@ -532,7 +532,7 @@ extern void natcap_common_exit(void);
 		okfn(skb); \
 	} else { \
 		kfree_skb(skb); \
-		NATCAP_println("NF_OKFN is null, drop pkt=%p", skb); \
+		NATCAP_println("NF_OKFN is null, drop pkt=%px", skb); \
 	} \
 } while (0)
 
@@ -543,7 +543,7 @@ extern void natcap_common_exit(void);
 		state->okfn(state->sk, skb); \
 	} else { \
 		kfree_skb(skb); \
-		NATCAP_println("NF_OKFN is null, drop pkt=%p", skb); \
+		NATCAP_println("NF_OKFN is null, drop pkt=%px", skb); \
 	} \
 } while (0)
 
@@ -554,7 +554,7 @@ extern void natcap_common_exit(void);
 		state->okfn(state->net, state->sk, skb); \
 	} else { \
 		kfree_skb(skb); \
-		NATCAP_println("NF_OKFN is null, drop pkt=%p", skb); \
+		NATCAP_println("NF_OKFN is null, drop pkt=%px", skb); \
 	} \
 } while (0)
 

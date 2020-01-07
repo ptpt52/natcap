@@ -2230,7 +2230,7 @@ sni_out:
 
 				spin_lock_bh(&ps->lock);
 				if (ps->port_map[pmi] != user || fue->local_seq + 1 != ntohl(TCPH(l4)->ack_seq)) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer_server_node pmi user=%p,%p mismatch\n",
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer_server_node pmi user=%px,%px mismatch\n",
 							DEBUG_TCP_ARG(iph,l4), ps->port_map[pmi], user);
 					spin_unlock_bh(&ps->lock);
 					nf_ct_put(user);
@@ -2458,7 +2458,7 @@ syn_out:
 						}
 						ct = nf_ct_get(skb, &ctinfo);
 						if (ct == NULL || ct != user) {
-							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": FACK https sni, ct=%p, user=%p mismatch\n", DEBUG_TCP_ARG(iph,l4), ct, user);
+							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": FACK https sni, ct=%px, user=%px mismatch\n", DEBUG_TCP_ARG(iph,l4), ct, user);
 							goto sni_skip;
 						}
 						ret = nf_conntrack_confirm(skb);
