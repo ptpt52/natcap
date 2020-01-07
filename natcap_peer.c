@@ -292,7 +292,7 @@ static void peer_timer_flush(struct timer_list *ignore)
 #endif
 {
 	static unsigned short flush_idx = 0;
-	int i, j = 0;
+	unsigned int i, j = 0;
 	struct nf_conn *user;
 	for (i = 0; i < PEER_PORT_MAP_FLUSH_STEP; i++) {
 		if (peer_port_map[flush_idx] == NULL) {
@@ -439,7 +439,7 @@ static __be16 alloc_peer_port(struct nf_conn *user, const unsigned char *mac)
 
 struct peer_server_node *peer_server_node_in(__be32 ip, unsigned short conn, int new)
 {
-	int i;
+	unsigned int i;
 	unsigned long maxdiff = 0;
 	unsigned long last_jiffies = jiffies;
 	struct peer_server_node *ps = NULL;
@@ -509,7 +509,7 @@ static struct sk_buff *peer_user_uskbs[NR_CPUS];
 #define PEER_USKB_SIZE (sizeof(struct iphdr) + sizeof(struct udphdr))
 #define PEER_FAKEUSER_DADDR __constant_htonl(0x7ffffffe)
 
-static inline struct sk_buff *uskb_of_this_cpu(int id)
+static inline struct sk_buff *uskb_of_this_cpu(unsigned int id)
 {
 	BUG_ON(id >= NR_CPUS);
 	if (!peer_user_uskbs[id]) {
@@ -638,8 +638,8 @@ struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be16 spor
 
 struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, __be32 client_ip, const unsigned char *client_mac, struct peer_tuple **ppt)
 {
-	int i;
 	int ret;
+	unsigned int i;
 	struct peer_tuple *pt = NULL;
 	struct user_expect *ue;
 	struct nf_conn *user;
@@ -1450,7 +1450,7 @@ unsigned char *tls_sni_search(unsigned char *data, int *data_len)
 {
 	unsigned char *p = data;
 	int p_len = *data_len;
-	int i = 0;
+	unsigned int i = 0;
 	unsigned short len;
 
 	if (p[i + 0] != 0x16) {//Content Type NOT HandShake
@@ -1798,7 +1798,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				return NF_STOLEN;
 			} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(0x00000002)) {
 				//get PEER_ECHO_REPLY
-				int i;
+				unsigned int i;
 				for (i = 0; i < PEER_PUB_NUM; i++) {
 					if (peer_pub_ip[i] == iph->saddr) {
 						consume_skb(skb);
@@ -2002,8 +2002,8 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
 #endif
 			if (h) {
-				int i;
 				int ret;
+				unsigned int i;
 				struct tuple server;
 				unsigned long mindiff = peer_port_map_timeout * HZ;
 				struct sk_buff *cache_skb;
@@ -2915,7 +2915,7 @@ h_out:
 knock:
 		user = get_peer_user(port);
 		if (user) {
-			int i;
+			unsigned int i;
 			unsigned long mindiff = peer_port_map_timeout * HZ;
 			struct peer_tuple *pt = NULL;
 			struct natcap_session *ns;
@@ -3478,7 +3478,7 @@ const char *natcap_peer_dev_name = "natcap_peer_ctl";
 static struct class *natcap_peer_class;
 static struct device *natcap_peer_dev;
 
-static inline struct peer_server_node *peer_server_node_get(int idx)
+static inline struct peer_server_node *peer_server_node_get(unsigned int idx)
 {
 	if (idx < MAX_PEER_SERVER) {
 		return &(peer_server[idx]);
@@ -3820,7 +3820,7 @@ static struct file_operations natcap_peer_fops = {
 
 static int peer_netdev_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
-	int i, j;
+	unsigned int i, j;
 	struct nf_conn *user;
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 
@@ -3857,8 +3857,8 @@ static struct notifier_block peer_netdev_notifier = {
 
 int natcap_peer_init(void)
 {
-	int i;
 	dev_t devno;
+	unsigned int i;
 	int ret = 0;
 
 	need_conntrack();
@@ -3953,7 +3953,7 @@ peer_timer_init_failed:
 
 void natcap_peer_exit(void)
 {
-	int i;
+	unsigned int i;
 	dev_t devno;
 
 	peer_stop = 1;
@@ -3989,7 +3989,7 @@ void natcap_peer_exit(void)
 	}
 
 	for (i = 0; i < MAX_PEER_SERVER; i++) {
-		int j;
+		unsigned int j;
 		spin_lock_bh(&peer_server[i].lock);
 		for (j = 0; j < MAX_PEER_CONN; j++) {
 			if (peer_server[i].port_map[j]) {

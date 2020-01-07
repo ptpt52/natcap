@@ -391,7 +391,7 @@ void natcap_server_in_touch(__be32 ip)
 	unsigned int m = nsi->active_index;
 	unsigned int count = nsi->server_count[m];
 	unsigned int hash;
-	int i;
+	unsigned int i;
 
 	if (count == 0)
 		return;
@@ -421,7 +421,7 @@ void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, stru
 	unsigned int m = nsi->active_index;
 	unsigned int count = nsi->server_count[m];
 	unsigned int hash;
-	int i, found = 0;
+	unsigned int i, found = 0;
 
 	dst->ip = 0;
 	dst->port = 0;
@@ -1566,7 +1566,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			}
 
 			if (ns->peer_cnt > 0) {
-				int i, ret;
+				int ret;
+				unsigned int i;
 				struct ethhdr *neth;
 				struct sk_buff *nskb;
 				for (i = 0; i < MAX_PEER_NUM; i++) {
@@ -1766,7 +1767,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 			return NF_STOLEN;
 		} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(NATCAP_9_MAGIC_TYPE4)) {
-			int i, ret;
+			int ret;
+			unsigned int i;
 			if (!master->master) {
 				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 				NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": peer pass forward: type4\n", DEBUG_UDP_ARG(iph,l4));
@@ -1804,7 +1806,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 
 	} else if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_8_MAGIC)) {
-		int i, offlen;
+		int offlen;
+		unsigned int i;
 		int dir = CTINFO2DIR(ctinfo);
 		if (!inet_is_local(in, iph->daddr)) {
 			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
@@ -2194,7 +2197,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			skb->next = NULL;
 
 			if (ns->peer_ver == 1 && ns->peer_mark) {
-				int i, idx;
+				unsigned int i, idx;
 				for (i = 0; i < MAX_PEER_NUM + 1; i++) {
 					idx = (i + ns->peer_idx) % (MAX_PEER_NUM + 1);
 					if (idx >= MAX_PEER_NUM) {
@@ -2483,7 +2486,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 					ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
 					IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
-				int idx;
+				unsigned int idx;
 				struct cone_snat_session css;
 
 				idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, iph->saddr) % 32768;
@@ -2538,7 +2541,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 				ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
 				IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
-			int idx;
+			unsigned int idx;
 			struct cone_nat_session cns;
 			struct cone_snat_session css;
 
