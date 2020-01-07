@@ -1538,9 +1538,9 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			if (ns->peer_cnt == 0) {
 				//lock once
 				if (!(IPS_NATCAP_DUAL & ct->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &ct->status)) {
-					int i, j, idx;
 					__be32 ip;
-					int off = prandom_u32();
+					unsigned int i, j, idx;
+					unsigned int off = prandom_u32();
 					for (i = 0; i < PEER_PUB_NUM; i++) {
 						idx = (i + off) % PEER_PUB_NUM;
 						ip = peer_pub_ip[idx];
