@@ -128,11 +128,9 @@ static unsigned char dnatcap_map[256];
 static void dnatcap_map_init(void)
 {
 	int i;
-
 	for (i = 0; i < 256; i++) {
 		natcap_map[i] = (natcap_map[i] + server_seed) & 0xff;
 	}
-
 	for (i = 0; i < 256; i++) {
 		dnatcap_map[natcap_map[i]] = i;
 	}
@@ -1126,7 +1124,7 @@ void *compat_nf_ct_ext_add(struct nf_conn *ct, int id, gfp_t gfp)
 
 int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 {
-	int i;
+	unsigned int i;
 	struct nat_key_t *nk;
 	struct natcap_session *ns;
 	struct nf_ct_ext *old, *new;
@@ -1531,7 +1529,7 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 			((IPS_NATCAP & ct->status) ||
 			 (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip != iph->saddr &&
 			  IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0))) {
-		int idx;
+		unsigned int idx;
 
 		idx = ntohs(UDPH(l4)->source) % 65536;
 		memcpy(&cns, &cone_nat_array[idx], sizeof(cns));
@@ -1725,7 +1723,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 
 	if (cone_snat_array) {
 		int ret;
-		int idx;
+		unsigned int idx;
 		const struct rtable *rt;
 		__be32 newsrc, nh;
 		struct cone_snat_session css;

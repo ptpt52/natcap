@@ -1496,7 +1496,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			}
 
 			if (ns->peer_ver == 1 && ns->peer_mark) {
-				int i, idx;
+				unsigned int i, idx;
 				for (i = 0; i < MAX_PEER_NUM + 1; i++) {
 					idx = (i + ns->peer_idx) % (MAX_PEER_NUM + 1);
 					if (idx >= MAX_PEER_NUM) {
@@ -1879,7 +1879,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			}
 
 			if (ns->peer_cnt > 0) {
-				int i, ret;
+				int ret;
+				unsigned int i;
 				struct ethhdr *neth;
 				struct sk_buff *nskb;
 				for (i = 0; i < MAX_PEER_NUM; i++) {
@@ -1974,8 +1975,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 			return NF_ACCEPT;
 		} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(NATCAP_9_MAGIC_TYPE3)) {
-			int i, ret;
-			unsigned int tmp;
+			int ret;
+			unsigned int i, tmp;
 			struct ethhdr *eth;
 			if (!nf_ct_is_confirmed(master) && !master->master) {
 				struct nf_conntrack_tuple tuple;
@@ -2079,7 +2080,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 			return NF_STOLEN;
 		} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(NATCAP_9_MAGIC_TYPE4)) {
-			int i, ret;
+			int ret;
+			unsigned int i;
 			if (!master->master) {
 				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 				NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer pass forward: type4\n", DEBUG_UDP_ARG(iph,l4));
@@ -2117,7 +2119,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 
 	} else if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_8_MAGIC)) {
-		int i, offlen;
+		int offlen;
+		unsigned int i;
 		int dir = CTINFO2DIR(ctinfo);
 		if (!inet_is_local(in, iph->daddr)) {
 			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
