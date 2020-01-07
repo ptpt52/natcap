@@ -1535,28 +1535,31 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			UDPH(l4)->check = CSUM_MANGLED_0;
 
 			if (ns->peer_cnt == 0) {
-				int i, j, idx;
-				__be32 ip;
-				int off = prandom_u32();
-				for (i = 0; i < PEER_PUB_NUM; i++) {
-					idx = (i + off) % PEER_PUB_NUM;
-					ip = peer_pub_ip[idx];
-					if (ip != 0 && ip != sip && ip != dip) {
-						for (j = 0; j < MAX_PEER_NUM; j++)
-							if (ns->peer_tuple3[j].dip == ip)
-								break;
-
-						if (j == MAX_PEER_NUM)
+				//lock once
+				if (!(IPS_NATCAP_DUAL & ct->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &ct->status)) {
+					int i, j, idx;
+					__be32 ip;
+					int off = prandom_u32();
+					for (i = 0; i < PEER_PUB_NUM; i++) {
+						idx = (i + off) % PEER_PUB_NUM;
+						ip = peer_pub_ip[idx];
+						if (ip != 0 && ip != sip && ip != dip) {
 							for (j = 0; j < MAX_PEER_NUM; j++)
-								if (ns->peer_tuple3[j].dip == 0) {
-									ns->peer_cnt++;
-									ns->peer_tuple3[j].dip = ip;
-									ns->peer_tuple3[j].dport = prandom_u32() % (65536 - 1024) + 1024;
-									ns->peer_tuple3[j].sport = prandom_u32() % (65536 - 1024) + 1024;
-									NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": peer%p select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
-											ntohs(ns->peer_tuple3[j].sport), &ns->peer_tuple3[j].dip, ntohs(ns->peer_tuple3[j].dport), j);
+								if (ns->peer_tuple3[j].dip == ip)
 									break;
-								}
+
+							if (j == MAX_PEER_NUM)
+								for (j = 0; j < MAX_PEER_NUM; j++)
+									if (ns->peer_tuple3[j].dip == 0) {
+										ns->peer_cnt++;
+										ns->peer_tuple3[j].dip = ip;
+										ns->peer_tuple3[j].dport = prandom_u32() % (65536 - 1024) + 1024;
+										ns->peer_tuple3[j].sport = prandom_u32() % (65536 - 1024) + 1024;
+										NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": peer%p select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
+												ntohs(ns->peer_tuple3[j].sport), &ns->peer_tuple3[j].dip, ntohs(ns->peer_tuple3[j].dport), j);
+										break;
+									}
+						}
 					}
 				}
 			}
