@@ -1487,6 +1487,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		if (!(IPS_NATCAP_DUAL & master->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &master->status)) {
 			nf_conntrack_get(&ct->ct_general);
 			master->master = ct;
+			ns->peer_jiffies = jiffies; //set peer_jiffies once init
 		}
 		return NF_ACCEPT;
 
