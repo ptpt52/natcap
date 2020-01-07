@@ -1834,12 +1834,19 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			sip = get_byte4((void *)UDPH(l4) + 8 + 4 + 4);
 			dip = iph->saddr;
 
+			/* XXX I just confirm it first  */
+			ret = nf_conntrack_confirm(skb);
+			if (ret != NF_ACCEPT) {
+				return ret;
+			}
+			skb_nfct_reset(skb);
+
 			set_byte4((void *)UDPH(l4) + 8 + 4, __constant_htonl(NATCAP_9_MAGIC_TYPE2));
 			set_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2 + 2, iph->saddr);
 			iph->saddr = iph->daddr;
 			UDPH(l4)->check = CSUM_MANGLED_0;
 
-			if (ns->peer_cnt < MAX_PEER_NUM) {
+			if (ns->peer_cnt == 0) {
 				int i, j, idx;
 				__be32 ip;
 				int off = prandom_u32();
@@ -1854,10 +1861,12 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						if (j == MAX_PEER_NUM)
 							for (j = 0; j < MAX_PEER_NUM; j++)
 								if (ns->peer_tuple3[j].dip == 0) {
+									ns->peer_cnt++;
 									ns->peer_tuple3[j].dip = ip;
 									ns->peer_tuple3[j].dport = prandom_u32() % (65536 - 1024) + 1024;
 									ns->peer_tuple3[j].sport = prandom_u32() % (65536 - 1024) + 1024;
-									ns->peer_cnt++;
+									NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer%p select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
+											ntohs(ns->peer_tuple3[j].sport), &ns->peer_tuple3[j].dip, ntohs(ns->peer_tuple3[j].dport), j);
 									break;
 								}
 					}
@@ -1885,9 +1894,9 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						memcpy(neth->h_source, neth->h_dest, ETH_ALEN);
 						memcpy(neth->h_dest, mac, ETH_ALEN);
 					}
-
 					iph = ip_hdr(nskb);
 					l4 = (void *)iph + iph->ihl * 4;
+
 					iph->id = __constant_htons(jiffies);
 					iph->daddr = ns->peer_tuple3[i].dip;
 					UDPH(l4)->dest = ns->peer_tuple3[i].dport;
@@ -1919,6 +1928,13 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					if (!(IPS_NATCAP_DUAL & ct->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &ct->status)) {
 						nf_conntrack_get(&master->master->ct_general);
 						ct->master = master->master;
+						ct = ct->master;
+						NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": BIND=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n", DEBUG_UDP_ARG(iph,l4), i,
+								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+								&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+								&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
+								);
 					}
 
 					skb_push(nskb, (char *)iph - (char *)neth);
