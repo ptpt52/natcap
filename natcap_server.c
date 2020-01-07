@@ -1471,6 +1471,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			skb->next = NULL;
 
 			if (nskb == NULL && ns->peer_ver == 1 && ns->peer_mark != 0xffff && ns->peer_req_cnt < 3 && uintdiff(ns->peer_jiffies, jiffies) > 1*HZ ) {
+				ns->peer_jiffies = jiffies;
 				pcskb = natcap_peer_ctrl_alloc(skb);
 				if (pcskb) {
 					iph = ip_hdr(pcskb);
@@ -2014,8 +2015,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						ns->peer_tuple3[i].dport = UDPH(l4)->source;
 						ns->peer_tuple3[i].sport = UDPH(l4)->dest;
 						ns->peer_cnt++;
-						NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4),
-								i,
+						NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4), i,
 								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
 								&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
@@ -2097,8 +2097,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			if (!short_test_bit(i, &ns->peer_mark) &&
 					ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
 				short_set_bit(i, &ns->peer_mark);
-				NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4),
-						i,
+				NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4), i,
 						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
 						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
