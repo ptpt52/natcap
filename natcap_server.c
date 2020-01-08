@@ -2124,6 +2124,15 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		unsigned int i;
 		int dir = CTINFO2DIR(ctinfo);
 
+		if (skb->len < iph->ihl * 4 + sizeof(struct tcphdr) + 8) {
+			return NF_ACCEPT;
+		}
+		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 8)) {
+			return NF_ACCEPT;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+
 		if (!inet_is_local(in, iph->daddr)) {
 			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
 			return NF_ACCEPT;
@@ -2149,6 +2158,12 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			skb->csum = 0;
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 		}
+
+		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4 + 8)) {
+			return NF_DROP;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
 
 		if (ns->peer_mark != 0xff)
 			for (i = 0; i < MAX_PEER_NUM; i++)

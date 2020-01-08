@@ -1821,6 +1821,16 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": peer pass forward: data\n", DEBUG_UDP_ARG(iph,l4));
 			return NF_ACCEPT;
 		}
+
+		if (skb->len < iph->ihl * 4 + sizeof(struct tcphdr) + 8) {
+			return NF_ACCEPT;
+		}
+		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 8)) {
+			return NF_ACCEPT;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+
 		ct = master->master;
 		ns = natcap_session_get(ct);
 		if (ns == NULL) {
@@ -1836,6 +1846,12 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			skb->csum = 0;
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 		}
+
+		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4 + 8)) {
+			return NF_DROP;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
 
 		if (ns->peer_mark != 0xff)
 			for (i = 0; i < MAX_PEER_NUM; i++)
