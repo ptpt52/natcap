@@ -1966,13 +1966,14 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 				if (natcap_dnat_setup(master, dip, dport) != NF_ACCEPT) {
 					return NF_DROP;
 				}
+
+				set_bit(IPS_NATCAP_BYPASS_BIT, &master->status);
+				set_bit(IPS_NATCAP_ACK_BIT, &master->status);
+				set_bit(IPS_NATFLOW_FF_STOP_BIT, &master->status);
+				set_bit(IPS_NATCAP_DUAL_BIT, &master->status);
 			}
 
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
-			set_bit(IPS_NATCAP_BYPASS_BIT, &master->status);
-			set_bit(IPS_NATCAP_ACK_BIT, &master->status);
-			if (!(IPS_NATFLOW_FF_STOP & master->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &master->status);
-
 			return NF_ACCEPT;
 		} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(NATCAP_9_MAGIC_TYPE3)) {
 			int ret;
@@ -2122,6 +2123,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		int offlen;
 		unsigned int i;
 		int dir = CTINFO2DIR(ctinfo);
+
 		if (!inet_is_local(in, iph->daddr)) {
 			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
 			return NF_ACCEPT;
@@ -2184,10 +2186,16 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		if (!ct) {
 			return NF_DROP;
 		}
-		natcap_clone_timeout(master, ct);
 
 		NATCAP_DEBUG("(SPI)" DEBUG_TCP_FMT ": peer pass up: after\n", DEBUG_TCP_ARG(iph,l4));
 
+		return NF_ACCEPT;
+	} else if (master->master || (IPS_NATCAP_DUAL & master->status)) {
+		//ufo come in
+		if (!inet_is_local(in, iph->daddr)) {
+			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
+			return NF_ACCEPT;
+		}
 		return NF_ACCEPT;
 	} else {
 		set_bit(IPS_NATCAP_PRE_BIT, &master->status);
