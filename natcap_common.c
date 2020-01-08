@@ -1118,23 +1118,19 @@ void *compat_nf_ct_ext_add(struct nf_conn *ct, int id, gfp_t gfp)
 #define compat_nf_ct_ext_add nf_ct_ext_add
 #endif
 
-#define NATFLOW_MAX_OFF 512u
+#define NATCAP_MAX_OFF 512u
 #define __ALIGN_64BITS 8
-#define NATFLOW_FACTOR (__ALIGN_64BITS * 2)
+#define __ALIGN_64BYTES (__ALIGN_64BITS * 8)
+#define NATCAP_FACTOR (__ALIGN_64BITS * 2)
 
 int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 {
 	unsigned int i;
-	struct nat_key_t *nk;
-	struct natcap_session *ns;
+	struct nat_key_t *nk = NULL;
 	struct nf_ct_ext *old, *new;
-	unsigned int newoff, newlen = 0;
+	unsigned int nkoff, newoff, newlen = 0;
 	size_t alloc_size;
 	size_t var_alloc_len = ALIGN(sizeof(struct natcap_session), __ALIGN_64BITS);
-
-	if (natcap_session_get(ct) != NULL) {
-		return 0;
-	}
 
 	if (nf_ct_is_confirmed(ct)) {
 		return -1;
@@ -1149,14 +1145,27 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 	}
 
 	old = ct->ext;
-	newoff = ALIGN(old->len, NATFLOW_FACTOR);
+	nkoff = ALIGN(old->len, __ALIGN_64BYTES);
+	newoff = ALIGN(nkoff + ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS), __ALIGN_64BITS);
 
-	if (newoff > NATFLOW_MAX_OFF) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "realloc ct->ext->len > %u not supported!\n", DEBUG_ARG_PREFIX, NATFLOW_MAX_OFF);
+	if (old->len * NATCAP_FACTOR <= NATCAP_MAX_OFF) {
+		nk = (struct nat_key_t *)((void *)old + old->len * NATCAP_FACTOR);
+		if (nk->magic == NATCAP_MAGIC && nk->ext_magic == (((unsigned long)ct) & 0xffffffff)) {
+			if (nk->natcap_off) {
+				//natcap exist
+				return 0;
+			}
+			nkoff = old->len * NATCAP_FACTOR;
+			newoff = ALIGN(nkoff + nk->len, __ALIGN_64BITS);
+		}
+	}
+
+	if (nkoff > NATCAP_MAX_OFF) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "realloc ct->ext->len > %u not supported!\n", DEBUG_ARG_PREFIX, NATCAP_MAX_OFF);
 		return -1;
 	}
 
-	newlen = ALIGN(newoff + ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS) + var_alloc_len, NATFLOW_FACTOR);
+	newlen = ALIGN(newoff + var_alloc_len, __ALIGN_64BITS);
 	alloc_size = ALIGN(newlen, __ALIGN_64BITS);
 
 	new = __krealloc(old, alloc_size, gfp);
@@ -1175,13 +1184,12 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 #endif
 	}
 
-	new->len = newoff / NATFLOW_FACTOR;
-	nk = (struct nat_key_t *)((void *)new + newoff);
+	new->len = nkoff / NATCAP_FACTOR;
+	nk = (struct nat_key_t *)((void *)new + nkoff);
 	nk->magic = NATCAP_MAGIC;
 	nk->ext_magic = (unsigned long)ct & 0xffffffff;
 	nk->len = newlen;
-
-	ns = (struct natcap_session *)((void *)nk + ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS));
+	nk->natcap_off = newoff;
 
 	return 0;
 }
@@ -1195,16 +1203,21 @@ struct natcap_session *natcap_session_get(struct nf_conn *ct)
 		return NULL;
 	}
 
-	if (ct->ext->len * NATFLOW_FACTOR > NATFLOW_MAX_OFF) {
+	if (ct->ext->len * NATCAP_FACTOR > NATCAP_MAX_OFF) {
 		return NULL;
 	}
 
-	nk = (struct nat_key_t *)((void *)ct->ext + ct->ext->len * NATFLOW_FACTOR);
+	nk = (struct nat_key_t *)((void *)ct->ext + ct->ext->len * NATCAP_FACTOR);
 	if (nk->magic != NATCAP_MAGIC || nk->ext_magic != (((unsigned long)ct) & 0xffffffff)) {
 		return NULL;
 	}
 
-	ns = (struct natcap_session *)((void *)nk + ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS));
+	if (nk->natcap_off == 0) {
+		return NULL;
+	}
+
+	ns = (struct natcap_session *)((void *)ct->ext + nk->natcap_off);
+
 	return ns;
 }
 

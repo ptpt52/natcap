@@ -255,6 +255,8 @@ struct nat_key_t {
 	unsigned int magic;
 	unsigned int ext_magic;
 	unsigned int len;
+	unsigned short natcap_off;
+	unsigned short natflow_off;
 };
 
 /*XXX refer to drivers/nos/src/nos.h */
