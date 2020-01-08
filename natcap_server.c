@@ -1951,18 +1951,14 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			consume_skb(skb);
 			return NF_STOLEN;
 		} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(NATCAP_9_MAGIC_TYPE2)) {
-			__be32 dip;
-			__be16 dport;
-
-			dip = get_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2 + 2);
-			dport = prandom_u32() % (65536 - 1024) + 1024;
-
 			set_byte4((void *)UDPH(l4) + 8 + 4, __constant_htonl(NATCAP_9_MAGIC_TYPE3));
 			UDPH(l4)->check = CSUM_MANGLED_0;
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
 
 			if (!nf_ct_is_confirmed(master)) {
+				__be32 dip = get_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2 + 2);
+				__be16 dport = prandom_u32() % (65536 - 1024) + 1024;
 				if (natcap_dnat_setup(master, dip, dport) != NF_ACCEPT) {
 					return NF_DROP;
 				}
