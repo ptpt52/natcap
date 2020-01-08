@@ -1828,6 +1828,15 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			return NF_DROP;
 		}
 
+		if (skb->ip_summed == CHECKSUM_NONE) {
+			if (skb_rcsum_verify(skb) != 0) {
+				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": skb_rcsum_verify fail\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_DROP;
+			}
+			skb->csum = 0;
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+		}
+
 		if (ns->peer_mark != 0xff)
 			for (i = 0; i < MAX_PEER_NUM; i++)
 				if (!short_test_bit(i, &ns->peer_mark) &&
