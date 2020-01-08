@@ -482,9 +482,16 @@ extern int natcap_session_init(struct nf_conn *ct, gfp_t gfp);
 extern struct natcap_session *natcap_session_get(struct nf_conn *ct);
 static inline struct natcap_session *natcap_session_in(struct nf_conn *ct)
 {
+	struct natcap_session *ns = natcap_session_get(ct);
+
+	if (ns) {
+		return ns;
+	}
+
 	if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
 		return NULL;
 	}
+
 	return natcap_session_get(ct);
 }
 
