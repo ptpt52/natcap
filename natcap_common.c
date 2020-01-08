@@ -1157,6 +1157,8 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 			}
 			nkoff = old->len * NATCAP_FACTOR;
 			newoff = ALIGN(nkoff + nk->len, __ALIGN_64BITS);
+		} else {
+			nk = NULL;
 		}
 	}
 
@@ -1173,6 +1175,10 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		return -1;
 	}
 	memset((void *)new + newoff, 0, newlen - newoff);
+	if (nk == NULL) {
+		nk = (struct nat_key_t *)((void *)new + nkoff);
+		memset((void *)nk, 0, newoff - nkoff);
+	}
 
 	if (new != old) {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
