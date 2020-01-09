@@ -512,11 +512,18 @@ extern void natcap_common_exit(void);
 	struct rtable *rt = (struct rtable *)dst; \
 	if (!rt || !rt->__RT_GATEWAY) { \
 		struct net *net = dst ? dev_net(dst->dev) : skb->dev ? dev_net(skb->dev) : &init_net; \
-		rt = ip_route_output(net, iph->daddr, 0, RT_TOS(iph->tos), 0); \
+		rt = ip_route_output(net, iph->daddr, iph->saddr, RT_TOS(iph->tos), 0); \
 		if (!IS_ERR(rt)) { \
 			skb_dst_drop(skb); \
 			skb_dst_set(skb, &rt->dst); \
 			skb->dev = rt->dst.dev; \
+		} else { \
+			rt = ip_route_output(net, iph->daddr, 0, RT_TOS(iph->tos), 0); \
+			if (!IS_ERR(rt)) { \
+				skb_dst_drop(skb); \
+				skb_dst_set(skb, &rt->dst); \
+				skb->dev = rt->dst.dev; \
+			} \
 		} \
 	} \
 } while (0)
