@@ -1824,7 +1824,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 			ct = master->master;
 			if (!ct) {
-				NATCAP_WARN("(SPI)" DEBUG_UDP_FMT ": master->master == NULL\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": master->master == NULL\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
 			ns = natcap_session_get(ct);
