@@ -1483,8 +1483,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		}
 		if (ns->peer_ver != peer_ver) ns->peer_ver = peer_ver;
 
-		/* safe to set IPS_NATCAP_DUAL here, this master only run in this hook */
-		if (!(IPS_NATCAP_DUAL & master->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &master->status)) {
+		/* safe to set IPS_NATCAP_CFM here, this master only run in this hook */
+		if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
 			nf_conntrack_get(&ct->ct_general);
 			master->master = ct;
 			ns->peer_jiffies = jiffies; //set peer_jiffies once init
@@ -1537,28 +1537,30 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 			if (ns->peer_cnt == 0) {
 				//lock once
-				__be32 ip;
-				unsigned int i, j, idx;
-				unsigned int off = prandom_u32();
-				for (i = 0; i < PEER_PUB_NUM; i++) {
-					idx = (i + off) % PEER_PUB_NUM;
-					ip = peer_pub_ip[idx];
-					if (ip != 0 && ip != sip && ip != dip) {
-						for (j = 0; j < MAX_PEER_NUM; j++)
-							if (ns->peer_tuple3[j].dip == ip)
-								break;
-
-						if (j == MAX_PEER_NUM)
+				if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
+					__be32 ip;
+					unsigned int i, j, idx;
+					unsigned int off = prandom_u32();
+					for (i = 0; i < PEER_PUB_NUM; i++) {
+						idx = (i + off) % PEER_PUB_NUM;
+						ip = peer_pub_ip[idx];
+						if (ip != 0 && ip != sip && ip != dip) {
 							for (j = 0; j < MAX_PEER_NUM; j++)
-								if (ns->peer_tuple3[j].dip == 0) {
-									ns->peer_cnt++;
-									ns->peer_tuple3[j].dip = ip;
-									ns->peer_tuple3[j].dport = prandom_u32() % (65536 - 1024) + 1024;
-									ns->peer_tuple3[j].sport = prandom_u32() % (65536 - 1024) + 1024;
-									NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": peer%px select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
-											ntohs(ns->peer_tuple3[j].sport), &ns->peer_tuple3[j].dip, ntohs(ns->peer_tuple3[j].dport), j);
+								if (ns->peer_tuple3[j].dip == ip)
 									break;
-								}
+
+							if (j == MAX_PEER_NUM)
+								for (j = 0; j < MAX_PEER_NUM; j++)
+									if (ns->peer_tuple3[j].dip == 0) {
+										ns->peer_cnt++;
+										ns->peer_tuple3[j].dip = ip;
+										ns->peer_tuple3[j].dport = prandom_u32() % (65536 - 1024) + 1024;
+										ns->peer_tuple3[j].sport = prandom_u32() % (65536 - 1024) + 1024;
+										NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": peer%px select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
+												ntohs(ns->peer_tuple3[j].sport), &ns->peer_tuple3[j].dip, ntohs(ns->peer_tuple3[j].dport), j);
+										break;
+									}
+						}
 					}
 				}
 			}
@@ -1616,7 +1618,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 						consume_skb(nskb);
 						break;
 					}
-					if (!(IPS_NATCAP_DUAL & ct->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &ct->status)) {
+					if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 						nf_conntrack_get(&master->master->ct_general);
 						ct->master = master->master;
 						ct = ct->master;
@@ -1651,7 +1653,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				set_bit(IPS_NATCAP_BYPASS_BIT, &master->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &master->status);
 				set_bit(IPS_NATFLOW_FF_STOP_BIT, &master->status);
-				set_bit(IPS_NATCAP_DUAL_BIT, &master->status);
+				set_bit(IPS_NATCAP_CFM_BIT, &master->status);
 			}
 
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
@@ -1706,7 +1708,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 								ns->peer_mark);
 					}
 
-					if (!(IPS_NATCAP_DUAL & master->status) && !test_and_set_bit(IPS_NATCAP_DUAL_BIT, &master->status)) {
+					if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
 						nf_conntrack_get(&ct->ct_general);
 						master->master = ct;
 					}
@@ -1900,7 +1902,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all));
 
 		return NF_ACCEPT;
-	} else if (master->master || (IPS_NATCAP_DUAL & master->status)) {
+	} else if (master->master || (IPS_NATCAP_CFM & master->status)) {
 		//ufo come in
 		if (!inet_is_local(in, iph->daddr)) {
 			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
