@@ -1943,6 +1943,14 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 								);
 					}
 
+					skb_nfct_reset(nskb);
+
+					NF_GW_REROUTE(nskb);
+					if (skb_dst(nskb) && dst_output(net, NULL, nskb) == 0) {
+						continue;
+					}
+
+					/* may fail output */
 					skb_push(nskb, (char *)iph - (char *)neth);
 					dev_queue_xmit(nskb);
 				}
