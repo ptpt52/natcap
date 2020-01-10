@@ -788,6 +788,8 @@ static unsigned int natcap_server_forward_hook(void *priv,
 
 	if (disabled)
 		return NF_ACCEPT;
+	if (skb->mark & natcap_ignore_mask)
+		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
@@ -874,6 +876,8 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 	void *l4;
 
 	if (disabled)
+		return NF_ACCEPT;
+	if (skb->mark & natcap_ignore_mask)
 		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
@@ -997,6 +1001,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 	struct tuple server;
 
 	if (disabled)
+		return NF_ACCEPT;
+	if (skb->mark & natcap_ignore_mask)
 		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
@@ -1335,6 +1341,8 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 	if (disabled)
 		return NF_ACCEPT;
+	if (skb->mark & natcap_ignore_mask)
+		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
@@ -1597,6 +1605,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 	struct net *net = &init_net;
 
 	if (disabled)
+		return NF_ACCEPT;
+	if (skb->mark & natcap_ignore_mask)
 		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);

@@ -77,6 +77,9 @@ static inline void natcap_tuple_to_ns(struct natcap_session *ns, const struct tu
 	ns->n.target_port = t->port;
 }
 
+
+extern unsigned int natcap_ignore_mask;
+
 extern struct cone_nat_session *cone_nat_array;
 extern struct cone_snat_session *cone_snat_array;
 
