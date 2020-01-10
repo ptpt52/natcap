@@ -2052,6 +2052,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
 				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 		if (ret != 0) {
+			u16 mss;
 			/* skb cannot setup encode, means that tcp option space has no enough left
 			 * so we dup a skb and mark it with NATCAP_TCPOPT_SYN as a pioneer to 'kick the door'
 			 * just strim the tcp options
@@ -2068,9 +2069,15 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			}
 			iph = ip_hdr(skb2);
 			l4 = (void *)iph + iph->ihl * 4;
-			skb2->len = iph->ihl * 4 + sizeof(struct tcphdr);
+			mss = natcap_tcpmss_get(TCPH(l4));
+			if (mss == 0) mss = TCP_MSS_DEFAULT;
+			/* fake mss */
+			set_byte1((void *)l4 + sizeof(struct tcphdr) + 0, TCPOPT_MSS);
+			set_byte1((void *)l4 + sizeof(struct tcphdr) + 1, TCPOLEN_MSS);
+			set_byte2((void *)l4 + sizeof(struct tcphdr) + 2, ntohs(mss));
+			skb2->len = iph->ihl * 4 + sizeof(struct tcphdr) + TCPOLEN_MSS;
 			iph->tot_len = htons(skb2->len);
-			TCPH(l4)->doff = 5;
+			TCPH(l4)->doff = (sizeof(struct tcphdr) + TCPOLEN_MSS) / 4;
 			skb_rcsum_tcpudp(skb2);
 
 			ret = natcap_tcpopt_setup(status, skb2, ct, &tcpopt,
