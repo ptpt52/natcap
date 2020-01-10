@@ -641,6 +641,8 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 
 	if (disabled)
 		return NF_ACCEPT;
+	if (skb->mark & natcap_ignore_mask)
+		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
@@ -1085,10 +1087,13 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 
 	if (disabled)
 		return NF_ACCEPT;
+	if (skb->mark & natcap_ignore_mask)
+		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
-	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP)
+	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
 		return NF_ACCEPT;
+	}
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
@@ -1282,8 +1287,12 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 	if (mode == MIXING_MODE)
 		return NF_ACCEPT;
+	if (skb->mark & natcap_ignore_mask)
+		return NF_ACCEPT;
 
 	if (disabled)
+		return NF_ACCEPT;
+	if (skb->mark & natcap_ignore_mask)
 		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
@@ -1966,6 +1975,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 	if (disabled)
 		return NF_ACCEPT;
+	if (skb->mark & natcap_ignore_mask)
+		return NF_ACCEPT;
 
 	if (in)
 		net = dev_net(in);
@@ -2421,6 +2432,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	struct natcap_TCPOPT tcpopt = { };
 
 	if (disabled)
+		return NF_ACCEPT;
+	if (skb->mark & natcap_ignore_mask)
 		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
@@ -3173,10 +3186,13 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 	if (disabled)
 		return NF_ACCEPT;
+	if (skb->mark & natcap_ignore_mask)
+		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
-	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP)
+	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
 		return NF_ACCEPT;
+	}
 	l4 = (void *)iph + iph->ihl * 4;
 
 	ct = nf_ct_get(skb, &ctinfo);
