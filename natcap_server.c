@@ -1890,7 +1890,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			iph->saddr = iph->daddr;
 			UDPH(l4)->check = CSUM_MANGLED_0;
 
-			if (ns->peer_cnt == 0) {
+			if (ns->peer_cnt == 0 && peer_multipath) {
 				//lock once
 				if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 					__be32 ip;
@@ -1900,12 +1900,12 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						idx = (i + off) % PEER_PUB_NUM;
 						ip = peer_pub_ip[idx];
 						if (ip != 0 && ip != sip && ip != dip) {
-							for (j = 0; j < MAX_PEER_NUM; j++)
+							for (j = 0; j < MAX_PEER_NUM && j < peer_multipath; j++)
 								if (ns->peer_tuple3[j].dip == ip)
 									break;
 
-							if (j == MAX_PEER_NUM)
-								for (j = 0; j < MAX_PEER_NUM; j++)
+							if (j == MAX_PEER_NUM || j == peer_multipath)
+								for (j = 0; j < MAX_PEER_NUM && j < peer_multipath; j++)
 									if (ns->peer_tuple3[j].dip == 0) {
 										ns->peer_cnt++;
 										ns->peer_tuple3[j].dip = ip;

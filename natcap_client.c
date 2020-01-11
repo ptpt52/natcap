@@ -63,7 +63,7 @@ static inline int server_index_natcap_get(unsigned int *at)
 	return (val >> idx);
 }
 
-unsigned int peer_multipath = 1;
+unsigned int peer_multipath = 4;
 unsigned int dns_proxy_drop = 0;
 unsigned int server_persist_lock = 0;
 unsigned int server_persist_timeout = 0;
@@ -1544,7 +1544,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			iph->saddr = iph->daddr;
 			UDPH(l4)->check = CSUM_MANGLED_0;
 
-			if (ns->peer_cnt == 0) {
+			if (ns->peer_cnt == 0 && peer_multipath) {
 				//lock once
 				if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 					__be32 ip;
@@ -1554,12 +1554,12 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 						idx = (i + off) % PEER_PUB_NUM;
 						ip = peer_pub_ip[idx];
 						if (ip != 0 && ip != sip && ip != dip) {
-							for (j = 0; j < MAX_PEER_NUM; j++)
+							for (j = 0; j < MAX_PEER_NUM && j < peer_multipath; j++)
 								if (ns->peer_tuple3[j].dip == ip)
 									break;
 
-							if (j == MAX_PEER_NUM)
-								for (j = 0; j < MAX_PEER_NUM; j++)
+							if (j == MAX_PEER_NUM || j == peer_multipath)
+								for (j = 0; j < MAX_PEER_NUM && j < peer_multipath; j++)
 									if (ns->peer_tuple3[j].dip == 0) {
 										ns->peer_cnt++;
 										ns->peer_tuple3[j].dip = ip;
@@ -2022,7 +2022,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 	if (NULL == ns) {
 		return NF_ACCEPT;
 	}
-	if (peer_multipath == 1) {
+	if (peer_multipath) {
 		if (ns->peer_ver != 1) ns->peer_ver = 1;
 	}
 
