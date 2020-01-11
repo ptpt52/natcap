@@ -1517,6 +1517,9 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 						UDPH(l4)->source = ns->peer_tuple3[idx].sport;
 						set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_8_MAGIC));
 						ns->peer_idx = (idx + 1) % (MAX_PEER_NUM + 1);
+						/*FIXME make ct state happy */
+						skb_nfct_reset(skb);
+						nf_conntrack_in_compat(dev_net(skb->dev), PF_INET, NF_INET_PRE_ROUTING, skb);
 						break;
 					}
 				}
