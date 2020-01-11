@@ -2257,14 +2257,37 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 						break;
 					}
 					if (ns->peer_tuple3[idx].dip != 0 && short_test_bit(idx, &ns->peer_mark)) {
+						struct nf_conntrack_tuple tuple;
+						struct nf_conntrack_tuple_hash *h;
+
+						ns->peer_idx = (idx + 1) % (MAX_PEER_NUM + 1);
+
+						memset(&tuple, 0, sizeof(tuple));
+						tuple.src.u3.ip = iph->saddr;
+						tuple.src.u.udp.port = ns->peer_tuple3[idx].sport;
+						tuple.dst.u3.ip = ns->peer_tuple3[idx].dip;
+						tuple.dst.u.udp.port = ns->peer_tuple3[idx].dport;
+						tuple.src.l3num = PF_INET;
+						tuple.dst.protonum = IPPROTO_UDP;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+						h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
+						h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
+						if (h) {
+							ct = nf_ct_tuplehash_to_ctrack(h);
+							nf_ct_put(ct);
+						} else {
+							ns->peer_tuple3[idx].dip = 0;
+							ns->peer_tuple3[idx].dport = 0;
+							ns->peer_tuple3[idx].sport = 0;
+							short_clear_bit(idx, &ns->peer_mark);
+							break;
+						}
 						iph->daddr = ns->peer_tuple3[idx].dip;
 						UDPH(l4)->dest = ns->peer_tuple3[idx].dport;
 						UDPH(l4)->source = ns->peer_tuple3[idx].sport;
 						set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_8_MAGIC));
-						ns->peer_idx = (idx + 1) % (MAX_PEER_NUM + 1);
-						/*FIXME make ct state happy */
-						skb_nfct_reset(skb);
-						nf_conntrack_in_compat(dev_net(skb->dev), PF_INET, NF_INET_PRE_ROUTING, skb);
 						break;
 					}
 				}
