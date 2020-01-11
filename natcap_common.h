@@ -77,6 +77,7 @@ static inline void natcap_tuple_to_ns(struct natcap_session *ns, const struct tu
 	ns->n.target_port = t->port;
 }
 
+extern unsigned int peer_multipath;
 
 extern unsigned int natcap_ignore_mask;
 

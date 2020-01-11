@@ -1240,7 +1240,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 
 	tcpopt = (struct natcap_TCPOPT *)((void *)ntcph + sizeof(struct tcphdr));
 	tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
-	tcpopt->header.opcode = peer_multipath == 1 ? TCPOPT_PEER_V2 : TCPOPT_PEER;
+	tcpopt->header.opcode = peer_multipath ? TCPOPT_PEER_V2 : TCPOPT_PEER;
 	tcpopt->header.opsize = header_len;
 	tcpopt->header.encryption = !!peer_sni_ban; //use encryption to carry peer_sni_ban
 	tcpopt->header.subtype = SUBTYPE_PEER_SYN;
