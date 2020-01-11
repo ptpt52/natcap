@@ -67,6 +67,7 @@ static struct peer_cache_node peer_cache[MAX_PEER_CACHE];
 #define PEER_CACHE_TIMEOUT 4
 
 __be32 peer_pub_ip[PEER_PUB_NUM];
+unsigned int peer_pub_active[PEER_PUB_NUM];
 unsigned int peer_pub_idx = 0;
 
 static inline void peer_cache_init(void)
@@ -1048,7 +1049,15 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 	set_byte2((void *)tcpopt + header_len + 2, ntohs(TCP_MSS_DEFAULT)); //just set a fake mss
 
 	if (ext_header_len > 0) {
-		memcpy((char *)ip_hdr(nskb) + sizeof(struct iphdr) + sizeof(struct tcphdr) + ext_header_len, peer_pub_ip, sizeof(peer_pub_ip));
+		unsigned int i;
+		unsigned int *dst = (void *)((char *)ip_hdr(nskb) + sizeof(struct iphdr) + sizeof(struct tcphdr) + ext_header_len);
+		for (i = 0; i < PEER_PUB_NUM; i++) {
+			if (uintdiff(jiffies, peer_pub_active[i]) < 45 * HZ) {
+				dst[i] = peer_pub_ip[i];
+			} else {
+				dst[i] = 0;
+			}
+		}
 	}
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -1801,13 +1810,15 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				unsigned int i;
 				for (i = 0; i < PEER_PUB_NUM; i++) {
 					if (peer_pub_ip[i] == iph->saddr) {
+						peer_pub_active[i] = jiffies;
 						consume_skb(skb);
 						return NF_STOLEN;
 					}
 				}
-				peer_pub_ip[peer_pub_idx] = iph->saddr;
+				i = peer_pub_idx;
 				peer_pub_idx = (peer_pub_idx + 1) % PEER_PUB_NUM;
-
+				peer_pub_ip[i] = iph->saddr;
+				peer_pub_active[i] = jiffies;
 				consume_skb(skb);
 				return NF_STOLEN;
 			}
@@ -3868,6 +3879,7 @@ int natcap_peer_init(void)
 	}
 
 	memset(peer_pub_ip, 0, sizeof(peer_pub_ip));
+	memset(peer_pub_active, 0, sizeof(peer_pub_active));
 
 	peer_cache_init();
 	memset(peer_server, 0, sizeof(peer_server));
