@@ -1052,7 +1052,7 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 		unsigned int i;
 		unsigned int *dst = (void *)((char *)ip_hdr(nskb) + sizeof(struct iphdr) + sizeof(struct tcphdr) + ext_header_len);
 		for (i = 0; i < PEER_PUB_NUM; i++) {
-			if (uintdiff(jiffies, peer_pub_active[i]) < 45 * HZ) {
+			if (uintdiff(jiffies, peer_pub_active[i]) < 120 * HZ) {
 				dst[i] = peer_pub_ip[i];
 			} else {
 				dst[i] = 0;
@@ -2411,7 +2411,7 @@ sni_out:
 				pt->mode = PT_MODE_UDP;
 			}
 			natcap_peer_pong_send(in, skb, ue->map_port, pt, (ue->status & PEER_SUBTYPE_SSYN));
-			if (tcpopt->header.opcode == TCPOPT_PEER_V2 && uintdiff(jiffies, ue->last_active_peer) >= 120 * HZ) {
+			if (tcpopt->header.opcode == TCPOPT_PEER_V2 && uintdiff(jiffies, ue->last_active_peer) >= 60 * HZ) {
 				ue->last_active_peer = jiffies;
 				natcap_peer_echo_request(in, skb);
 			}
