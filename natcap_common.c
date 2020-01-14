@@ -92,7 +92,6 @@ char htp_confusion_rsp[1024] = ""
 const char *const mode_str[] = {
 	[CLIENT_MODE] = "CLIENT",
 	[SERVER_MODE] = "SERVER",
-	[FORWARD_MODE] = "FORWARD",
 	[MIXING_MODE] = "CLIENT+SERVER",
 	[KNOCK_MODE] = "KNOCK",
 	[PEER_MODE] = "PEER",
@@ -541,7 +540,7 @@ int natcap_tcp_decode(struct nf_conn *ct, struct sk_buff *skb, struct natcap_TCP
 	}
 
 	memcpy((void *)tcpopt, (void *)opt, opt->header.opsize);
-	if (mode == FORWARD_MODE || NATCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_CONFUSION) {
+	if (NATCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_CONFUSION) {
 		goto done;
 	}
 	if ((tcpopt->header.type & NATCAP_TCPOPT_SYN)) {

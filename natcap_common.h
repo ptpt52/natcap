@@ -54,7 +54,6 @@ static inline int nf_nat_used_tuple(const struct nf_conntrack_tuple *tuple, cons
 enum {
 	CLIENT_MODE = 0,
 	SERVER_MODE = 1,
-	FORWARD_MODE = 2,
 	MIXING_MODE = 3,
 	KNOCK_MODE = 4,
 	PEER_MODE = 5,
