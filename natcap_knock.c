@@ -97,8 +97,6 @@ static unsigned int natcap_knock_dnat_hook(void *priv,
 
 	if (disabled)
 		return NF_ACCEPT;
-	if (skb->mark & natcap_ignore_mask)
-		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_TCP) {
@@ -118,6 +116,14 @@ static unsigned int natcap_knock_dnat_hook(void *priv,
 	}
 	if ((IPS_NATCAP & ct->status)) {
 		return NF_ACCEPT;
+	}
+	if (!nf_ct_is_confirmed(ct)) {
+		if (skb->mark & natcap_ignore_mask) {
+			set_bit(IPS_NATCAP_PRE_BIT, &ct->status);
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			set_bit(IPS_NATCAP_SERVER_BIT, &ct->status);
+			return NF_ACCEPT;
+		}
 	}
 
 	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
@@ -196,8 +202,6 @@ static unsigned int natcap_knock_post_out_hook(void *priv,
 	struct natcap_TCPOPT tcpopt = { };
 
 	if (disabled)
-		return NF_ACCEPT;
-	if (skb->mark & natcap_ignore_mask)
 		return NF_ACCEPT;
 
 	iph = ip_hdr(skb);
