@@ -52,7 +52,6 @@
 #include "natcap_common.h"
 #include "natcap_client.h"
 #include "natcap_server.h"
-#include "natcap_forward.h"
 #include "natcap_knock.h"
 #include "natcap_peer.h"
 
@@ -243,7 +242,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	}
 
 	if (strncmp(data, "clean", 5) == 0) {
-		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == FORWARD_MODE) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
 			natcap_server_info_cleanup();
 			goto done;
 		}
@@ -262,7 +261,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			}
 		}
 	} else if (strncmp(data, "server ", 7) == 0) {
-		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == FORWARD_MODE) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
 			unsigned int a, b, c, d, e;
 			char f, g, h;
 			n = sscanf(data, "server %u.%u.%u.%u:%u-%c-%c-%c", &a, &b, &c, &d, &e, &f, &g, &h);
@@ -287,12 +286,12 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			}
 		}
 	} else if (strncmp(data, "change_server", 13) == 0) {
-		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == FORWARD_MODE) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
 			natcap_server_info_change(1);
 			goto done;
 		}
 	} else if (strncmp(data, "delete", 6) == 0) {
-		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == FORWARD_MODE) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
 			unsigned int a, b, c, d, e;
 			char f;
 			n = sscanf(data, "delete %u.%u.%u.%u:%u-%c", &a, &b, &c, &d, &e, &f);
@@ -364,7 +363,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			}
 		}
 	} else if (strncmp(data, "server_persist_timeout=", 23) == 0) {
-		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == FORWARD_MODE) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
 			int d;
 			n = sscanf(data, "server_persist_timeout=%u", &d);
 			if (n == 1) {
@@ -373,7 +372,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			}
 		}
 	} else if (strncmp(data, "server_persist_lock=", 20) == 0) {
-		if (mode == CLIENT_MODE || mode == MIXING_MODE || mode == FORWARD_MODE) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
 			int d;
 			n = sscanf(data, "server_persist_lock=%u", &d);
 			if (n == 1) {
@@ -698,9 +697,6 @@ static int natcap_mode_init(void)
 				break;
 			}
 			break;
-		case FORWARD_MODE:
-			ret = natcap_forward_init();
-			break;
 		case MIXING_MODE:
 			ret = natcap_client_init();
 			if (ret != 0) {
@@ -739,9 +735,6 @@ static void natcap_mode_exit(void)
 		case SERVER_MODE:
 			natcap_peer_exit();
 			natcap_server_exit();
-			break;
-		case FORWARD_MODE:
-			natcap_forward_exit();
 			break;
 		case MIXING_MODE:
 			natcap_peer_exit();
