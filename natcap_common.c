@@ -40,7 +40,7 @@
 #include "natcap_knock.h"
 #include "natcap_peer.h"
 
-unsigned int natcap_ignore_mask = 0x00800000;
+unsigned int natcap_ignore_mask = 0x00000000;
 unsigned int natcap_max_pmtu = 1440;
 
 unsigned int natcap_touch_timeout = 32;
