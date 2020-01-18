@@ -18,8 +18,6 @@ src_install:
 		natcap_client.h \
 		natcap_server.c \
 		natcap_server.h \
-		natcap_forward.c \
-		natcap_forward.h \
 		natcap_knock.c \
 		natcap_knock.h \
 		natcap_peer.c \
