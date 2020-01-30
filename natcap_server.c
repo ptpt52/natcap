@@ -2286,7 +2286,7 @@ static struct nf_hook_ops server_hooks[] = {
 		.hook = natcap_server_pre_in_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_CONNTRACK + 5 + 1,
+		.priority = NF_IP_PRI_MANGLE + 5 + 1,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -2295,7 +2295,7 @@ static struct nf_hook_ops server_hooks[] = {
 		.hook = natcap_server_pre_ct_test_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_CONNTRACK + 10 - 1,
+		.priority = NF_IP_PRI_MANGLE + 10 - 1,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -2304,7 +2304,7 @@ static struct nf_hook_ops server_hooks[] = {
 		.hook = natcap_server_pre_ct_in_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_NAT_DST - 35 + 1,
+		.priority = NF_IP_PRI_NAT_DST - 10 + 1,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
