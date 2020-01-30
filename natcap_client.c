@@ -3689,7 +3689,7 @@ static struct nf_hook_ops client_hooks[] = {
 		.hook = natcap_client_pre_in_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_CONNTRACK + 5,
+		.priority = NF_IP_PRI_MANGLE + 5,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -3698,7 +3698,7 @@ static struct nf_hook_ops client_hooks[] = {
 		.hook = natcap_client_pre_ct_in_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_CONNTRACK + 10,
+		.priority = NF_IP_PRI_MANGLE + 10,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -3707,7 +3707,7 @@ static struct nf_hook_ops client_hooks[] = {
 		.hook = natcap_client_pre_master_in_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_CONNTRACK + 10 + 1,
+		.priority = NF_IP_PRI_MANGLE + 10 + 1,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -3716,7 +3716,7 @@ static struct nf_hook_ops client_hooks[] = {
 		.hook = natcap_client_dnat_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_NAT_DST - 35,
+		.priority = NF_IP_PRI_NAT_DST - 10,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -3725,7 +3725,7 @@ static struct nf_hook_ops client_hooks[] = {
 		.hook = natcap_client_dnat_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_LOCAL_OUT,
-		.priority = NF_IP_PRI_NAT_DST - 35,
+		.priority = NF_IP_PRI_NAT_DST - 10,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
