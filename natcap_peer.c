@@ -3404,6 +3404,258 @@ static unsigned int natcap_peer_push_out_hook(void *priv,
 	return NF_STOLEN;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned int natcap_peer_dns_hook(unsigned int hooknum,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_peer_dns_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct net_device *in,
+		const struct net_device *out,
+		int (*okfn)(struct sk_buff *))
+{
+	unsigned int hooknum = ops->hooknum;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+static unsigned int natcap_peer_dns_hook(const struct nf_hook_ops *ops,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
+#else
+static unsigned int natcap_peer_dns_hook(void *priv,
+		struct sk_buff *skb,
+		const struct nf_hook_state *state)
+{
+	unsigned int hooknum = state->hook;
+	const struct net_device *in = state->in;
+	const struct net_device *out = state->out;
+#endif
+	struct net *net = &init_net;
+	struct iphdr *iph;
+	void *l4;
+
+	if (peer_stop)
+		return NF_ACCEPT;
+
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
+
+	iph = ip_hdr(skb);
+	if (iph->protocol != IPPROTO_UDP) {
+		return NF_ACCEPT;
+	}
+	l4 = (void *)iph + iph->ihl * 4;
+
+	if (UDPH(l4)->dest != __constant_htons(53)) {
+		return NF_ACCEPT;
+	}
+
+	if (!skb_make_writable(skb, skb->len)) {
+		return NF_ACCEPT;
+	}
+	iph = ip_hdr(skb);
+	l4 = (void *)iph + iph->ihl * 4;
+
+	do {
+		__be32 ip = 0;
+		unsigned short id = 0;
+		int i = 0, pos;
+		unsigned int v;
+		unsigned short flags;
+		unsigned short qd_count;
+		//unsigned short an_count;
+		//unsigned short ns_count;
+		//unsigned short ar_count;
+		struct sk_buff *nskb = NULL;
+
+		unsigned char *p = (unsigned char *)UDPH(l4) + sizeof(struct udphdr);
+		int len = skb->len - iph->ihl * 4 - sizeof(struct udphdr);
+
+		id = ntohs(get_byte2(p + 0));
+		flags = ntohs(get_byte2(p + 2));
+		qd_count = ntohs(get_byte2(p + 4));
+		//an_count = ntohs(get_byte2(p + 6));
+		//ns_count = ntohs(get_byte2(p + 8));
+		//ar_count = ntohs(get_byte2(p + 10));
+
+		pos = 12;
+		for(i = 0; i < qd_count; i++) {
+			unsigned char *an_p = NULL;
+			unsigned short qtype, qclass;
+			int qname_off = 0;
+			int qname_len = 0;
+			char qname[128];
+			int n;
+			unsigned int a, b, c, d, e, f;
+			unsigned char client_mac[ETH_ALEN];
+			struct nf_conntrack_tuple tuple;
+			struct nf_conntrack_tuple_hash *h;
+
+			ip = 0;
+			if (pos >= len) {
+				break;
+			}
+
+			if ((qname_len = get_rdata(p, len, pos, qname, 127)) >= 0) {
+				qname[qname_len] = 0;
+			}
+			if (qname_len <= 0) {
+				break;
+			}
+			qname_off = pos;
+
+			while (pos < len && ((v = get_byte1(p + pos)) != 0)) {
+				if (v > 0x3f) {
+					pos++;
+					break;
+				} else {
+					pos += v + 1;
+				}
+			}
+			pos++;
+
+			if (pos + 1 >= len) {
+				break;
+			}
+			qtype = ntohs(get_byte2(p + pos));
+			pos += 2;
+
+			if (pos + 1 >= len) {
+				break;
+			}
+			qclass = ntohs(get_byte2(p + pos));
+			pos += 2;
+
+			NATCAP_INFO("(PD)" DEBUG_UDP_FMT ": id=0x%04x, qtype=%d, qclass=%d, qname=%s\n", DEBUG_UDP_ARG(iph,l4), id, qtype, qclass, qname);
+
+			n = sscanf(qname, "%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
+			if (n != 6) {
+				break;
+			}
+			client_mac[0] = a;
+			client_mac[1] = b;
+			client_mac[2] = c;
+			client_mac[3] = d;
+			client_mac[4] = e;
+			client_mac[5] = f;
+
+			memset(&tuple, 0, sizeof(tuple));
+			tuple.src.u3.ip = get_byte4(client_mac);
+			tuple.src.u.udp.port = get_byte2(client_mac + 4);
+			tuple.dst.u3.ip = PEER_FAKEUSER_DADDR;
+			tuple.dst.u.udp.port = __constant_htons(65535);
+			tuple.src.l3num = PF_INET;
+			tuple.dst.protonum = IPPROTO_UDP;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+			h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
+			h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
+			if (h) {
+				struct user_expect *ue;
+				struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
+				if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_ORIGINAL) {
+					nf_ct_put(user);
+					break;
+				}
+
+				ue = peer_user_expect(user);
+				if (ue->ip == ue->local_ip) {
+					ip = ue->ip;
+				} else {
+					nf_ct_put(user);
+					break;
+				}
+				nf_ct_put(user);
+			}
+			if (ip == 0) {
+				break;
+			}
+
+			if (nskb == NULL) {
+				struct ethhdr *neth;
+				struct iphdr *niph;
+				struct udphdr *nudph;
+				int offset = sizeof(struct iphdr) + iph->ihl * 4 + 16 * qd_count - (skb_headlen(skb) + skb_tailroom(skb));
+				int add_len = offset < 0 ? 0 : offset;
+				offset += skb_tailroom(skb);
+				nskb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
+				if (!nskb) {
+					break;
+				}
+				nskb->tail += offset;
+				nskb->len += 16 * qd_count;
+
+				neth = eth_hdr(nskb);
+				niph = ip_hdr(nskb);
+				if (neth->h_proto == htons(ETH_P_IP) && (void *)neth != (void *)niph) {
+					memcpy(neth->h_dest, eth_hdr(skb)->h_source, ETH_ALEN);
+					memcpy(neth->h_source, eth_hdr(skb)->h_dest, ETH_ALEN);
+					//neth->h_proto = htons(ETH_P_IP);
+				}
+
+				niph->saddr = iph->daddr;
+				niph->daddr = iph->saddr;
+				niph->tot_len = htons(nskb->len);
+
+				nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
+				nudph->source = UDPH(l4)->dest;
+				nudph->dest = UDPH(l4)->source;
+				nudph->len = ntohs(nskb->len - niph->ihl * 4);
+				nudph->check = CSUM_MANGLED_0;
+
+				an_p = (unsigned char *)niph + nskb->len - 16 * qd_count;
+				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 2, htons(flags | 0x8080));
+				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6, htons(qd_count));
+				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 8, __constant_htons(0));
+				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 10, __constant_htons(0));
+			}
+			if (nskb == NULL || an_p == NULL) {
+				break;
+			}
+
+			set_byte2(an_p, htons(0xc000 | qname_off));
+			set_byte2(an_p + 2, __constant_htons(1));
+			set_byte2(an_p + 4, __constant_htons(1));
+			set_byte4(an_p + 6, __constant_htons(128));
+			set_byte2(an_p + 10, __constant_htons(4));
+			set_byte4(an_p + 12, ip); //ip
+
+			an_p += 16;
+			//set as
+		}
+
+		if (nskb == NULL) {
+			break;
+		}
+		if (i != qd_count || ip == 0) {
+			consume_skb(nskb);
+			break;
+		}
+
+		nskb->ip_summed = CHECKSUM_UNNECESSARY;
+		skb_rcsum_tcpudp(nskb);
+		nskb->dev = (struct net_device *)in;
+
+		skb_push(nskb, (char *)ip_hdr(nskb) - (char *)eth_hdr(nskb));
+		dev_queue_xmit(nskb);
+
+		consume_skb(skb);
+		//ct and post out
+		return NF_STOLEN;
+	} while (0);
+
+	return NF_ACCEPT;
+}
+
 
 static struct nf_hook_ops peer_hooks[] = {
 	{
@@ -3477,6 +3729,15 @@ static struct nf_hook_ops peer_hooks[] = {
 		.pf = PF_INET,
 		.hooknum = NF_INET_LOCAL_IN,
 		.priority = NF_IP_PRI_NAT_SRC - 10,
+	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
+		.hook = natcap_peer_dns_hook,
+		.pf = PF_INET,
+		.hooknum = NF_INET_LOCAL_IN,
+		.priority = NF_IP_PRI_NAT_SRC - 10 + 1,
 	},
 };
 
