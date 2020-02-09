@@ -3625,7 +3625,7 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 			set_byte2(an_p, htons(0xc000 | qname_off));
 			set_byte2(an_p + 2, __constant_htons(1));
 			set_byte2(an_p + 4, __constant_htons(1));
-			set_byte4(an_p + 6, __constant_htons(128));
+			set_byte4(an_p + 6, __constant_htonl(128));
 			set_byte2(an_p + 10, __constant_htons(4));
 			set_byte4(an_p + 12, ip); //ip
 
