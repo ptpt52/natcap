@@ -3641,6 +3641,15 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 			break;
 		}
 
+		if (len > pos) {
+			memmove((void *)ip_hdr(nskb) + ip_hdr(nskb)->ihl * 4 + sizeof(struct udphdr) + pos,
+					(void *)ip_hdr(nskb) + ip_hdr(nskb)->ihl * 4 + sizeof(struct udphdr) + len,
+					16 * qd_count);
+			nskb->len -= len - pos;
+			ip_hdr(nskb)->tot_len = htons(nskb->len);
+			UDPH((void *)ip_hdr(nskb) + ip_hdr(nskb)->ihl * 4)->len = ntohs(nskb->len - ip_hdr(nskb)->ihl * 4);
+		}
+
 		nskb->ip_summed = CHECKSUM_UNNECESSARY;
 		skb_rcsum_tcpudp(nskb);
 		nskb->dev = (struct net_device *)in;
