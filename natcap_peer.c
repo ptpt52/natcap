@@ -818,7 +818,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	return user;
 }
 
-static inline void natcap_peer_echo_request(const struct net_device *dev, struct sk_buff *oskb)
+static inline void natcap_peer_echo_request(const struct net_device *dev, struct sk_buff *oskb, unsigned char *client_mac)
 {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
@@ -829,7 +829,7 @@ static inline void natcap_peer_echo_request(const struct net_device *dev, struct
 	oeth = (struct ethhdr *)skb_mac_header(oskb);
 	oiph = ip_hdr(oskb);
 
-	offset = sizeof(struct iphdr) + sizeof(struct udphdr) + 8 - (skb_headlen(oskb) + skb_tailroom(oskb));
+	offset = sizeof(struct iphdr) + sizeof(struct udphdr) + 14 - (skb_headlen(oskb) + skb_tailroom(oskb));
 	add_len = offset < 0 ? 0 : offset;
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
@@ -838,7 +838,7 @@ static inline void natcap_peer_echo_request(const struct net_device *dev, struct
 		return;
 	}
 	nskb->tail += offset;
-	nskb->len = sizeof(struct iphdr) + sizeof(struct udphdr) + 8;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct udphdr) + 14;
 
 	neth = eth_hdr(nskb);
 	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
@@ -867,6 +867,7 @@ static inline void natcap_peer_echo_request(const struct net_device *dev, struct
 	l4 += sizeof(struct udphdr);
 	set_byte4(l4, __constant_htonl(NATCAP_A_MAGIC));
 	set_byte4(l4 + 4, __constant_htonl(0x00000001)); //PEER_ECHO_REQUEST
+	set_byte6(l4 + 8, client_mac);
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
@@ -890,7 +891,7 @@ static inline void natcap_peer_echo_reply(const struct net_device *dev, struct s
 	oiph = ip_hdr(oskb);
 	oudph = (struct udphdr *)((void *)oiph + oiph->ihl * 4);
 
-	offset = sizeof(struct iphdr) + sizeof(struct udphdr) + 8 - (skb_headlen(oskb) + skb_tailroom(oskb));
+	offset = sizeof(struct iphdr) + sizeof(struct udphdr) + 14 - (skb_headlen(oskb) + skb_tailroom(oskb));
 	add_len = offset < 0 ? 0 : offset;
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
@@ -899,7 +900,7 @@ static inline void natcap_peer_echo_reply(const struct net_device *dev, struct s
 		return;
 	}
 	nskb->tail += offset;
-	nskb->len = sizeof(struct iphdr) + sizeof(struct udphdr) + 8;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct udphdr) + 14;
 
 	neth = eth_hdr(nskb);
 	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
@@ -928,6 +929,9 @@ static inline void natcap_peer_echo_reply(const struct net_device *dev, struct s
 	l4 += sizeof(struct udphdr);
 	set_byte4(l4, __constant_htonl(NATCAP_A_MAGIC));
 	set_byte4(l4 + 4, __constant_htonl(0x00000002)); //PEER_ECHO_REPLY
+	if (oskb->len >= oiph->ihl * 4 + sizeof(struct udphdr) + 14) {
+		set_byte6(l4 + 8, (void *)oudph + sizeof(struct udphdr) + 8);
+	}
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
@@ -1808,6 +1812,43 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(0x00000002)) {
 				//get PEER_ECHO_REPLY
 				unsigned int i;
+				if (skb->len >= iph->ihl * 4 + sizeof(struct udphdr) + 14) {
+					unsigned char client_mac[ETH_ALEN];
+					struct nf_conntrack_tuple tuple;
+					struct nf_conntrack_tuple_hash *h;
+
+					if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct udphdr) + 14)) {
+						return NF_ACCEPT;
+					}
+					iph = ip_hdr(skb);
+					l4 = (void *)iph + iph->ihl * 4;
+
+					get_byte6(l4 + sizeof(struct udphdr) + 8, client_mac);
+
+					memset(&tuple, 0, sizeof(tuple));
+					tuple.src.u3.ip = get_byte4(client_mac);
+					tuple.src.u.udp.port = get_byte2(client_mac + 4);
+					tuple.dst.u3.ip = PEER_FAKEUSER_DADDR;
+					tuple.dst.u.udp.port = __constant_htons(65535);
+					tuple.src.l3num = PF_INET;
+					tuple.dst.protonum = IPPROTO_UDP;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+					h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
+					h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
+					if (h) {
+						struct user_expect *ue;
+						struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
+						if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_ORIGINAL) {
+							nf_ct_put(user);
+						} else {
+							ue = peer_user_expect(user);
+							short_set_bit(PEER_SUBTYPE_PUB_BIT, &ue->status);
+							nf_ct_put(user);
+						}
+					}
+				}
 				for (i = 0; i < PEER_PUB_NUM; i++) {
 					if (peer_pub_ip[i] == iph->saddr) {
 						peer_pub_active[i] = jiffies;
@@ -2413,7 +2454,7 @@ sni_out:
 			natcap_peer_pong_send(in, skb, ue->map_port, pt, (ue->status & PEER_SUBTYPE_SSYN));
 			if (tcpopt->header.opcode == TCPOPT_PEER_V2 && uintdiff(jiffies, ue->last_active_peer) >= 60 * HZ) {
 				ue->last_active_peer = jiffies;
-				natcap_peer_echo_request(in, skb);
+				natcap_peer_echo_request(in, skb, client_mac);
 			}
 			spin_unlock_bh(&ue->lock);
 		}
@@ -2617,7 +2658,7 @@ syn_out:
 			natcap_peer_pong_send(in, skb, ue->map_port, pt, (ue->status & PEER_SUBTYPE_SSYN));
 			if (tcpopt->header.opcode == TCPOPT_PEER_V2 && uintdiff(jiffies, ue->last_active_peer) >= 120 * HZ) {
 				ue->last_active_peer = jiffies;
-				natcap_peer_echo_request(in, skb);
+				natcap_peer_echo_request(in, skb, client_mac);
 			}
 			spin_unlock_bh(&ue->lock);
 		}
@@ -3568,7 +3609,7 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 				}
 
 				ue = peer_user_expect(user);
-				if (ue->ip == ue->local_ip) {
+				if (ue->ip == ue->local_ip || (ue->status & PEER_SUBTYPE_PUB)) {
 					ip = ue->ip;
 				} else {
 					nf_ct_put(user);

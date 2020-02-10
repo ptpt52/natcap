@@ -29,6 +29,8 @@ struct peer_server_node {
 #define PEER_SUBTYPE_SSYN (1 << PEER_SUBTYPE_SSYN_BIT)
 #define PEER_SUBTYPE_SYN_BIT 1
 #define PEER_SUBTYPE_SYN (1 << PEER_SUBTYPE_SYN_BIT)
+#define PEER_SUBTYPE_PUB_BIT 2
+#define PEER_SUBTYPE_PUB (1 << PEER_SUBTYPE_PUB_BIT)
 	unsigned short status;
 	__be32 ip;
 	__be16 map_port;
