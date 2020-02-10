@@ -1806,6 +1806,20 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			}
 			if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(0x00000001)) {
 				//get PEER_ECHO_REQUEST
+				if (skb->len >= iph->ihl * 4 + sizeof(struct udphdr) + 14) {
+					unsigned char client_mac[ETH_ALEN];
+					if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct udphdr) + 14)) {
+						return NF_ACCEPT;
+					}
+					iph = ip_hdr(skb);
+					l4 = (void *)iph + iph->ihl * 4;
+
+					get_byte6(l4 + sizeof(struct udphdr) + 8, client_mac);
+					if (memcmp(default_mac_addr, client_mac, ETH_ALEN) != 0) {
+						//target not me
+						return NF_ACCEPT;
+					}
+				}
 				natcap_peer_echo_reply(in, skb);
 				consume_skb(skb);
 				return NF_STOLEN;
