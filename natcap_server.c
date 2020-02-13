@@ -1575,6 +1575,11 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 		}
 
 		if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
+			/* XXX I just confirm it first  */
+			ret = nf_conntrack_confirm(skb);
+			if (ret != NF_ACCEPT) {
+				return ret;
+			}
 			natcap_udp_to_tcp_pack(skb, ns, 1);
 		}
 		return NF_ACCEPT;
