@@ -2369,6 +2369,13 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 				NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 
+				/* XXX I just confirm it first  */
+				/* confirm before post out */
+				ret = nf_conntrack_confirm(nskb);
+				if (ret != NF_ACCEPT) {
+					return ret;
+				}
+
 				if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
 					natcap_udp_to_tcp_pack(nskb, ns, 0);
 				}
@@ -2417,6 +2424,11 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		}
 
 		if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
+			/* XXX I just confirm it first  */
+			ret = nf_conntrack_confirm(skb);
+			if (ret != NF_ACCEPT) {
+				return ret;
+			}
 			natcap_udp_to_tcp_pack(skb, ns, 0);
 		}
 	}
@@ -3063,6 +3075,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 
 				if ((NS_NATCAP_TCPUDPENC & master_ns->n.status)) {
+					/* XXX I just confirm it first  */
+					/* master has been confirm */
 					natcap_udp_to_tcp_pack(nskb, master_ns, 0);
 				}
 
@@ -3118,6 +3132,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 
 		if ((NS_NATCAP_TCPUDPENC & master_ns->n.status)) {
+			/* XXX I just confirm it first  */
+			/* master has been confirm */
 			natcap_udp_to_tcp_pack(skb, master_ns, 0);
 		}
 
