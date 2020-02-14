@@ -280,7 +280,7 @@ static unsigned long jiffies_diff(unsigned long j1, unsigned long j2)
 	return (j1 > j2) ? (j1 - j2) : (j2 - j1);
 }
 
-#define MAX_NATCAP_SERVER 64
+#define MAX_NATCAP_SERVER 128
 struct natcap_server_info {
 	unsigned int active_index;
 	unsigned int server_count[2];
