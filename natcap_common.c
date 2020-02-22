@@ -1172,6 +1172,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 
 	new = __krealloc(old, alloc_size, gfp);
 	if (!new) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "__krealloc size=%u failed!\n", DEBUG_ARG_PREFIX, (unsigned int)alloc_size);
 		return -1;
 	}
 	memset((void *)new + newoff, 0, newlen - newoff);
