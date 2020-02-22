@@ -2235,6 +2235,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		do {
 			int offlen;
 			struct sk_buff *nskb = skb->next;
+			struct sk_buff *dup_skb = NULL;
 
 			if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 				consume_skb(skb);
@@ -2259,17 +2260,13 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 			if (ns->peer_ver == 1 && ns->peer_mark) {
 				unsigned int i, idx;
-				for (i = 0; i < MAX_PEER_NUM + 1; i++) {
-					idx = (i + ns->peer_idx) % (MAX_PEER_NUM + 1);
-					if (idx >= MAX_PEER_NUM) {
-						ns->peer_idx = (idx + 1) % (MAX_PEER_NUM + 1);
-						break;
-					}
+				for (i = 0; i < MAX_PEER_NUM; i++) {
+					idx = (i + ns->peer_idx) % MAX_PEER_NUM;
 					if (ns->peer_tuple3[idx].dip != 0 && short_test_bit(idx, &ns->peer_mark)) {
 						struct nf_conntrack_tuple tuple;
 						struct nf_conntrack_tuple_hash *h;
 
-						ns->peer_idx = (idx + 1) % (MAX_PEER_NUM + 1);
+						ns->peer_idx = (idx + 1) % MAX_PEER_NUM;
 
 						memset(&tuple, 0, sizeof(tuple));
 						tuple.src.u3.ip = iph->saddr;
@@ -2293,10 +2290,21 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 							short_clear_bit(idx, &ns->peer_mark);
 							break;
 						}
-						iph->daddr = ns->peer_tuple3[idx].dip;
-						UDPH(l4)->dest = ns->peer_tuple3[idx].dport;
-						UDPH(l4)->source = ns->peer_tuple3[idx].sport;
-						set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_8_MAGIC));
+
+						dup_skb = skb_copy(skb, GFP_ATOMIC);
+						if (dup_skb) {
+							iph = ip_hdr(dup_skb);
+							l4 = (void *)iph + iph->ihl * 4;
+
+							iph->daddr = ns->peer_tuple3[idx].dip;
+							UDPH(l4)->dest = ns->peer_tuple3[idx].dport;
+							UDPH(l4)->source = ns->peer_tuple3[idx].sport;
+							set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_8_MAGIC));
+
+							dup_skb->ip_summed = CHECKSUM_UNNECESSARY;
+							skb_rcsum_tcpudp(dup_skb);
+							flow_total_tx_bytes += dup_skb->len;
+						}
 						break;
 					}
 				}
@@ -2309,6 +2317,9 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 			flow_total_tx_bytes += skb->len;
 			NF_OKFN(skb);
+			if (dup_skb) {
+				NF_OKFN(dup_skb);
+			}
 
 			skb = nskb;
 		} while (skb);
