@@ -278,8 +278,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				dst.encryption = !!(f == 'e');
 				dst.tcp_encode = g == 'T' ? TCP_ENCODE : UDP_ENCODE;
 				dst.udp_encode = h == 'U' ? UDP_ENCODE : TCP_ENCODE;
-				if ((err = natcap_server_info_add(&dst)) == 0)
-				{
+				if ((err = natcap_server_info_add(&dst)) == 0) {
 					goto done;
 				}
 				NATCAP_println("natcap_server_add() failed ret=%d", err);
@@ -293,10 +292,12 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	} else if (strncmp(data, "delete", 6) == 0) {
 		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
 			unsigned int a, b, c, d, e;
-			char f;
-			n = sscanf(data, "delete %u.%u.%u.%u:%u-%c", &a, &b, &c, &d, &e, &f);
-			if ( (n == 6 && e <= 0xffff) &&
+			char f, g, h;
+			n = sscanf(data, "delete %u.%u.%u.%u:%u-%c-%c-%c", &a, &b, &c, &d, &e, &f, &g, &h);
+			if ( (n == 8 && e <= 0xffff) &&
 					(f == 'e' || f == 'o') &&
+					(g == 'T' || g == 'U') &&
+					(h == 'U' || h == 'T') &&
 					(((a & 0xff) == a) &&
 					 ((b & 0xff) == b) &&
 					 ((c & 0xff) == c) &&
@@ -304,8 +305,11 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 				dst.port = htons(e);
 				dst.encryption = !!(f == 'e');
-				if ((err = natcap_server_info_delete(&dst)) == 0)
+				dst.tcp_encode = g == 'T' ? TCP_ENCODE : UDP_ENCODE;
+				dst.udp_encode = h == 'U' ? UDP_ENCODE : TCP_ENCODE;
+				if ((err = natcap_server_info_delete(&dst)) == 0) {
 					goto done;
+				}
 				NATCAP_println("natcap_server_delete() failed ret=%d", err);
 			}
 		}
