@@ -1185,9 +1185,11 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
 		kfree_rcu(old, rcu);
 		ct->ext = new;
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0)
 		kfree_rcu(old, rcu);
 		rcu_assign_pointer(ct->ext, new);
+#else
+		ct->ext = new;
 #endif
 	}
 

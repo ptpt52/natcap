@@ -608,8 +608,15 @@ struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be16 spor
 		}
 
 		if (user->ext != new) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
+			kfree_rcu(user->ext, rcu);
+			user->ext = new;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0)
 			kfree_rcu(user->ext, rcu);
 			rcu_assign_pointer(user->ext, new);
+#else
+			user->ext = new;
+#endif
 		}
 		new->len = newoff;
 		memset((void *)new + newoff, 0, sizeof(struct fakeuser_expect));
@@ -718,8 +725,15 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 		}
 
 		if (user->ext != new) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
+			kfree_rcu(user->ext, rcu);
+			user->ext = new;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0)
 			kfree_rcu(user->ext, rcu);
 			rcu_assign_pointer(user->ext, new);
+#else
+			user->ext = new;
+#endif
 		}
 		new->len = newoff;
 		memset((void *)new + newoff, 0, sizeof(struct user_expect));
