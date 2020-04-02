@@ -80,7 +80,7 @@ struct peer_tuple {
 	__be16 dport;
 	unsigned short mss;
 	unsigned char connected:7,
-	              sni_ban:1;
+	         sni_ban:1;
 #define PT_MODE_TCP 0
 #define PT_MODE_UDP 1
 	unsigned char mode;
@@ -110,25 +110,25 @@ static inline struct natcap_TCPOPT *natcap_peer_decode_header(struct tcphdr *tcp
 
 	opt = (struct natcap_TCPOPT *)((void *)tcph + sizeof(struct tcphdr));
 	if (
-			!(
-				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int)) &&
-				 (opt->header.opcode == TCPOPT_PEER || opt->header.opcode == TCPOPT_PEER_V2) &&
-				 (opt->header.subtype == SUBTYPE_PEER_SYN ||
-				  opt->header.subtype == SUBTYPE_PEER_SSYN ||
-				  opt->header.subtype == SUBTYPE_PEER_SYNACK ||
-				  opt->header.subtype == SUBTYPE_PEER_ACK ||
-				  opt->header.subtype == SUBTYPE_PEER_FSYNACK) &&
-				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int))) ||
-				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)) &&
-				 (opt->header.opcode == TCPOPT_PEER || opt->header.opcode == TCPOPT_PEER_V2) &&
-				 (opt->header.subtype == SUBTYPE_PEER_FSYN || opt->header.subtype == SUBTYPE_PEER_FACK) &&
-				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int))) ||
-				(tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int)) &&
-				 (opt->header.opcode == TCPOPT_PEER || opt->header.opcode == TCPOPT_PEER_V2) &&
-				 opt->header.subtype == SUBTYPE_PEER_XSYN &&
-				 opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int)))
-			 )
-	   )
+	    !(
+	        (tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int)) &&
+	         (opt->header.opcode == TCPOPT_PEER || opt->header.opcode == TCPOPT_PEER_V2) &&
+	         (opt->header.subtype == SUBTYPE_PEER_SYN ||
+	          opt->header.subtype == SUBTYPE_PEER_SSYN ||
+	          opt->header.subtype == SUBTYPE_PEER_SYNACK ||
+	          opt->header.subtype == SUBTYPE_PEER_ACK ||
+	          opt->header.subtype == SUBTYPE_PEER_FSYNACK) &&
+	         opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int))) ||
+	        (tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)) &&
+	         (opt->header.opcode == TCPOPT_PEER || opt->header.opcode == TCPOPT_PEER_V2) &&
+	         (opt->header.subtype == SUBTYPE_PEER_FSYN || opt->header.subtype == SUBTYPE_PEER_FACK) &&
+	         opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int))) ||
+	        (tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int)) &&
+	         (opt->header.opcode == TCPOPT_PEER || opt->header.opcode == TCPOPT_PEER_V2) &&
+	         opt->header.subtype == SUBTYPE_PEER_XSYN &&
+	         opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_dst), sizeof(unsigned int)))
+	    )
+	)
 	{
 		return NULL;
 	}

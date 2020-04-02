@@ -183,7 +183,7 @@ static remote_t *connect_to_remote(EV_P_ struct addrinfo *res, struct sockaddr *
 		getifaddrs(&ifaddr);
 		for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
 			if (ifa->ifa_addr && ifa->ifa_name && AF_INET == ifa->ifa_addr->sa_family &&
-					((struct sockaddr_in *)ifa->ifa_addr)->sin_addr.s_addr == ((struct sockaddr_in *)bind_addr)->sin_addr.s_addr) {
+			        ((struct sockaddr_in *)ifa->ifa_addr)->sin_addr.s_addr == ((struct sockaddr_in *)bind_addr)->sin_addr.s_addr) {
 				//bind ifname
 				struct ifreq ifr;
 				memset(&ifr, 0, sizeof(ifr));
@@ -231,8 +231,8 @@ static remote_t *connect_to_remote(EV_P_ struct addrinfo *res, struct sockaddr *
 #ifdef NATCAP_CLIENT_MODE
 static int getdestaddr(int fd, struct sockaddr_storage *destaddr)
 {
-    socklen_t socklen = sizeof(*destaddr);
-    int error = 0;
+	socklen_t socklen = sizeof(*destaddr);
+	int error = 0;
 
 	error = getsockopt(fd, SOL_IP, SO_ORIGINAL_DST, destaddr, &socklen);
 	if (error) {
@@ -255,8 +255,8 @@ static int getdestaddr(int fd, struct sockaddr_storage *destaddr)
 
 static int get_original_destaddr(int fd, struct sockaddr_storage *destaddr)
 {
-    socklen_t socklen = sizeof(*destaddr);
-    int error = 0;
+	socklen_t socklen = sizeof(*destaddr);
+	int error = 0;
 
 	error = getsockopt(fd, SOL_IP, SO_ORIGINAL_DST, destaddr, &socklen);
 	if (error) {
@@ -784,32 +784,32 @@ int main(int argc, char **argv)
 	while ((c = getopt_long(argc, argv, "s:l:It:hv", NULL, NULL)) != -1) {
 #endif
 		switch (c) {
-			case 's':
-				if (server_num < MAX_REMOTE_NUM) {
-					server_host[server_num++] = optarg;
-				}
-				break;
-			case 'l':
-				server_port = optarg;
-				break;
+		case 's':
+			if (server_num < MAX_REMOTE_NUM) {
+				server_host[server_num++] = optarg;
+			}
+			break;
+		case 'l':
+			server_port = optarg;
+			break;
 #ifndef NATCAP_CLIENT_MODE
-			case 'I':
-				ito = 1;
-				break;
+		case 'I':
+			ito = 1;
+			break;
 #endif
-			case 't':
-				timeout = optarg;
-				break;
-			case 'v':
-				verbose = 1;
-				break;
-			case 'h':
-				usage();
-				exit(EXIT_SUCCESS);
-			case '?':
-				// The option character is not recognized.
-				opterr = 1;
-				break;
+		case 't':
+			timeout = optarg;
+			break;
+		case 'v':
+			verbose = 1;
+			break;
+		case 'h':
+			usage();
+			exit(EXIT_SUCCESS);
+		case '?':
+			// The option character is not recognized.
+			opterr = 1;
+			break;
 		}
 	}
 

@@ -88,22 +88,22 @@ void dns_server_node_clean(void)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 static inline int natcap_auth(const struct nf_hook_state *state,
-		const struct net_device *in,
-		const struct net_device *out,
-		struct sk_buff *skb,
-		struct nf_conn *ct,
-		struct natcap_session *ns,
-		const struct natcap_TCPOPT *tcpopt,
-		struct tuple *server)
+                              const struct net_device *in,
+                              const struct net_device *out,
+                              struct sk_buff *skb,
+                              struct nf_conn *ct,
+                              struct natcap_session *ns,
+                              const struct natcap_TCPOPT *tcpopt,
+                              struct tuple *server)
 #define NATCAP_AUTH(state, in, out, skb, ct, ns, tcpopt, server) natcap_auth(state, in, out, skb, ct, ns, tcpopt, server)
 #else
 static inline int natcap_auth(const struct net_device *in,
-		const struct net_device *out,
-		struct sk_buff *skb,
-		struct nf_conn *ct,
-		struct natcap_session *ns,
-		const struct natcap_TCPOPT *tcpopt,
-		struct tuple *server)
+                              const struct net_device *out,
+                              struct sk_buff *skb,
+                              struct nf_conn *ct,
+                              struct natcap_session *ns,
+                              const struct natcap_TCPOPT *tcpopt,
+                              struct tuple *server)
 #define NATCAP_AUTH(state, in, out, skb, ct, ns, tcpopt, server) natcap_auth(in, out, skb, ct, ns, tcpopt, server)
 #endif
 {
@@ -134,17 +134,17 @@ static inline int natcap_auth(const struct net_device *in,
 				ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
 			if (ret <= 0) {
 				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed\n",
-						__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
-						tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
-						tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
-						ntohl(tcpopt->all.data.u_hash));
+				            __FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
+				            tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
+				            tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
+				            ntohl(tcpopt->all.data.u_hash));
 				return E_NATCAP_AUTH_FAIL;
 			}
 			NATCAP_DEBUG("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth ok\n",
-					__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
-					tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
-					tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
-					ntohl(tcpopt->all.data.u_hash));
+			             __FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
+			             tcpopt->all.data.mac_addr[0], tcpopt->all.data.mac_addr[1], tcpopt->all.data.mac_addr[2],
+			             tcpopt->all.data.mac_addr[3], tcpopt->all.data.mac_addr[4], tcpopt->all.data.mac_addr[5],
+			             ntohl(tcpopt->all.data.u_hash));
 		}
 		ns->n.u_hash = ntohl(tcpopt->all.data.u_hash);
 	} else if (NATCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_USER) {
@@ -161,17 +161,17 @@ static inline int natcap_auth(const struct net_device *in,
 				ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
 			if (ret <= 0) {
 				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed\n",
-						__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
-						tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
-						tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
-						ntohl(tcpopt->user.data.u_hash));
+				            __FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
+				            tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
+				            tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
+				            ntohl(tcpopt->user.data.u_hash));
 				return E_NATCAP_AUTH_FAIL;
 			}
 			NATCAP_DEBUG("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth ok\n",
-					__FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
-					tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
-					tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
-					ntohl(tcpopt->user.data.u_hash));
+			             __FUNCTION__, DEBUG_ARG_TCP(iph,tcph),
+			             tcpopt->user.data.mac_addr[0], tcpopt->user.data.mac_addr[1], tcpopt->user.data.mac_addr[2],
+			             tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
+			             ntohl(tcpopt->user.data.u_hash));
 		}
 	} else if (NATCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_DST) {
 		if (server) {
@@ -563,20 +563,20 @@ char *auth_http_redirect_url = NULL;
 static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_buff *skb, struct nf_conn *ct)
 {
 	const char *http_header_fmt = ""
-		"HTTP/1.1 302 Moved Temporarily\r\n"
-		"Connection: close\r\n"
-		"Cache-Control: no-cache\r\n"
-		"Content-Type: text/html; charset=UTF-8\r\n"
-		"Location: %s\r\n"
-		"Content-Length: %u\r\n"
-		"\r\n";
+	                              "HTTP/1.1 302 Moved Temporarily\r\n"
+	                              "Connection: close\r\n"
+	                              "Cache-Control: no-cache\r\n"
+	                              "Content-Type: text/html; charset=UTF-8\r\n"
+	                              "Location: %s\r\n"
+	                              "Content-Length: %u\r\n"
+	                              "\r\n";
 	const char *http_data_fmt = ""
-		"<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\r\n"
-		"<TITLE>302 Moved</TITLE></HEAD><BODY>\r\n"
-		"<H1>302 Moved</H1>\r\n"
-		"The document has moved\r\n"
-		"<A HREF=\"%s\">here</A>.\r\n"
-		"</BODY></HTML>\r\n";
+	                            "<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\r\n"
+	                            "<TITLE>302 Moved</TITLE></HEAD><BODY>\r\n"
+	                            "<H1>302 Moved</H1>\r\n"
+	                            "The document has moved\r\n"
+	                            "<A HREF=\"%s\">here</A>.\r\n"
+	                            "</BODY></HTML>\r\n";
 	int n = 0;
 	struct {
 		char location[128];
@@ -665,7 +665,7 @@ static inline unsigned int natcap_try_http_redirect(struct iphdr *iph, struct sk
 	data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
 	data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
 	if ((data_len > 4 && strncasecmp(data, "GET ", 4) == 0) ||
-			(data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
+	        (data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
 		short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
 		natcap_auth_http_302(in, skb, ct);
 		natcap_auth_tcp_to_rst(skb);
@@ -756,28 +756,28 @@ static inline void natcap_confusion_tcp_reply_ack(const struct net_device *dev, 
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_server_forward_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_server_forward_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_server_forward_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	const struct net_device *in = state->in;
 #else
 static unsigned int natcap_server_forward_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	const struct net_device *in = state->in;
 #endif
@@ -838,31 +838,31 @@ static unsigned int natcap_server_forward_hook(void *priv,
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_server_pre_ct_test_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_server_pre_ct_test_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	//unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_server_pre_ct_test_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	//unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #else
 static unsigned int natcap_server_pre_ct_test_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	//unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
@@ -935,8 +935,8 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 
 			if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_E_MAGIC) ||
-					(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC) &&
-					 skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
+			        (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC) &&
+			         skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
 				iph = ip_hdr(skb);
 				l4 = (void *)iph + iph->ihl * 4;
 
@@ -957,31 +957,31 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_server_pre_ct_in_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_server_pre_ct_in_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_server_pre_ct_in_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_server_pre_ct_in_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
@@ -1083,7 +1083,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
-			
+
 			tcpopt.header.encryption = 0;
 			ret = natcap_tcp_decode(ct, skb, &tcpopt, IP_CT_DIR_ORIGINAL);
 			if (ret != 0) {
@@ -1124,7 +1124,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 			if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
 				NATCAP_INFO("(SPCI)" DEBUG_TCP_FMT ": new connection, after decode target=" TUPLE_FMT " u_hash=0x%08x(%u)\n",
-						DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server), ns->n.u_hash, ns->n.u_hash);
+				            DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server), ns->n.u_hash, ns->n.u_hash);
 
 				if (server.encryption) {
 					short_set_bit(NS_NATCAP_ENC_BIT, &ns->n.status);
@@ -1179,8 +1179,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 
 			if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_E_MAGIC) ||
-					(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC) &&
-					 skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
+			        (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC) &&
+			         skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
 				int off = 12;
 				iph = ip_hdr(skb);
 				l4 = (void *)iph + iph->ihl * 4;
@@ -1227,7 +1227,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 						dns_server_node_random_select(&server.ip);
 					}
 					NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT " u_hash=0x%08x(%u)\n",
-							DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server), ns->n.u_hash, ns->n.u_hash);
+					            DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server), ns->n.u_hash, ns->n.u_hash);
 					if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 						NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, target=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
 						set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -1294,31 +1294,31 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 //PREROUTING->*POSTROUTING*
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_server_post_out_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_server_post_out_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_server_post_out_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_server_post_out_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
@@ -1388,8 +1388,8 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			}
 		} else if (iph->protocol == IPPROTO_UDP) {
 			if ((get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_E_MAGIC) ||
-						get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC)) &&
-					NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TYPE1) {
+			        get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC)) &&
+			        NATCAP_UDP_GET_TYPE(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TYPE1) {
 				ret = nf_conntrack_confirm(skb);
 				if (ret != NF_ACCEPT) {
 					return ret;
@@ -1602,25 +1602,25 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 /*XXX this function works exactly the same as natcap_client_pre_in_hook() */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_server_pre_in_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	u_int8_t pf = PF_INET;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_server_pre_in_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	u_int8_t pf = ops->pf;
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_server_pre_in_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -1628,8 +1628,8 @@ static unsigned int natcap_server_pre_in_hook(const struct nf_hook_ops *ops,
 	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_server_pre_in_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -1926,7 +1926,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 										ns->peer_tuple3[j].dport = prandom_u32() % (65536 - 1024) + 1024;
 										ns->peer_tuple3[j].sport = prandom_u32() % (65536 - 1024) + 1024;
 										NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer%px select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
-												ntohs(ns->peer_tuple3[j].sport), &ns->peer_tuple3[j].dip, ntohs(ns->peer_tuple3[j].dport), j);
+										             ntohs(ns->peer_tuple3[j].sport), &ns->peer_tuple3[j].dip, ntohs(ns->peer_tuple3[j].dport), j);
 										break;
 									}
 						}
@@ -1992,11 +1992,11 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						ct->master = master->master;
 						ct = ct->master;
 						NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": BIND=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n", DEBUG_UDP_ARG(iph,l4), i,
-								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-								&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-								&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
-								);
+						             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+						             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+						             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+						             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
+						            );
 					}
 
 					skb_nfct_reset(nskb);
@@ -2079,11 +2079,11 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						ns->peer_tuple3[i].sport = UDPH(l4)->dest;
 						ns->peer_cnt++;
 						NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4), i,
-								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-								&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-								&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
-								ns->peer_mark);
+						            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+						            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+						            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+						            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+						            ns->peer_mark);
 					}
 
 					if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
@@ -2159,14 +2159,14 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			i = get_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2);
 			i = ntohs(i) % MAX_PEER_NUM;
 			if (!short_test_bit(i, &ns->peer_mark) &&
-					ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
+			        ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
 				short_set_bit(i, &ns->peer_mark);
 				NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4), i,
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
-						ns->peer_mark);
+				            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+				            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+				            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+				            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+				            ns->peer_mark);
 			}
 
 			/* XXX I just confirm it first  */
@@ -2229,7 +2229,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		if (ns->peer_mark != 0xff)
 			for (i = 0; i < MAX_PEER_NUM; i++)
 				if (!short_test_bit(i, &ns->peer_mark) &&
-						ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
+				        ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
 					short_set_bit(i, &ns->peer_mark);
 					break;
 				}
@@ -2273,10 +2273,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		}
 
 		NATCAP_DEBUG("(SPI)" DEBUG_TCP_FMT ": peer pass up: after ct=[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n", DEBUG_TCP_ARG(iph,l4),
-				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-				&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-				&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all));
+		             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+		             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+		             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+		             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all));
 
 		return NF_ACCEPT;
 	} else if (master->master || (IPS_NATCAP_CFM & master->status)) {
@@ -2372,7 +2372,7 @@ static int get_natcap_dst(struct sock *sk, int optval, void __user *user, int *l
 
 	if ((unsigned int) *len < sizeof(struct sockaddr_in)) {
 		NATCAP_DEBUG("SO_NATCAP_DST: len %d not %Zu\n",
-				*len, sizeof(struct sockaddr_in));
+		             *len, sizeof(struct sockaddr_in));
 		return -EINVAL;
 	}
 
@@ -2403,8 +2403,8 @@ static int get_natcap_dst(struct sock *sk, int optval, void __user *user, int *l
 		nf_ct_put(ct);
 	}
 	NATCAP_DEBUG("SO_NATCAP_DST: Can't find %pI4/%u-%pI4/%u.\n",
-			&tuple.src.u3.ip, ntohs(tuple.src.u.tcp.port),
-			&tuple.dst.u3.ip, ntohs(tuple.dst.u.tcp.port));
+	             &tuple.src.u3.ip, ntohs(tuple.src.u.tcp.port),
+	             &tuple.dst.u3.ip, ntohs(tuple.dst.u.tcp.port));
 	return -ENOENT;
 }
 

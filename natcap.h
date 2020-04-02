@@ -76,10 +76,10 @@ struct natcap_TCPOPT_header {
 	u8 type;
 #if defined(__LITTLE_ENDIAN_BITFIELD)
 	u8 encryption:1,
-	   subtype:7;
+	subtype:7;
 #elif defined(__BIG_ENDIAN_BITFIELD)
 	u8 subtype:7,
-	   encryption:1;
+	encryption:1;
 #else
 #error	"Adjust your <asm/byteorder.h> defines"
 #endif
@@ -165,8 +165,8 @@ struct cone_snat_session {
 
 struct tuple {
 	u16 encryption:8,
-		tcp_encode:4,
-		udp_encode:4;
+	    tcp_encode:4,
+	    udp_encode:4;
 	__be16 port;
 	__be32 ip;
 };
@@ -243,9 +243,9 @@ struct natcap_session {
 	unsigned int peer_jiffies;
 	unsigned short peer_mark;
 	unsigned char peer_ver:1,
-				  peer_idx:7;
+	         peer_idx:7;
 	unsigned char peer_cnt:5,
-				  peer_req_cnt:3;
+	         peer_req_cnt:3;
 	struct tuple3 peer_tuple3[MAX_PEER_NUM];
 };
 
@@ -293,10 +293,10 @@ static inline int tuple_lt(const struct tuple *t1, const struct tuple *t2)
 static inline int tuple_eq(const struct tuple *t1, const struct tuple *t2)
 {
 	return (t1->ip == t2->ip &&
-			t1->port == t2->port &&
-			t1->encryption == t2->encryption &&
-			t1->tcp_encode == t2->tcp_encode &&
-			t1->udp_encode == t2->udp_encode);
+	        t1->port == t2->port &&
+	        t1->encryption == t2->encryption &&
+	        t1->tcp_encode == t2->tcp_encode &&
+	        t1->udp_encode == t2->udp_encode);
 }
 
 static inline void tuple_copy(struct tuple *to, const struct tuple *from)

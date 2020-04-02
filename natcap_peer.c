@@ -130,7 +130,7 @@ static inline void peer_cache_cleaner(void)
 	unsigned short i;
 	struct natcap_session *ns;
 	if (peer_cache[peer_cache_next_to_clean].user != NULL &&
-			!time_after(jiffies, peer_cache[peer_cache_next_to_clean].jiffies + PEER_CACHE_TIMEOUT * HZ))
+	        !time_after(jiffies, peer_cache[peer_cache_next_to_clean].jiffies + PEER_CACHE_TIMEOUT * HZ))
 		return;
 	spin_lock_bh(&peer_cache_lock);
 	i = peer_cache_next_to_clean;
@@ -309,9 +309,9 @@ static void peer_timer_flush(struct timer_list *ignore)
 				set_byte4(client_mac, get_byte4((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip));
 				set_byte2(client_mac + 4, get_byte2((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all));
 				NATCAP_INFO(DEBUG_FMT_PREFIX "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] timeout drop\n", DEBUG_ARG_PREFIX,
-						client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-						&ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
-						);
+				            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+				            &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
+				           );
 				peer_port_map[flush_idx] = NULL;
 				nf_ct_put(user);
 				j++;
@@ -330,9 +330,9 @@ static void peer_timer_flush(struct timer_list *ignore)
 				struct fakeuser_expect *fue = peer_fakeuser_expect(user);
 				if (after(jiffies, fue->last_active + peer_conn_timeout * HZ)) {
 					NATCAP_INFO(DEBUG_FMT_PREFIX "conn[%u:%u] @N[[%pI4:%u] [AS %ds] timeout drop\n", DEBUG_ARG_PREFIX,
-							ntohs(peer_fakeuser_sport(user)), ntohs(peer_fakeuser_dport(user)),
-							&ps->ip, ntohs(ps->map_port), fue->last_active != 0 ?(uintdiff(fue->last_active, jiffies) + HZ / 2) / HZ : (-1)
-							);
+					            ntohs(peer_fakeuser_sport(user)), ntohs(peer_fakeuser_dport(user)),
+					            &ps->ip, ntohs(ps->map_port), fue->last_active != 0 ?(uintdiff(fue->last_active, jiffies) + HZ / 2) / HZ : (-1)
+					           );
 					peer_server[i].port_map[j] = NULL;
 					nf_ct_put(user);
 				}
@@ -486,7 +486,7 @@ struct peer_server_node *peer_server_node_in(__be32 ip, unsigned short conn, int
 init_out:
 		if (ps->ip != 0) {
 			NATCAP_WARN(DEBUG_FMT_PREFIX "drop the old server %pI4 map_port=%u replace new=%pI4\n",
-					DEBUG_ARG_PREFIX, &ps->ip, ntohs(ps->map_port), &ip);
+			            DEBUG_ARG_PREFIX, &ps->ip, ntohs(ps->map_port), &ip);
 		}
 		for (i = 0; i < MAX_PEER_CONN; i++) {
 			if (ps->port_map[i] != NULL) {
@@ -522,12 +522,12 @@ static inline struct sk_buff *uskb_of_this_cpu(unsigned int id)
 void natcap_user_timeout_touch(struct nf_conn *ct, unsigned long timeout)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
-		unsigned long newtimeout = jiffies + timeout * HZ;
-		if (newtimeout - ct->timeout.expires > HZ) {
-			mod_timer_pending(&ct->timeout, newtimeout);
-		}
+	unsigned long newtimeout = jiffies + timeout * HZ;
+	if (newtimeout - ct->timeout.expires > HZ) {
+		mod_timer_pending(&ct->timeout, newtimeout);
+	}
 #else
-		ct->timeout = jiffies + timeout * HZ;
+	ct->timeout = jiffies + timeout * HZ;
 #endif
 }
 
@@ -701,15 +701,15 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 
 	if (!user) {
 		NATCAP_ERROR("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] failed\n",
-				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-				&saddr, ntohs(sport), &daddr, ntohs(dport));
+		             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+		             &saddr, ntohs(sport), &daddr, ntohs(dport));
 		return NULL;
 	}
 
 	if (!user->ext) {
 		NATCAP_ERROR("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] failed, user->ext is NULL\n",
-				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-				&saddr, ntohs(sport), &daddr, ntohs(dport));
+		             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+		             &saddr, ntohs(sport), &daddr, ntohs(dport));
 		skb_nfct_reset(uskb);
 		return NULL;
 	}
@@ -718,8 +718,8 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 		new = krealloc(user->ext, newoff + sizeof(struct user_expect), GFP_ATOMIC);
 		if (!new) {
 			NATCAP_ERROR("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] failed, realloc user->ext failed\n",
-					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-					&saddr, ntohs(sport), &daddr, ntohs(dport));
+			             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+			             &saddr, ntohs(sport), &daddr, ntohs(dport));
 			skb_nfct_reset(uskb);
 			return NULL;
 		}
@@ -774,8 +774,8 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 
 		if (user != peer_port_map[ntohs(ue->map_port)]) {
 			NATCAP_WARN("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] alloc map_port fail\n",
-					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-					&saddr, ntohs(sport), &daddr, ntohs(dport));
+			            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+			            &saddr, ntohs(sport), &daddr, ntohs(dport));
 			nf_ct_put(user);
 			return NULL;
 		}
@@ -810,9 +810,9 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 		if (pt) {
 			spin_lock_bh(&ue->lock);
 			NATCAP_INFO("user [%02x:%02x:%02x:%02x:%02x:%02x] @map_port=%u use new-ct[%pI4:%u->%pI4:%u] replace old-ct[%pI4:%u->%pI4:%u] time=%u,%u\n",
-					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-					ntohs(ue->map_port), &saddr, ntohs(sport), &daddr, ntohs(dport),
-					&pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport), pt->last_active, (unsigned int)last_jiffies);
+			            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+			            ntohs(ue->map_port), &saddr, ntohs(sport), &daddr, ntohs(dport),
+			            &pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport), pt->last_active, (unsigned int)last_jiffies);
 			pt->sip = saddr;
 			pt->dip = daddr;
 			pt->sport = sport;
@@ -1288,7 +1288,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		if (ops != NULL) {
 			tcpopt->header.subtype = SUBTYPE_PEER_ACK;
 		} else if ((ps->status & PEER_SUBTYPE_SSYN) ||
-				(!(ps->status & PEER_SUBTYPE_SYN) && after(jiffies, fue->last_active + 64 * HZ))) {
+		           (!(ps->status & PEER_SUBTYPE_SYN) && after(jiffies, fue->last_active + 64 * HZ))) {
 			//XXX auto switch to SSYN mode if fue no active for more than 64s
 			if (!(ps->status & PEER_SUBTYPE_SSYN)) short_set_bit(PEER_SUBTYPE_SSYN_BIT, &ps->status);
 			tcpopt->header.subtype = SUBTYPE_PEER_SSYN;
@@ -1316,7 +1316,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		nf_ct_put(user);
 		spin_unlock_bh(&ps->lock);
 		NATCAP_INFO(DEBUG_FMT_PREFIX DEBUG_FMT_TCP ": %s\n", DEBUG_ARG_PREFIX, DEBUG_ARG_TCP(niph,ntcph),
-				ntcph->syn ? "sent ping(syn) SYN out" : "sent ping(ack) ACK out");
+		            ntcph->syn ? "sent ping(syn) SYN out" : "sent ping(ack) ACK out");
 		dev_queue_xmit(nskb);
 		return NULL;
 	} else if (fue->rt_out.outdev) {
@@ -1327,7 +1327,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		nf_ct_put(user);
 		spin_unlock_bh(&ps->lock);
 		NATCAP_INFO(DEBUG_FMT_PREFIX DEBUG_FMT_TCP ": %s\n", DEBUG_ARG_PREFIX, DEBUG_ARG_TCP(niph,ntcph),
-				ntcph->syn ? "sent ping(syn) SYN out" : "sent ping(ack) ACK out");
+		            ntcph->syn ? "sent ping(syn) SYN out" : "sent ping(ack) ACK out");
 		dev_queue_xmit(nskb);
 		return NULL;
 	}
@@ -1483,9 +1483,11 @@ unsigned char *tls_sni_search(unsigned char *data, int *data_len)
 	if (p[i + 0] != 0x16) {//Content Type NOT HandShake
 		return NULL;
 	}
-	i += 1 + 2; if (i >= p_len) return NULL;
+	i += 1 + 2;
+	if (i >= p_len) return NULL;
 	len = ntohs(get_byte2(p + i + 0)); //content_len
-	i += 2; if (i >= p_len) return NULL;
+	i += 2;
+	if (i >= p_len) return NULL;
 	if (i + len > p_len) return NULL;
 
 	p = p + i;
@@ -1495,19 +1497,25 @@ unsigned char *tls_sni_search(unsigned char *data, int *data_len)
 	if (p[i + 0] != 0x01) { //HanShake Type NOT Client Hello
 		return NULL;
 	}
-	i += 1; if (i >= p_len) return NULL;
+	i += 1;
+	if (i >= p_len) return NULL;
 	len = (p[i + 0] << 8) + ntohs(get_byte2(p + i + 0 + 1)); //hanshake_len
-	i += 1 + 2; if (i >= p_len) return NULL;
+	i += 1 + 2;
+	if (i >= p_len) return NULL;
 	if (i + len > p_len) return NULL;
 
 	p = p + i;
 	p_len = len;
 	i = 0;
 
-	i += 2 + 32; if (i >= p_len) return NULL; //tls_v, random
-	i += 1 + p[i + 0]; if (i >= p_len) return NULL; //session id
-	i += 2 + ntohs(get_byte2(p + i + 0)); if (i >= p_len) return NULL; //Cipher Suites
-	i += 1 + p[i + 0]; if (i >= p_len) return NULL; //Compression Methods
+	i += 2 + 32;
+	if (i >= p_len) return NULL; //tls_v, random
+	i += 1 + p[i + 0];
+	if (i >= p_len) return NULL; //session id
+	i += 2 + ntohs(get_byte2(p + i + 0));
+	if (i >= p_len) return NULL; //Cipher Suites
+	i += 1 + p[i + 0];
+	if (i >= p_len) return NULL; //Compression Methods
 
 	len = ntohs(get_byte2(p + i + 0)); //ext_len
 	i += 2;
@@ -1558,7 +1566,7 @@ unsigned char *tls_sni_search(unsigned char *data, int *data_len)
 }
 
 static inline void sni_ack_pass_back(struct sk_buff *oskb, struct sk_buff *cache_skb,
-		struct nf_conn *ct, struct natcap_session *ns, const struct net_device *dev)
+                                     struct nf_conn *ct, struct natcap_session *ns, const struct net_device *dev)
 {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
@@ -1658,7 +1666,7 @@ static inline void sni_ack_pass_back(struct sk_buff *oskb, struct sk_buff *cache
 
 
 static inline void sni_cache_skb_pass_back(struct sk_buff *oskb, struct sk_buff *cache_skb,
-		struct nf_conn *ct, struct natcap_session *ns, const struct net_device *dev, enum ip_conntrack_info ctinfo)
+        struct nf_conn *ct, struct natcap_session *ns, const struct net_device *dev, enum ip_conntrack_info ctinfo)
 {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
@@ -1745,25 +1753,25 @@ static inline void sni_cache_skb_pass_back(struct sk_buff *oskb, struct sk_buff 
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_peer_pre_in_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	u_int8_t pf = PF_INET;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_peer_pre_in_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	u_int8_t pf = ops->pf;
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_peer_pre_in_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -1771,8 +1779,8 @@ static unsigned int natcap_peer_pre_in_hook(const struct nf_hook_ops *ops,
 	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_peer_pre_in_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -2105,14 +2113,14 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				}
 				if (pt == NULL) {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
-							DEBUG_TCP_ARG(iph,l4),
-							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
-							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
-							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
-							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
-							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
-							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
-							);
+					            DEBUG_TCP_ARG(iph,l4),
+					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
+					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
+					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
+					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
+					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
+					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
+					           );
 					nf_ct_put(user);
 					goto sni_out;
 				}
@@ -2126,21 +2134,21 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				if (pt->sip == 0) {
 					spin_unlock_bh(&ue->lock);
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
-							DEBUG_TCP_ARG(iph,l4),
-							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
-							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
-							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
-							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
-							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
-							((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
-							);
+					            DEBUG_TCP_ARG(iph,l4),
+					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
+					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
+					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
+					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
+					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
+					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
+					           );
 					nf_ct_put(user);
 					goto sni_out;
 				}
 				if (pt->connected == 0 || pt->local_seq == 0 || pt->remote_seq == 0) {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": port mapping(%s,local_seq=%u,remote_seq=%u) last_active(%u,%u) not ok\n",
-							DEBUG_TCP_ARG(iph,l4), pt->connected ? "connected" : "disconnected",
-							pt->local_seq, pt->remote_seq, pt->last_active, (unsigned int)jiffies);
+					            DEBUG_TCP_ARG(iph,l4), pt->connected ? "connected" : "disconnected",
+					            pt->local_seq, pt->remote_seq, pt->last_active, (unsigned int)jiffies);
 					spin_unlock_bh(&ue->lock);
 					nf_ct_put(user);
 					goto sni_out;
@@ -2251,9 +2259,9 @@ sni_out:
 	}
 
 	if ((TCPH(l4)->syn && TCPH(l4)->ack) ||
-			tcpopt->header.subtype == SUBTYPE_PEER_FSYN ||
-			tcpopt->header.subtype == SUBTYPE_PEER_XSYN ||
-			tcpopt->header.subtype == SUBTYPE_PEER_FSYNACK) {
+	        tcpopt->header.subtype == SUBTYPE_PEER_FSYN ||
+	        tcpopt->header.subtype == SUBTYPE_PEER_XSYN ||
+	        tcpopt->header.subtype == SUBTYPE_PEER_FSYNACK) {
 		//got syn ack
 		//first. lookup fakeuser_expect
 		struct nf_conntrack_tuple tuple;
@@ -2311,7 +2319,7 @@ sni_out:
 				spin_lock_bh(&ps->lock);
 				if (ps->port_map[pmi] != user || fue->local_seq + 1 != ntohl(TCPH(l4)->ack_seq)) {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer_server_node pmi user=%px,%px mismatch\n",
-							DEBUG_TCP_ARG(iph,l4), ps->port_map[pmi], user);
+					            DEBUG_TCP_ARG(iph,l4), ps->port_map[pmi], user);
 					spin_unlock_bh(&ps->lock);
 					nf_ct_put(user);
 					return NF_ACCEPT;
@@ -2364,12 +2372,12 @@ sni_out:
 					payload_len = ntohs(payload_len);
 
 					NATCAP_DEBUG("(PPI)" DEBUG_TCP_FMT ": got pong(%s) SYNACK in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4),
-							TCPH(l4)->syn ? "synack" : "ack", ntohs(id), ntohs(sequence));
+					             TCPH(l4)->syn ? "synack" : "ack", ntohs(id), ntohs(sequence));
 
 					if (tcpopt->header.opsize >= \
-							16 + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int)) &&
-							skb->len >= iph->ihl * 4 + sizeof(struct tcphdr) + \
-							16 + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int))) {
+					        16 + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int)) &&
+					        skb->len >= iph->ihl * 4 + sizeof(struct tcphdr) + \
+					        16 + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int))) {
 						memcpy(timeval, tcpopt->peer.data.timeval, 16);
 					}
 					if (payload_len > ICMP_PAYLOAD_LIMIT)
@@ -2447,7 +2455,7 @@ sni_out:
 			if (pt->sip != iph->saddr || pt->dip != iph->daddr || pt->sport != TCPH(l4)->source || pt->dport != TCPH(l4)->dest) {
 				//The caught duck flew
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, but pt[%pI4:%u->%pI4:%u] mismatch\n",
-						DEBUG_TCP_ARG(iph,l4), &pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport));
+				            DEBUG_TCP_ARG(iph,l4), &pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport));
 				spin_unlock_bh(&ue->lock);
 				goto syn_out;
 			}
@@ -2466,13 +2474,13 @@ sni_out:
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, dup, re-sending pong(synack) SYNACK back\n", DEBUG_TCP_ARG(iph,l4));
 				} else {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, pt[disconnected], seq(=%u,remote_seq=%u) mismatch, drop \n",
-							DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq);
+					            DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq);
 					spin_unlock_bh(&ue->lock);
 					goto syn_out;
 				}
 			} else { /* XXX Impossible */
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, pt[connected], seq(=%u,remote_seq=%u) mismatch, ignore and drop\n",
-						DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq);
+				            DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq);
 				spin_unlock_bh(&ue->lock);
 				goto syn_out;
 			}
@@ -2556,7 +2564,7 @@ syn_out:
 						sni_ack_pass_back(skb, cache_skb, ct, ns, in);
 						sni_cache_skb_pass_back(skb, cache_skb, ct, ns, in, ctinfo);
 						consume_skb(cache_skb);
-					sni_skip:
+sni_skip:
 						consume_skb(skb);
 						nf_ct_put(user);
 						return NF_STOLEN;
@@ -2574,12 +2582,12 @@ syn_out:
 
 		if (tcpopt->header.subtype != SUBTYPE_PEER_SYN && tcpopt->header.subtype != SUBTYPE_PEER_SSYN && tcpopt->header.subtype != SUBTYPE_PEER_ACK) {
 			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got unexpected PEER packet in opcode=%u type=%u opsize=%u subtype=%u, ignore pass\n",
-					DEBUG_TCP_ARG(iph,l4), tcpopt->header.opcode, tcpopt->header.type, tcpopt->header.opsize, tcpopt->header.subtype);
+			            DEBUG_TCP_ARG(iph,l4), tcpopt->header.opcode, tcpopt->header.type, tcpopt->header.opsize, tcpopt->header.subtype);
 			return NF_ACCEPT;
 		}
 		if (ntohl(TCPH(l4)->seq) - 1 == 0) {
 			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, but seq is 1, drop\n", DEBUG_TCP_ARG(iph,l4),
-					tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK");
+			            tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK");
 			goto ack_out;
 		}
 
@@ -2587,7 +2595,7 @@ syn_out:
 			__be16 id = get_byte2((const void *)&tcpopt->peer.data.icmp_id);
 			__be16 sequence = get_byte2((const void *)&tcpopt->peer.data.icmp_sequence);
 			NATCAP_DEBUG("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4),
-					tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK", ntohs(id), ntohs(sequence));
+			             tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK", ntohs(id), ntohs(sequence));
 		} while (0);
 
 		client_ip = get_byte4((const void *)&tcpopt->peer.data.user.ip);
@@ -2601,7 +2609,7 @@ syn_out:
 			if (pt->sip != iph->saddr || pt->dip != iph->daddr || pt->sport != TCPH(l4)->source || pt->dport != TCPH(l4)->dest) {
 				//The caught duck flew
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) in, but pt[%pI4:%u->%pI4:%u] mismatch\n",
-						DEBUG_TCP_ARG(iph,l4), &pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport));
+				            DEBUG_TCP_ARG(iph,l4), &pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport));
 				spin_unlock_bh(&ue->lock);
 				goto ack_out;
 			}
@@ -2611,75 +2619,76 @@ syn_out:
 
 			if (!pt->connected) {
 				switch (tcpopt->header.subtype) {
-					case SUBTYPE_PEER_ACK:
-						if (pt->local_seq != 0 &&
-								pt->remote_seq != 0 &&
-								pt->remote_seq + 1 == ntohl(TCPH(l4)->seq) &&
-								pt->local_seq + 1 == ntohl(TCPH(l4)->ack_seq)) {
-							NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, 3-way handshake complete\n", DEBUG_TCP_ARG(iph,l4));
-							pt->connected = 1;
-							pt->last_active = ue->last_active = jiffies;
-							spin_unlock_bh(&ue->lock);
-							goto ack_out;
-						} else if (pt->local_seq == 0 && pt->remote_seq == 0 &&
-								ntohl(TCPH(l4)->seq) != 1 && ntohl(TCPH(l4)->ack_seq) != 1) {
-							//This means server reload or packet droped on-the-way
-							pt->remote_seq = ntohl(TCPH(l4)->seq) - 1;
-							pt->local_seq = ntohl(TCPH(l4)->ack_seq) - 1;
-							pt->connected = 1;
-							pt->last_active = ue->last_active = jiffies;
-							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, assume, sending pong(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
-						} else {
-							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, seq(=%u,remote_seq=%u) ack_seq(=%u,local_seq=%u) mismatch\n",
-									DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq, ntohl(TCPH(l4)->ack_seq), pt->local_seq);
-							spin_unlock_bh(&ue->lock);
-							goto ack_out;
-						}
-						break;
-					case SUBTYPE_PEER_SSYN:
-						if (!(ue->status & PEER_SUBTYPE_SSYN)) short_set_bit(PEER_SUBTYPE_SSYN_BIT, &ue->status);
-						/* fall through */
-					case SUBTYPE_PEER_SYN:
-						if (pt->local_seq != 0 &&
-								pt->remote_seq != 0 &&
-								pt->remote_seq + 1 == ntohl(TCPH(l4)->seq) &&
-								pt->local_seq + 1 == ntohl(TCPH(l4)->ack_seq)) {
-							NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, 3-way handshake complete\n", DEBUG_TCP_ARG(iph,l4));
-							pt->connected = 1;
-							pt->last_active = ue->last_active = jiffies;
-							spin_unlock_bh(&ue->lock);
-							goto ack_out;
-						} if (pt->local_seq == 0 && pt->remote_seq == 0 &&
-								ntohl(TCPH(l4)->seq) != 1 && ntohl(TCPH(l4)->ack_seq) != 1) {
-							//This means server reload or packet droped on-the-way
-							pt->remote_seq = ntohl(TCPH(l4)->seq) - 1;
-							pt->local_seq = ntohl(TCPH(l4)->ack_seq) - 1;
-							pt->connected = 1;
-							pt->last_active = ue->last_active = jiffies;
-							NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, assume, sending pong(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
-						} else {
-							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, seq(=%u,remote_seq=%u) ack_seq(=%u,local_seq=%u) mismatch\n",
-									DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq, ntohl(TCPH(l4)->ack_seq), pt->local_seq);
-							spin_unlock_bh(&ue->lock);
-							goto ack_out;
-						}
-						break;
-					default: /* BUG: cannot happen, ignore */
-						break;
+				case SUBTYPE_PEER_ACK:
+					if (pt->local_seq != 0 &&
+					        pt->remote_seq != 0 &&
+					        pt->remote_seq + 1 == ntohl(TCPH(l4)->seq) &&
+					        pt->local_seq + 1 == ntohl(TCPH(l4)->ack_seq)) {
+						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, 3-way handshake complete\n", DEBUG_TCP_ARG(iph,l4));
+						pt->connected = 1;
+						pt->last_active = ue->last_active = jiffies;
+						spin_unlock_bh(&ue->lock);
+						goto ack_out;
+					} else if (pt->local_seq == 0 && pt->remote_seq == 0 &&
+					           ntohl(TCPH(l4)->seq) != 1 && ntohl(TCPH(l4)->ack_seq) != 1) {
+						//This means server reload or packet droped on-the-way
+						pt->remote_seq = ntohl(TCPH(l4)->seq) - 1;
+						pt->local_seq = ntohl(TCPH(l4)->ack_seq) - 1;
+						pt->connected = 1;
+						pt->last_active = ue->last_active = jiffies;
+						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, assume, sending pong(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
+					} else {
+						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, seq(=%u,remote_seq=%u) ack_seq(=%u,local_seq=%u) mismatch\n",
+						            DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq, ntohl(TCPH(l4)->ack_seq), pt->local_seq);
+						spin_unlock_bh(&ue->lock);
+						goto ack_out;
+					}
+					break;
+				case SUBTYPE_PEER_SSYN:
+					if (!(ue->status & PEER_SUBTYPE_SSYN)) short_set_bit(PEER_SUBTYPE_SSYN_BIT, &ue->status);
+				/* fall through */
+				case SUBTYPE_PEER_SYN:
+					if (pt->local_seq != 0 &&
+					        pt->remote_seq != 0 &&
+					        pt->remote_seq + 1 == ntohl(TCPH(l4)->seq) &&
+					        pt->local_seq + 1 == ntohl(TCPH(l4)->ack_seq)) {
+						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, 3-way handshake complete\n", DEBUG_TCP_ARG(iph,l4));
+						pt->connected = 1;
+						pt->last_active = ue->last_active = jiffies;
+						spin_unlock_bh(&ue->lock);
+						goto ack_out;
+					}
+					if (pt->local_seq == 0 && pt->remote_seq == 0 &&
+					        ntohl(TCPH(l4)->seq) != 1 && ntohl(TCPH(l4)->ack_seq) != 1) {
+						//This means server reload or packet droped on-the-way
+						pt->remote_seq = ntohl(TCPH(l4)->seq) - 1;
+						pt->local_seq = ntohl(TCPH(l4)->ack_seq) - 1;
+						pt->connected = 1;
+						pt->last_active = ue->last_active = jiffies;
+						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, assume, sending pong(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
+					} else {
+						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) ACK in, seq(=%u,remote_seq=%u) ack_seq(=%u,local_seq=%u) mismatch\n",
+						            DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq, ntohl(TCPH(l4)->ack_seq), pt->local_seq);
+						spin_unlock_bh(&ue->lock);
+						goto ack_out;
+					}
+					break;
+				default: /* BUG: cannot happen, ignore */
+					break;
 				}
 			} else if (pt->remote_seq + 1 == ntohl(TCPH(l4)->seq) && pt->local_seq + 1 == ntohl(TCPH(l4)->ack_seq)) {
 				/* XXX: pt->local_seq != 0 && pt->remote_seq */
 				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, keepalive, sending pong(ack) ACK out\n",
-						DEBUG_TCP_ARG(iph,l4), tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK");
+				            DEBUG_TCP_ARG(iph,l4), tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK");
 				pt->last_active = ue->last_active = jiffies;
 				if (tcpopt->header.subtype == SUBTYPE_PEER_SSYN) {
 					if (!(ue->status & PEER_SUBTYPE_SSYN)) short_set_bit(PEER_SUBTYPE_SSYN_BIT, &ue->status);
 				}
 			} else {
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, seq(=%u,remote_seq=%u) ack_seq(=%u,local_seq=%u) mismatch\n",
-						DEBUG_TCP_ARG(iph,l4),
-						tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK",
-						ntohl(TCPH(l4)->seq), pt->remote_seq, ntohl(TCPH(l4)->ack_seq), pt->local_seq);
+				            DEBUG_TCP_ARG(iph,l4),
+				            tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK",
+				            ntohl(TCPH(l4)->seq), pt->remote_seq, ntohl(TCPH(l4)->ack_seq), pt->local_seq);
 				spin_unlock_bh(&ue->lock);
 				goto ack_out;
 			}
@@ -2703,25 +2712,25 @@ ack_out:
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_peer_post_out_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	//u_int8_t pf = PF_INET;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_peer_post_out_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	//u_int8_t pf = ops->pf;
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_peer_post_out_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	//u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -2729,8 +2738,8 @@ static unsigned int natcap_peer_post_out_hook(const struct nf_hook_ops *ops,
 	//const struct net_device *out = state->out;
 #else
 static unsigned int natcap_peer_post_out_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	//u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -2783,31 +2792,31 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_peer_dnat_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_peer_dnat_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_peer_dnat_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_peer_dnat_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
@@ -3022,14 +3031,14 @@ knock:
 
 			if (pt == NULL) {
 				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
-						DEBUG_TCP_ARG(iph,l4),
-						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
-						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
-						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
-						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
-						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
-						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
-						);
+				            DEBUG_TCP_ARG(iph,l4),
+				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
+				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
+				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
+				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
+				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
+				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
+				           );
 				put_peer_user(user);
 				return NF_ACCEPT;
 			}
@@ -3039,21 +3048,21 @@ knock:
 			if (pt->sip == 0) {
 				spin_unlock_bh(&ue->lock);
 				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
-						DEBUG_TCP_ARG(iph,l4),
-						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
-						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
-						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
-						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
-						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
-						((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
-						);
+				            DEBUG_TCP_ARG(iph,l4),
+				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
+				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
+				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
+				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
+				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
+				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
+				           );
 				put_peer_user(user);
 				return NF_ACCEPT;
 			}
 			if (pt->connected == 0 || pt->local_seq == 0 || pt->remote_seq == 0) {
 				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": port mapping(%s,local_seq=%u,remote_seq=%u) last_active(%u,%u) not ok\n",
-						DEBUG_TCP_ARG(iph,l4), pt->connected ? "connected" : "disconnected",
-						pt->local_seq, pt->remote_seq, pt->last_active, (unsigned int)jiffies);
+				            DEBUG_TCP_ARG(iph,l4), pt->connected ? "connected" : "disconnected",
+				            pt->local_seq, pt->remote_seq, pt->last_active, (unsigned int)jiffies);
 				spin_unlock_bh(&ue->lock);
 				put_peer_user(user);
 				return NF_ACCEPT;
@@ -3114,31 +3123,31 @@ knock:
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_peer_snat_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_peer_snat_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_peer_snat_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_peer_snat_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
@@ -3331,31 +3340,31 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_peer_push_out_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_peer_push_out_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_peer_push_out_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_peer_push_out_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
@@ -3475,31 +3484,31 @@ static unsigned int natcap_peer_push_out_hook(void *priv,
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_peer_dns_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_peer_dns_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_peer_dns_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_peer_dns_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
@@ -3712,8 +3721,8 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 
 		if (len > pos) {
 			memmove((void *)ip_hdr(nskb) + ip_hdr(nskb)->ihl * 4 + sizeof(struct udphdr) + pos,
-					(void *)ip_hdr(nskb) + ip_hdr(nskb)->ihl * 4 + sizeof(struct udphdr) + len,
-					16 * qd_count);
+			        (void *)ip_hdr(nskb) + ip_hdr(nskb)->ihl * 4 + sizeof(struct udphdr) + len,
+			        16 * qd_count);
 			nskb->len -= len - pos;
 			ip_hdr(nskb)->tot_len = htons(nskb->len);
 			UDPH((void *)ip_hdr(nskb) + ip_hdr(nskb)->ihl * 4)->len = ntohs(nskb->len - ip_hdr(nskb)->ihl * 4);
@@ -3844,30 +3853,30 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 
 	if ((*pos) == 0) {
 		n = snprintf(natcap_peer_ctl_buffer,
-				PAGE_SIZE - 1,
-				"# Info:\n"
-				"#    local_target=%pI4:%u\n"
-				"#    peer_conn_timeout=%us\n"
-				"#    peer_port_map_timeout=%us\n"
-				"#    KN=%pI4:%u MAC=%02x:%02x:%02x:%02x:%02x:%02x LP=%u\n"
-				"#    peer_sni_listen=%pI4:%u\n"
-				"#    peer_sni_auth=%u\n"
-				"#    peer_mode=%u\n"
-				"#    peer_max_pmtu=%u\n"
-				"#    peer_sni_ban=%u\n"
-				"#\n"
-				"\n",
-				&peer_local_ip, ntohs(peer_local_port),
-				peer_conn_timeout, peer_port_map_timeout,
-				&peer_knock_ip, ntohs(peer_knock_port),
-				peer_knock_mac[0], peer_knock_mac[1], peer_knock_mac[2], peer_knock_mac[3], peer_knock_mac[4], peer_knock_mac[5],
-				ntohs(peer_knock_local_port),
-				&peer_sni_ip, ntohs(peer_sni_port),
-				peer_sni_auth,
-				peer_mode,
-				peer_max_pmtu,
-				peer_sni_ban
-				);
+		             PAGE_SIZE - 1,
+		             "# Info:\n"
+		             "#    local_target=%pI4:%u\n"
+		             "#    peer_conn_timeout=%us\n"
+		             "#    peer_port_map_timeout=%us\n"
+		             "#    KN=%pI4:%u MAC=%02x:%02x:%02x:%02x:%02x:%02x LP=%u\n"
+		             "#    peer_sni_listen=%pI4:%u\n"
+		             "#    peer_sni_auth=%u\n"
+		             "#    peer_mode=%u\n"
+		             "#    peer_max_pmtu=%u\n"
+		             "#    peer_sni_ban=%u\n"
+		             "#\n"
+		             "\n",
+		             &peer_local_ip, ntohs(peer_local_port),
+		             peer_conn_timeout, peer_port_map_timeout,
+		             &peer_knock_ip, ntohs(peer_knock_port),
+		             peer_knock_mac[0], peer_knock_mac[1], peer_knock_mac[2], peer_knock_mac[3], peer_knock_mac[4], peer_knock_mac[5],
+		             ntohs(peer_knock_local_port),
+		             &peer_sni_ip, ntohs(peer_sni_port),
+		             peer_sni_auth,
+		             peer_mode,
+		             peer_max_pmtu,
+		             peer_sni_ban
+		            );
 		natcap_peer_ctl_buffer[n] = 0;
 		return natcap_peer_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -3879,19 +3888,19 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			spin_lock_bh(&ps->lock);
 			natcap_peer_ctl_buffer[0] = 0;
 			n = snprintf(natcap_peer_ctl_buffer,
-					PAGE_SIZE - 1,
-					"N[%pI4:%u] [AS %ds]\n"
-					"    conn[%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u]\n",
-					&ps->ip, ntohs(ps->map_port), ps->last_active != 0 ? (uintdiff(ps->last_active, jiffies) + HZ / 2) / HZ : (-1),
-					ntohs(peer_fakeuser_sport(ps->port_map[0])), ntohs(peer_fakeuser_dport(ps->port_map[0])),
-					ntohs(peer_fakeuser_sport(ps->port_map[1])), ntohs(peer_fakeuser_dport(ps->port_map[1])),
-					ntohs(peer_fakeuser_sport(ps->port_map[2])), ntohs(peer_fakeuser_dport(ps->port_map[2])),
-					ntohs(peer_fakeuser_sport(ps->port_map[3])), ntohs(peer_fakeuser_dport(ps->port_map[3])),
-					ntohs(peer_fakeuser_sport(ps->port_map[4])), ntohs(peer_fakeuser_dport(ps->port_map[4])),
-					ntohs(peer_fakeuser_sport(ps->port_map[5])), ntohs(peer_fakeuser_dport(ps->port_map[5])),
-					ntohs(peer_fakeuser_sport(ps->port_map[6])), ntohs(peer_fakeuser_dport(ps->port_map[6])),
-					ntohs(peer_fakeuser_sport(ps->port_map[7])), ntohs(peer_fakeuser_dport(ps->port_map[7]))
-					);
+			             PAGE_SIZE - 1,
+			             "N[%pI4:%u] [AS %ds]\n"
+			             "    conn[%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u]\n",
+			             &ps->ip, ntohs(ps->map_port), ps->last_active != 0 ? (uintdiff(ps->last_active, jiffies) + HZ / 2) / HZ : (-1),
+			             ntohs(peer_fakeuser_sport(ps->port_map[0])), ntohs(peer_fakeuser_dport(ps->port_map[0])),
+			             ntohs(peer_fakeuser_sport(ps->port_map[1])), ntohs(peer_fakeuser_dport(ps->port_map[1])),
+			             ntohs(peer_fakeuser_sport(ps->port_map[2])), ntohs(peer_fakeuser_dport(ps->port_map[2])),
+			             ntohs(peer_fakeuser_sport(ps->port_map[3])), ntohs(peer_fakeuser_dport(ps->port_map[3])),
+			             ntohs(peer_fakeuser_sport(ps->port_map[4])), ntohs(peer_fakeuser_dport(ps->port_map[4])),
+			             ntohs(peer_fakeuser_sport(ps->port_map[5])), ntohs(peer_fakeuser_dport(ps->port_map[5])),
+			             ntohs(peer_fakeuser_sport(ps->port_map[6])), ntohs(peer_fakeuser_dport(ps->port_map[6])),
+			             ntohs(peer_fakeuser_sport(ps->port_map[7])), ntohs(peer_fakeuser_dport(ps->port_map[7]))
+			            );
 			spin_unlock_bh(&ps->lock);
 			natcap_peer_ctl_buffer[n] = 0;
 			return natcap_peer_ctl_buffer;
@@ -3909,11 +3918,11 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			ue = peer_user_expect(user);
 			spin_lock_bh(&ue->lock);
 			n = snprintf(natcap_peer_ctl_buffer,
-					PAGE_SIZE - 1,
-					"C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds]\n",
-					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-					&ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
-					);
+			             PAGE_SIZE - 1,
+			             "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds]\n",
+			             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+			             &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
+			            );
 			spin_unlock_bh(&ue->lock);
 			put_peer_user(user);
 			natcap_peer_ctl_buffer[n] = 0;
@@ -3927,10 +3936,10 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			}
 			natcap_peer_ctl_buffer[0] = 0;
 			n = snprintf(natcap_peer_ctl_buffer,
-					PAGE_SIZE - 1,
-					"peer=%pI4\n",
-					&peer_pub_ip[(*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP]
-					);
+			             PAGE_SIZE - 1,
+			             "peer=%pI4\n",
+			             &peer_pub_ip[(*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP]
+			            );
 			natcap_peer_ctl_buffer[n] = 0;
 			return natcap_peer_ctl_buffer;
 		}
@@ -4014,10 +4023,10 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 		unsigned int a, b, c, d, e;
 		n = sscanf(data, "local_target=%u.%u.%u.%u:%u", &a, &b, &c, &d, &e);
 		if ( (n == 5 && e <= 0xffff) &&
-				(((a & 0xff) == a) &&
-				 ((b & 0xff) == b) &&
-				 ((c & 0xff) == c) &&
-				 ((d & 0xff) == d)) ) {
+		        (((a & 0xff) == a) &&
+		         ((b & 0xff) == b) &&
+		         ((c & 0xff) == c) &&
+		         ((d & 0xff) == d)) ) {
 			peer_local_ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 			peer_local_port = htons(e);
 			goto done;
@@ -4040,27 +4049,27 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 		unsigned int a, b, c, d, e, f;
 		unsigned int x0, x1, x2, x3, x4, x5;
 		n = sscanf(data, "KN=%u.%u.%u.%u:%u MAC=%02x:%02x:%02x:%02x:%02x:%02x LP=%u\n",
-				&a, &b, &c, &d, &e,
-				&x0, &x1, &x2, &x3, &x4, &x5,
-				&f);
+		           &a, &b, &c, &d, &e,
+		           &x0, &x1, &x2, &x3, &x4, &x5,
+		           &f);
 		if (n != 12) {
 			n = sscanf(data, "KN=%u.%u.%u.%u:%u MAC=%02x-%02x-%02x-%02x-%02x-%02x LP=%u\n",
-					&a, &b, &c, &d, &e,
-					&x0, &x1, &x2, &x3, &x4, &x5,
-					&f);
+			           &a, &b, &c, &d, &e,
+			           &x0, &x1, &x2, &x3, &x4, &x5,
+			           &f);
 		}
 		if ( (n == 12 && e <= 0xffff) &&
-				((a & 0xff) == a) &&
-				((b & 0xff) == b) &&
-				((c & 0xff) == c) &&
-				((d & 0xff) == d) &&
-				((x0 & 0xff) == x0) &&
-				((x1 & 0xff) == x1) &&
-				((x2 & 0xff) == x2) &&
-				((x3 & 0xff) == x3) &&
-				((x4 & 0xff) == x4) &&
-				((x5 & 0xff) == x5) &&
-				(f <= 0xffff)) {
+		        ((a & 0xff) == a) &&
+		        ((b & 0xff) == b) &&
+		        ((c & 0xff) == c) &&
+		        ((d & 0xff) == d) &&
+		        ((x0 & 0xff) == x0) &&
+		        ((x1 & 0xff) == x1) &&
+		        ((x2 & 0xff) == x2) &&
+		        ((x3 & 0xff) == x3) &&
+		        ((x4 & 0xff) == x4) &&
+		        ((x5 & 0xff) == x5) &&
+		        (f <= 0xffff)) {
 			if (f > 0 && f < 1024) {
 				peer_knock_ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 				peer_knock_port = htons(e);
@@ -4078,10 +4087,10 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 		unsigned int a, b, c, d, e;
 		n = sscanf(data, "peer_sni_listen=%u.%u.%u.%u:%u", &a, &b, &c, &d, &e);
 		if ( (n == 5 && e <= 0xffff) &&
-				(((a & 0xff) == a) &&
-				 ((b & 0xff) == b) &&
-				 ((c & 0xff) == c) &&
-				 ((d & 0xff) == d)) ) {
+		        (((a & 0xff) == a) &&
+		         ((b & 0xff) == b) &&
+		         ((c & 0xff) == c) &&
+		         ((d & 0xff) == d)) ) {
 			peer_sni_ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 			peer_sni_port = htons(e);
 			goto done;
