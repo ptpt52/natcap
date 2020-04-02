@@ -83,7 +83,8 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             "#\n"
 		             "# Info:\n"
 		             "#    mode=%s(%u)\n"
-		             "#    current_server=" TUPLE_FMT "\n"
+		             "#    current_server0=" TUPLE_FMT "\n"
+		             "#    current_server1=" TUPLE_FMT "\n"
 		             "#    default_mac_addr=%02x:%02x:%02x:%02x:%02x:%02x\n"
 		             "#    u_hash=0x%08x(%u)\n"
 		             "#    u_mask=0x%08x\n"
@@ -126,7 +127,8 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             "\n",
 		             NATCAP_VERSION,
 		             mode_str[mode], mode,
-		             TUPLE_ARG(natcap_server_info_current()),
+		             TUPLE_ARG(natcap_server_info_current(SERVER_GROUP_0)),
+		             TUPLE_ARG(natcap_server_info_current(SERVER_GROUP_1)),
 		             default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
 		             ntohl(default_u_hash),
 		             ntohl(default_u_hash),
@@ -154,13 +156,19 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
-		struct tuple *dst = (struct tuple *)natcap_server_info_get((*pos) - 1);
+		struct tuple *dst = NULL;
+		int x = 0;
+
+		for (x = SERVER_GROUP_0; x < SERVER_GROUP_MAX; x++) {
+			dst = (struct tuple *)natcap_server_info_get(x, (*pos) - 1);
+			if (dst) break;
+		}
 
 		if (dst) {
 			n = snprintf(natcap_ctl_buffer,
 			             PAGE_SIZE - 1,
-			             "server " TUPLE_FMT "\n",
-			             TUPLE_ARG(dst));
+			             "server %d " TUPLE_FMT "\n",
+			             x, TUPLE_ARG(dst));
 			natcap_ctl_buffer[n] = 0;
 			return natcap_ctl_buffer;
 		}
@@ -203,7 +211,7 @@ static ssize_t natcap_read(struct file *file, char __user *buf, size_t buf_len, 
 static ssize_t natcap_write(struct file *file, const char __user *buf, size_t buf_len, loff_t *offset)
 {
 	int err = 0;
-	int n, l;
+	int n, l, x;
 	struct tuple dst;
 	int cnt = MAX_IOCTL_LEN;
 	static char data[MAX_IOCTL_LEN];
@@ -243,7 +251,9 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 
 	if (strncmp(data, "clean", 5) == 0) {
 		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
-			natcap_server_info_cleanup();
+			for (x = 0; x < SERVER_GROUP_MAX; x++) {
+				natcap_server_info_cleanup(x);
+			}
 			goto done;
 		}
 	} else if (strncmp(data, "dns_server=", 11) == 0) {
@@ -264,8 +274,9 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
 			unsigned int a, b, c, d, e;
 			char f, g, h;
-			n = sscanf(data, "server %u.%u.%u.%u:%u-%c-%c-%c", &a, &b, &c, &d, &e, &f, &g, &h);
-			if ( (n == 8 && e <= 0xffff) &&
+			n = sscanf(data, "server %u %u.%u.%u.%u:%u-%c-%c-%c", &x, &a, &b, &c, &d, &e, &f, &g, &h);
+			if ( (n == 9 && e <= 0xffff) &&
+			        (x < SERVER_GROUP_MAX) &&
 			        (f == 'e' || f == 'o') &&
 			        (g == 'T' || g == 'U') &&
 			        (h == 'U' || h == 'T') &&
@@ -278,7 +289,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				dst.encryption = !!(f == 'e');
 				dst.tcp_encode = g == 'T' ? TCP_ENCODE : UDP_ENCODE;
 				dst.udp_encode = h == 'U' ? UDP_ENCODE : TCP_ENCODE;
-				if ((err = natcap_server_info_add(&dst)) == 0) {
+				if ((err = natcap_server_info_add(x, &dst)) == 0) {
 					goto done;
 				}
 				NATCAP_println("natcap_server_add() failed ret=%d", err);
@@ -286,15 +297,16 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		}
 	} else if (strncmp(data, "change_server", 13) == 0) {
 		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
-			natcap_server_info_change(1);
+			natcap_server_info_change(SERVER_GROUP_0, 1);
 			goto done;
 		}
 	} else if (strncmp(data, "delete", 6) == 0) {
 		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
 			unsigned int a, b, c, d, e;
 			char f, g, h;
-			n = sscanf(data, "delete %u.%u.%u.%u:%u-%c-%c-%c", &a, &b, &c, &d, &e, &f, &g, &h);
-			if ( (n == 8 && e <= 0xffff) &&
+			n = sscanf(data, "delete %u %u.%u.%u.%u:%u-%c-%c-%c", &x, &a, &b, &c, &d, &e, &f, &g, &h);
+			if ( (n == 9 && e <= 0xffff) &&
+			        (x < SERVER_GROUP_MAX) &&
 			        (f == 'e' || f == 'o') &&
 			        (g == 'T' || g == 'U') &&
 			        (h == 'U' || h == 'T') &&
@@ -307,7 +319,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				dst.encryption = !!(f == 'e');
 				dst.tcp_encode = g == 'T' ? TCP_ENCODE : UDP_ENCODE;
 				dst.udp_encode = h == 'U' ? UDP_ENCODE : TCP_ENCODE;
-				if ((err = natcap_server_info_delete(&dst)) == 0) {
+				if ((err = natcap_server_info_delete(x, &dst)) == 0) {
 					goto done;
 				}
 				NATCAP_println("natcap_server_delete() failed ret=%d", err);

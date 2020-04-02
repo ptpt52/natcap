@@ -212,7 +212,7 @@ struct natcap_session {
 	union {
 		struct {
 			unsigned short status;
-			unsigned short _pad[1];
+			unsigned short group_x;
 			__be16 new_source;
 			__be16 target_port;
 			__be32 target_ip;
