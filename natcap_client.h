@@ -58,15 +58,21 @@ extern u32 default_u_hash;
 extern unsigned char default_mac_addr[ETH_ALEN];
 void default_mac_addr_init(void);
 
-void natcap_server_info_change(int change);
-void natcap_server_info_cleanup(void);
-int natcap_server_info_add(const struct tuple *dst);
-int natcap_server_info_delete(const struct tuple *dst);
-void *natcap_server_info_get(loff_t idx);
-void natcap_server_in_touch(__be32 ip);
-void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst);
+enum server_group_t {
+	SERVER_GROUP_0,
+	SERVER_GROUP_1,
+	SERVER_GROUP_MAX
+};
 
-const struct tuple *natcap_server_info_current(void);
+void natcap_server_info_change(enum server_group_t x, int change);
+void natcap_server_info_cleanup(enum server_group_t x);
+int natcap_server_info_add(enum server_group_t x, const struct tuple *dst);
+int natcap_server_info_delete(enum server_group_t x, const struct tuple *dst);
+void *natcap_server_info_get(enum server_group_t x, loff_t idx);
+void natcap_server_in_touch(enum server_group_t x, __be32 ip);
+void natcap_server_info_select(enum server_group_t x, struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst);
+
+const struct tuple *natcap_server_info_current(enum server_group_t x);
 
 int natcap_client_init(void);
 void natcap_client_exit(void);

@@ -282,7 +282,9 @@ static unsigned long jiffies_diff(unsigned long j1, unsigned long j2)
 
 #define MAX_NATCAP_SERVER 128
 struct natcap_server_info {
+	unsigned long server_jiffies;
 	unsigned int active_index;
+	unsigned int server_index;
 	unsigned int server_count[2];
 	struct tuple server[2][MAX_NATCAP_SERVER];
 	unsigned long last_active[MAX_NATCAP_SERVER];
@@ -291,23 +293,22 @@ struct natcap_server_info {
 	unsigned char last_dir[MAX_NATCAP_SERVER];
 };
 
-static struct natcap_server_info natcap_server_info;
-static unsigned int server_index = 0;
+static struct natcap_server_info server_group[SERVER_GROUP_MAX];
 
-void natcap_server_info_change(int change)
+void natcap_server_info_change(enum server_group_t x, int change)
 {
-	static unsigned long server_jiffies = 0;
-	if (change || server_jiffies == 0 ||
+	struct natcap_server_info *nsi = &server_group[x];
+	if (change || nsi->server_jiffies == 0 ||
 	        (!server_persist_lock &&
-	         time_after(jiffies, server_jiffies + (7 * server_persist_timeout / 8 + jiffies % (server_persist_timeout / 4 + 1)) * HZ))) {
-		server_jiffies = jiffies;
-		server_index += 1 + prandom_u32();
+	         time_after(jiffies, nsi->server_jiffies + (7 * server_persist_timeout / 8 + jiffies % (server_persist_timeout / 4 + 1)) * HZ))) {
+		nsi->server_jiffies = jiffies;
+		nsi->server_index += 1 + prandom_u32();
 	}
 }
 
-void natcap_server_info_cleanup(void)
+void natcap_server_info_cleanup(enum server_group_t x)
 {
-	struct natcap_server_info *nsi = &natcap_server_info;
+	struct natcap_server_info *nsi = &server_group[x];
 	unsigned int m = nsi->active_index;
 	unsigned int n = (m + 1) % 2;
 
@@ -316,9 +317,9 @@ void natcap_server_info_cleanup(void)
 	nsi->active_index = n;
 }
 
-int natcap_server_info_add(const struct tuple *dst)
+int natcap_server_info_add(enum server_group_t x, const struct tuple *dst)
 {
-	struct natcap_server_info *nsi = &natcap_server_info;
+	struct natcap_server_info *nsi = &server_group[x];
 	unsigned int m = nsi->active_index;
 	unsigned int n = (m + 1) % 2;
 	unsigned int i, j;
@@ -348,9 +349,9 @@ int natcap_server_info_add(const struct tuple *dst)
 	return 0;
 }
 
-int natcap_server_info_delete(const struct tuple *dst)
+int natcap_server_info_delete(enum server_group_t x, const struct tuple *dst)
 {
-	struct natcap_server_info *nsi = &natcap_server_info;
+	struct natcap_server_info *nsi = &server_group[x];
 	unsigned int m = nsi->active_index;
 	unsigned int n = (m + 1) % 2;
 	unsigned int i, j;
@@ -372,25 +373,34 @@ int natcap_server_info_delete(const struct tuple *dst)
 	return 0;
 }
 
-const struct tuple *natcap_server_info_current(void)
+const struct tuple *natcap_server_info_current(enum server_group_t x)
 {
-	int count = natcap_server_info.server_count[natcap_server_info.active_index];
+	struct natcap_server_info *nsi = &server_group[x];
+	int count = nsi->server_count[nsi->active_index];
 	static struct tuple _tuple = {0};
 	if (count > 0)
-		return &natcap_server_info.server[natcap_server_info.active_index][server_index % count];
+		return &nsi->server[nsi->active_index][nsi->server_index % count];
 	return &_tuple;
 }
 
-void *natcap_server_info_get(loff_t idx)
+void *natcap_server_info_get(enum server_group_t x, loff_t idx)
 {
-	if (idx < natcap_server_info.server_count[natcap_server_info.active_index])
-		return &natcap_server_info.server[natcap_server_info.active_index][idx];
+	struct natcap_server_info *nsi = &server_group[x];
+	if (x > SERVER_GROUP_0) {
+		int y;
+		for (y = SERVER_GROUP_0; y < x; y++) {
+			idx = idx - server_group[y].server_count[server_group[y].active_index];
+		}
+	}
+	if (idx >= 0 && idx < nsi->server_count[nsi->active_index])
+		return &nsi->server[nsi->active_index][idx];
+
 	return NULL;
 }
 
-void natcap_server_in_touch(__be32 ip)
+void natcap_server_in_touch(enum server_group_t x, __be32 ip)
 {
-	struct natcap_server_info *nsi = &natcap_server_info;
+	struct natcap_server_info *nsi = &server_group[x];
 	unsigned int m = nsi->active_index;
 	unsigned int count = nsi->server_count[m];
 	unsigned int hash;
@@ -399,7 +409,7 @@ void natcap_server_in_touch(__be32 ip)
 	if (count == 0)
 		return;
 
-	hash = server_index % count;
+	hash = nsi->server_index % count;
 
 	for (i = hash; i < count; i++) {
 		if (nsi->server[m][i].ip == ip) {
@@ -417,10 +427,10 @@ void natcap_server_in_touch(__be32 ip)
 	}
 }
 
-void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst)
+void natcap_server_info_select(enum server_group_t x, struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst)
 {
 	static atomic_t server_port = ATOMIC_INIT(0);
-	struct natcap_server_info *nsi = &natcap_server_info;
+	struct natcap_server_info *nsi = &server_group[x];
 	unsigned int m = nsi->active_index;
 	unsigned int count = nsi->server_count[m];
 	unsigned int hash;
@@ -441,9 +451,9 @@ void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, stru
 		}
 	}
 
-	natcap_server_info_change(0);
+	natcap_server_info_change(x, 0);
 
-	hash = server_index % count;
+	hash = nsi->server_index % count;
 
 	if ((i = server_index_natcap_get(&skb->mark)) != 0) {
 		hash = (i - 1) % count;
@@ -457,7 +467,7 @@ void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, stru
 			if (nsi->last_dir[i] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[i]) > 512 * HZ) {
 				found = 1;
 				hash = i;
-				server_index = i;
+				nsi->server_index = i;
 				nsi->last_dir[i] = NATCAP_SERVER_IN;
 				NATCAP_WARN("current server(" TUPLE_FMT ") is blocked, switch to next=" TUPLE_FMT "\n",
 				            TUPLE_ARG(&nsi->server[m][oldhash]),
@@ -469,7 +479,7 @@ void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, stru
 			if (nsi->last_dir[i] == NATCAP_SERVER_IN || jiffies_diff(jiffies, nsi->last_active[i]) > 512 * HZ) {
 				found = 1;
 				hash = i;
-				server_index = i;
+				nsi->server_index = i;
 				nsi->last_dir[i] = NATCAP_SERVER_IN;
 				NATCAP_WARN("current server(" TUPLE_FMT ") is blocked, switch to next=" TUPLE_FMT "\n",
 				            TUPLE_ARG(&nsi->server[m][oldhash]),
@@ -478,8 +488,8 @@ void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, stru
 			}
 		}
 		if (!found) {
-			natcap_server_info_change(1);
-			hash = server_index % count;
+			natcap_server_info_change(x, 1);
+			hash = nsi->server_index % count;
 			NATCAP_WARN("all servers are blocked, force change. " TUPLE_FMT " -> " TUPLE_FMT "\n",
 			            TUPLE_ARG(&nsi->server[m][oldhash]),
 			            TUPLE_ARG(&nsi->server[m][hash]));
@@ -510,13 +520,18 @@ found:
 
 static inline int is_natcap_server(__be32 ip)
 {
-	struct natcap_server_info *nsi = &natcap_server_info;
-	unsigned int m = nsi->active_index;
+	struct natcap_server_info *nsi;
+	unsigned int m;
 	unsigned int i;
+	int x;
 
-	for (i = 0; i < nsi->server_count[m]; i++) {
-		if (nsi->server[m][i].ip == ip)
-			return 1;
+	for (x = 0; x < SERVER_GROUP_MAX; x++) {
+		nsi = &server_group[x];
+		m = nsi->active_index;
+		for (i = 0; i < nsi->server_count[m]; i++) {
+			if (nsi->server[m][i].ip == ip)
+				return 1;
+		}
 	}
 
 	return 0;
@@ -714,21 +729,19 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (iph->protocol == IPPROTO_TCP) {
+	if (iph->protocol == IPPROTO_TCP) { /* for TCP */
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
 			return NF_DROP;
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		//not syn
 		if (!TCPH(l4)->syn || TCPH(l4)->ack) {
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": first packet in but not syn, bypass\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
-
 		if (hooknum == NF_INET_PRE_ROUTING && !nf_ct_is_confirmed(ct)) {
 			if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
 				return NF_DROP;
@@ -756,10 +769,70 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		} else if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
 		           IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
 		           IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+bypass_tcp:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
-		} else if (cnipwhitelist_mode || IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0) {
+		} else {
+			int x = -1;
+
+			if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist0") > 0) {
+				x = SERVER_GROUP_0;
+			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
+				x = SERVER_GROUP_1;
+			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfw_tcp_port_list0") > 0) {
+				x = SERVER_GROUP_0;
+			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfw_tcp_port_list1") > 0) {
+				x = SERVER_GROUP_1;
+			}
+
+			if (x == -1) {
+				if (cnipwhitelist_mode) {
+					goto bypass_tcp;
+				} else {
+					//dual out
+					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+					if (!nf_ct_is_confirmed(ct)) {
+						struct nf_conn_help *help;
+						if (ct->master) {
+							set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+							return NF_ACCEPT;
+						}
+						help = nfct_help(ct);
+						if (help && help->helper) {
+							set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+							return NF_ACCEPT;
+						}
+
+						natcap_server_info_select(SERVER_GROUP_0, skb, iph->daddr, TCPH(l4)->dest, &server);
+						if (server.ip == 0) {
+							NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
+							set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+							return NF_ACCEPT;
+						}
+
+						ns = natcap_session_in(ct);
+						if (!ns) {
+							NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+							set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+							return NF_ACCEPT;
+						}
+						natcap_tuple_to_ns(ns, &server, iph->protocol);
+						ns->n.group_x = SERVER_GROUP_0;
+
+						set_bit(IPS_NATCAP_DUAL_BIT, &ct->status);
+
+						if (in && strncmp(in->name, "natcap", 6) == 0) {
+							if (!(NS_NATCAP_NOLIMIT & ns->n.status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->n.status);
+						}
+						NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": TCP dual out to server=%pI4\n", DEBUG_TCP_ARG(iph,l4), &server.ip);
+					}
+					xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+					if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
+					return NF_ACCEPT;
+				}
+			}
+
 			if (natcap_client_redirect_port != 0 && hooknum == NF_INET_PRE_ROUTING) {
 				__be32 newdst = 0;
 				struct in_device *indev;
@@ -778,11 +851,11 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 
-					NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection match gfwlist, use natcapd proxy\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection match g%d, use natcapd proxy\n", DEBUG_TCP_ARG(iph,l4), x);
 					return NF_ACCEPT;
 				}
 			}
-			natcap_server_info_select(skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
+			natcap_server_info_select(x, skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -798,60 +871,14 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				return NF_ACCEPT;
 			}
 			natcap_tuple_to_ns(ns, &server, iph->protocol);
+			ns->n.group_x = x;
 
 			if (in && strncmp(in->name, "natcap", 6) == 0) {
 				if (!(NS_NATCAP_NOLIMIT & ns->n.status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->n.status);
 			}
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, select server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
-		} else {
-			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-			if (!nf_ct_is_confirmed(ct)) {
-				struct nf_conn_help *help;
-
-				if (ipv4_is_lbcast(iph->daddr) ||
-				        ipv4_is_loopback(iph->daddr) ||
-				        ipv4_is_multicast(iph->daddr) ||
-				        ipv4_is_zeronet(iph->daddr)) {
-					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-					return NF_ACCEPT;
-				}
-				if (ct->master) {
-					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-					return NF_ACCEPT;
-				}
-				help = nfct_help(ct);
-				if (help && help->helper) {
-					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-					return NF_ACCEPT;
-				}
-
-				natcap_server_info_select(skb, iph->daddr, TCPH(l4)->dest, &server);
-				if (server.ip == 0) {
-					NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
-					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-					return NF_ACCEPT;
-				}
-
-				ns = natcap_session_in(ct);
-				if (!ns) {
-					NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
-					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-					return NF_ACCEPT;
-				}
-				natcap_tuple_to_ns(ns, &server, iph->protocol);
-
-				set_bit(IPS_NATCAP_DUAL_BIT, &ct->status);
-
-				if (in && strncmp(in->name, "natcap", 6) == 0) {
-					if (!(NS_NATCAP_NOLIMIT & ns->n.status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->n.status);
-				}
-				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": TCP dual out to server=%pI4\n", DEBUG_TCP_ARG(iph,l4), &server.ip);
-			}
-			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
-			if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
-			return NF_ACCEPT;
 		}
-	} else {
+	} else { /* for UDP */
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
 			return NF_DROP;
 		}
@@ -886,18 +913,10 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		}
 
 		if (UDPH(l4)->dest == __constant_htons(53) && !is_natcap_server(iph->daddr)) {
-natcap_dual_out:
+natcap_dual_out_udp:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			if (!nf_ct_is_confirmed(ct)) {
 				struct nf_conn_help *help;
-
-				if (ipv4_is_lbcast(iph->daddr) ||
-				        ipv4_is_loopback(iph->daddr) ||
-				        ipv4_is_multicast(iph->daddr) ||
-				        ipv4_is_zeronet(iph->daddr)) {
-					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-					return NF_ACCEPT;
-				}
 				if (ct->master) {
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
@@ -909,9 +928,9 @@ natcap_dual_out:
 				}
 
 				if (is_natcap_server(dns_server)) {
-					natcap_server_info_select(skb, dns_server, UDPH(l4)->dest, &server);
+					natcap_server_info_select(SERVER_GROUP_0, skb, dns_server, UDPH(l4)->dest, &server);
 				} else {
-					natcap_server_info_select(skb, iph->daddr, UDPH(l4)->dest, &server);
+					natcap_server_info_select(SERVER_GROUP_0, skb, iph->daddr, UDPH(l4)->dest, &server);
 				}
 				if (server.ip == 0) {
 					NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
@@ -926,6 +945,7 @@ natcap_dual_out:
 					return NF_ACCEPT;
 				}
 				natcap_tuple_to_ns(ns, &server, iph->protocol);
+				ns->n.group_x = SERVER_GROUP_0;
 
 				set_bit(IPS_NATCAP_DUAL_BIT, &ct->status);
 
@@ -945,13 +965,24 @@ natcap_dual_out:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
-		} else if (cnipwhitelist_mode ||
-		           IP_SET_test_dst_ip(state, in, out, skb, "udproxylist") > 0 ||
-		           IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0 ||
-		           UDPH(l4)->dest == __constant_htons(443) ||
-		           UDPH(l4)->dest == __constant_htons(80) ||
-		           (is_natcap_server(iph->daddr) && UDPH(l4)->dest == __constant_htons(53))) {
-			natcap_server_info_select(skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
+		} else {
+			int x = -1;
+
+			if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist0") > 0) {
+				x = SERVER_GROUP_0;
+			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
+				x = SERVER_GROUP_1;
+			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfw_udp_port_list0") > 0) {
+				x = SERVER_GROUP_0;
+			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfw_udp_port_list1") > 0) {
+				x = SERVER_GROUP_1;
+			}
+
+			if (x == -1) {
+				goto natcap_dual_out_udp;
+			}
+
+			natcap_server_info_select(x, skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -967,37 +998,22 @@ natcap_dual_out:
 				return NF_ACCEPT;
 			}
 			natcap_tuple_to_ns(ns, &server, iph->protocol);
+			ns->n.group_x = x;
 
 			if (in && strncmp(in->name, "natcap", 6) == 0) {
 				if (!(NS_NATCAP_NOLIMIT & ns->n.status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->n.status);
 			}
 			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
-		} else {
-			goto natcap_dual_out;
 		}
 	}
 
 	if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
-		if (ipv4_is_lbcast(iph->daddr) ||
-		        ipv4_is_loopback(iph->daddr) ||
-		        ipv4_is_multicast(iph->daddr) ||
-		        ipv4_is_zeronet(iph->daddr)) {
-			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-			return NF_ACCEPT;
-		}
 		switch (iph->protocol) {
 		case IPPROTO_TCP:
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
-			if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
-				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
-			}
 			break;
 		case IPPROTO_UDP:
 			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
-			if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
-				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
-			}
 			break;
 		}
 		if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
@@ -1027,7 +1043,7 @@ natcap_dual_out:
 natcaped_out:
 	xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 	if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
-	if (iph->protocol == IPPROTO_TCP) {
+	if (iph->protocol == IPPROTO_TCP && !cnipwhitelist_mode) {
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
 			return NF_DROP;
 		}
@@ -1044,8 +1060,8 @@ natcaped_out:
 			}
 			if ((IPS_NATCAP_SYN1 & ct->status) && (IPS_NATCAP_SYN2 & ct->status)) {
 				if (!is_natcap_server(iph->daddr)) {
-					NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": natcaped syn3 del target from gfwlist\n", DEBUG_TCP_ARG(iph,l4));
-					IP_SET_del_dst_ip(state, in, out, skb, "gfwlist");
+					NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": natcaped syn3 del target from gfwlist0\n", DEBUG_TCP_ARG(iph,l4));
+					IP_SET_del_dst_ip(state, in, out, skb, "gfwlist0");
 				}
 			}
 		}
@@ -1189,7 +1205,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if (TCPH(l4)->syn)
-			natcap_server_in_touch(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
+			natcap_server_in_touch(ns->n.group_x, ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 
 		NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": before decode\n", DEBUG_TCP_ARG(iph,l4));
 
@@ -1225,7 +1241,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 				NATCAP_INFO("(CPCI)" DEBUG_UDP_FMT ": got CFM pkt\n", DEBUG_UDP_ARG(iph,l4));
 			}
-			natcap_server_in_touch(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
+			natcap_server_in_touch(ns->n.group_x, ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 			consume_skb(skb);
 			return NF_STOLEN;
 		}
@@ -3288,8 +3304,8 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					TCPH(l4)->dest = master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all;
 					TCPH(l4)->source = master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all;
 					if (!is_natcap_server(iph->saddr) && IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
-						NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn natcap got response add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
-						IP_SET_add_src_ip(state, in, out, skb, "gfwlist");
+						NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn natcap got response add target to gfwlist0\n", DEBUG_TCP_ARG(iph,l4));
+						IP_SET_add_src_ip(state, in, out, skb, "gfwlist0");
 					}
 					iph->saddr = saddr;
 					TCPH(l4)->dest = dest;
@@ -3355,8 +3371,8 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			if (TCPH(l4)->rst) {
 				if ((TCPH(l4)->source == __constant_htons(80) || TCPH(l4)->source == __constant_htons(443)) &&
 				        IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
-					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": bypass get reset add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
-					IP_SET_add_src_ip(state, in, out, skb, "gfwlist");
+					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": bypass get reset add target to gfwlist0\n", DEBUG_TCP_ARG(iph,l4));
+					IP_SET_add_src_ip(state, in, out, skb, "gfwlist0");
 				}
 			}
 			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
@@ -3765,6 +3781,7 @@ static struct nf_hook_ops client_hooks[] = {
 
 int natcap_client_init(void)
 {
+	int x;
 	int ret = 0;
 
 	need_conntrack();
@@ -3772,7 +3789,10 @@ int natcap_client_init(void)
 	natcap_ntc_init(&tx_ntc);
 	natcap_ntc_init(&rx_ntc);
 
-	natcap_server_info_cleanup();
+	for (x = 0; x < SERVER_GROUP_MAX; x++) {
+		natcap_server_info_cleanup(x);
+	}
+
 	default_mac_addr_init();
 	ret = nf_register_hooks(client_hooks, ARRAY_SIZE(client_hooks));
 	return ret;
