@@ -124,17 +124,17 @@ static int natcap_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct, struct natc
 
 	//speed up for UDP/TCP 53
 	if ( ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53) ||
-			(ct->master && ct->master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53)) ) {
+	        (ct->master && ct->master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53)) ) {
 		return 0;
 	}
 
 	switch (iph->protocol) {
-		case IPPROTO_TCP:
-			len -= iph->ihl * 4 + TCPH(l4)->doff * 4;
-			break;
-		case IPPROTO_UDP:
-			len -= iph->ihl * 4 + sizeof(struct udphdr);
-			break;
+	case IPPROTO_TCP:
+		len -= iph->ihl * 4 + TCPH(l4)->doff * 4;
+		break;
+	case IPPROTO_UDP:
+		len -= iph->ihl * 4 + sizeof(struct udphdr);
+		break;
 	}
 	if (len <= 0) {
 		return 0;
@@ -298,8 +298,8 @@ void natcap_server_info_change(int change)
 {
 	static unsigned long server_jiffies = 0;
 	if (change || server_jiffies == 0 ||
-			(!server_persist_lock &&
-			 time_after(jiffies, server_jiffies + (7 * server_persist_timeout / 8 + jiffies % (server_persist_timeout / 4 + 1)) * HZ))) {
+	        (!server_persist_lock &&
+	         time_after(jiffies, server_jiffies + (7 * server_persist_timeout / 8 + jiffies % (server_persist_timeout / 4 + 1)) * HZ))) {
 		server_jiffies = jiffies;
 		server_index += 1 + prandom_u32();
 	}
@@ -460,8 +460,8 @@ void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, stru
 				server_index = i;
 				nsi->last_dir[i] = NATCAP_SERVER_IN;
 				NATCAP_WARN("current server(" TUPLE_FMT ") is blocked, switch to next=" TUPLE_FMT "\n",
-						TUPLE_ARG(&nsi->server[m][oldhash]),
-						TUPLE_ARG(&nsi->server[m][hash]));
+				            TUPLE_ARG(&nsi->server[m][oldhash]),
+				            TUPLE_ARG(&nsi->server[m][hash]));
 				break;
 			}
 		}
@@ -472,8 +472,8 @@ void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, stru
 				server_index = i;
 				nsi->last_dir[i] = NATCAP_SERVER_IN;
 				NATCAP_WARN("current server(" TUPLE_FMT ") is blocked, switch to next=" TUPLE_FMT "\n",
-						TUPLE_ARG(&nsi->server[m][oldhash]),
-						TUPLE_ARG(&nsi->server[m][hash]));
+				            TUPLE_ARG(&nsi->server[m][oldhash]),
+				            TUPLE_ARG(&nsi->server[m][hash]));
 				break;
 			}
 		}
@@ -481,8 +481,8 @@ void natcap_server_info_select(struct sk_buff *skb, __be32 ip, __be16 port, stru
 			natcap_server_info_change(1);
 			hash = server_index % count;
 			NATCAP_WARN("all servers are blocked, force change. " TUPLE_FMT " -> " TUPLE_FMT "\n",
-					TUPLE_ARG(&nsi->server[m][oldhash]),
-					TUPLE_ARG(&nsi->server[m][hash]));
+			            TUPLE_ARG(&nsi->server[m][oldhash]),
+			            TUPLE_ARG(&nsi->server[m][hash]));
 		}
 	}
 
@@ -603,31 +603,31 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_client_dnat_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_client_dnat_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_client_dnat_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_client_dnat_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
@@ -754,8 +754,8 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, knock select target server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		} else if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
-				IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
-				IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+		           IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
+		           IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
@@ -809,9 +809,9 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				struct nf_conn_help *help;
 
 				if (ipv4_is_lbcast(iph->daddr) ||
-						ipv4_is_loopback(iph->daddr) ||
-						ipv4_is_multicast(iph->daddr) ||
-						ipv4_is_zeronet(iph->daddr)) {
+				        ipv4_is_loopback(iph->daddr) ||
+				        ipv4_is_multicast(iph->daddr) ||
+				        ipv4_is_zeronet(iph->daddr)) {
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
@@ -864,8 +864,8 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				l4 = (void *)iph + iph->ihl * 4;
 
 				if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_E_MAGIC) ||
-						(get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC) &&
-						 skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
+				        (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC) &&
+				         skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
 					iph = ip_hdr(skb);
 					l4 = (void *)iph + iph->ihl * 4;
 					NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": first packet is already encoded, bypass\n", DEBUG_UDP_ARG(iph,l4));
@@ -892,9 +892,9 @@ natcap_dual_out:
 				struct nf_conn_help *help;
 
 				if (ipv4_is_lbcast(iph->daddr) ||
-						ipv4_is_loopback(iph->daddr) ||
-						ipv4_is_multicast(iph->daddr) ||
-						ipv4_is_zeronet(iph->daddr)) {
+				        ipv4_is_loopback(iph->daddr) ||
+				        ipv4_is_multicast(iph->daddr) ||
+				        ipv4_is_zeronet(iph->daddr)) {
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
@@ -940,17 +940,17 @@ natcap_dual_out:
 		}
 
 		if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
-				IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
-				IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+		        IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
+		        IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
 		} else if (cnipwhitelist_mode ||
-				IP_SET_test_dst_ip(state, in, out, skb, "udproxylist") > 0 ||
-				IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0 ||
-				UDPH(l4)->dest == __constant_htons(443) ||
-				UDPH(l4)->dest == __constant_htons(80) ||
-				(is_natcap_server(iph->daddr) && UDPH(l4)->dest == __constant_htons(53))) {
+		           IP_SET_test_dst_ip(state, in, out, skb, "udproxylist") > 0 ||
+		           IP_SET_test_dst_ip(state, in, out, skb, "gfwlist") > 0 ||
+		           UDPH(l4)->dest == __constant_htons(443) ||
+		           UDPH(l4)->dest == __constant_htons(80) ||
+		           (is_natcap_server(iph->daddr) && UDPH(l4)->dest == __constant_htons(53))) {
 			natcap_server_info_select(skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
@@ -979,35 +979,35 @@ natcap_dual_out:
 
 	if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
 		if (ipv4_is_lbcast(iph->daddr) ||
-				ipv4_is_loopback(iph->daddr) ||
-				ipv4_is_multicast(iph->daddr) ||
-				ipv4_is_zeronet(iph->daddr)) {
+		        ipv4_is_loopback(iph->daddr) ||
+		        ipv4_is_multicast(iph->daddr) ||
+		        ipv4_is_zeronet(iph->daddr)) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
 		switch (iph->protocol) {
-			case IPPROTO_TCP:
-				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
-				if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
-					NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
-				}
-				break;
-			case IPPROTO_UDP:
-				NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
-				if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
-					NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
-				}
-				break;
+		case IPPROTO_TCP:
+			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+			if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
+				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
+			}
+			break;
+		case IPPROTO_UDP:
+			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+			if (natcap_session_init(ct, GFP_ATOMIC) != 0) {
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
+			}
+			break;
 		}
 		if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 			switch (iph->protocol) {
-				case IPPROTO_TCP:
-					NATCAP_ERROR("(CD)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
-					break;
-				case IPPROTO_UDP:
-					NATCAP_ERROR("(CD)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
-					break;
+			case IPPROTO_TCP:
+				NATCAP_ERROR("(CD)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+				break;
+			case IPPROTO_UDP:
+				NATCAP_ERROR("(CD)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+				break;
 			}
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -1016,12 +1016,12 @@ natcap_dual_out:
 	}
 
 	switch (iph->protocol) {
-		case IPPROTO_TCP:
-			NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": after encode\n", DEBUG_TCP_ARG(iph,l4));
-			break;
-		case IPPROTO_UDP:
-			NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": after encode\n", DEBUG_UDP_ARG(iph,l4));
-			break;
+	case IPPROTO_TCP:
+		NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": after encode\n", DEBUG_TCP_ARG(iph,l4));
+		break;
+	case IPPROTO_UDP:
+		NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": after encode\n", DEBUG_UDP_ARG(iph,l4));
+		break;
 	}
 
 natcaped_out:
@@ -1056,31 +1056,31 @@ natcaped_out:
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_client_pre_ct_in_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_client_pre_ct_in_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_client_pre_ct_in_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
 	//const struct net_device *out = state->out;
 #else
 static unsigned int natcap_client_pre_ct_in_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	unsigned int hooknum = state->hook;
 	const struct net_device *in = state->in;
@@ -1221,7 +1221,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_E_MAGIC_A) &&
-				UDPH(l4)->len == __constant_htons(sizeof(struct udphdr) + 4)) {
+		        UDPH(l4)->len == __constant_htons(sizeof(struct udphdr) + 4)) {
 			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 				NATCAP_INFO("(CPCI)" DEBUG_UDP_FMT ": got CFM pkt\n", DEBUG_UDP_ARG(iph,l4));
 			}
@@ -1250,25 +1250,25 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_client_pre_in_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	u_int8_t pf = PF_INET;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_client_pre_in_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	u_int8_t pf = ops->pf;
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_client_pre_in_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -1276,8 +1276,8 @@ static unsigned int natcap_client_pre_in_hook(const struct nf_hook_ops *ops,
 	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_client_pre_in_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -1577,7 +1577,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 										ns->peer_tuple3[j].dport = prandom_u32() % (65536 - 1024) + 1024;
 										ns->peer_tuple3[j].sport = prandom_u32() % (65536 - 1024) + 1024;
 										NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": peer%px select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
-												ntohs(ns->peer_tuple3[j].sport), &ns->peer_tuple3[j].dip, ntohs(ns->peer_tuple3[j].dport), j);
+										             ntohs(ns->peer_tuple3[j].sport), &ns->peer_tuple3[j].dip, ntohs(ns->peer_tuple3[j].dport), j);
 										break;
 									}
 						}
@@ -1643,11 +1643,11 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 						ct->master = master->master;
 						ct = ct->master;
 						NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": BIND=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n", DEBUG_UDP_ARG(iph,l4), i,
-								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-								&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-								&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
-								);
+						             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+						             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+						             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+						             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
+						            );
 					}
 
 					skb_push(nskb, (char *)iph - (char *)neth);
@@ -1722,11 +1722,11 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 						ns->peer_tuple3[i].sport = UDPH(l4)->dest;
 						ns->peer_cnt++;
 						NATCAP_INFO("(CPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4), i,
-								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-								&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-								&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-								&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
-								ns->peer_mark);
+						            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+						            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+						            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+						            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+						            ns->peer_mark);
 					}
 
 					if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
@@ -1802,14 +1802,14 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			i = get_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2);
 			i = ntohs(i) % MAX_PEER_NUM;
 			if (!short_test_bit(i, &ns->peer_mark) &&
-					ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
+			        ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
 				short_set_bit(i, &ns->peer_mark);
 				NATCAP_INFO("(CPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4), i,
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
-						ns->peer_mark);
+				            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+				            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+				            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+				            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+				            ns->peer_mark);
 			}
 
 			/* XXX I just confirm it first  */
@@ -1873,7 +1873,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		if (ns->peer_mark != 0xff)
 			for (i = 0; i < MAX_PEER_NUM; i++)
 				if (!short_test_bit(i, &ns->peer_mark) &&
-						ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
+				        ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
 					short_set_bit(i, &ns->peer_mark);
 					break;
 				}
@@ -1917,10 +1917,10 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		}
 
 		NATCAP_DEBUG("(CPI)" DEBUG_TCP_FMT ": peer pass up: after ct=[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n", DEBUG_TCP_ARG(iph,l4),
-				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-				&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-				&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all));
+		             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+		             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+		             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+		             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all));
 
 		return NF_ACCEPT;
 	} else if (master->master || (IPS_NATCAP_CFM & master->status)) {
@@ -1940,25 +1940,25 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_client_post_out_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	//u_int8_t pf = PF_INET;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_client_post_out_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	//u_int8_t pf = ops->pf;
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_client_post_out_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	//u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -1966,8 +1966,8 @@ static unsigned int natcap_client_post_out_hook(const struct nf_hook_ops *ops,
 	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_client_post_out_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	//u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -2058,8 +2058,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		}
 
 		ret = natcap_tcpopt_setup(status, skb, ct, &tcpopt,
-				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
-				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+		                          ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
+		                          ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 		if (ret != 0) {
 			u16 mss;
 			/* skb cannot setup encode, means that tcp option space has no enough left
@@ -2090,8 +2090,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			skb_rcsum_tcpudp(skb2);
 
 			ret = natcap_tcpopt_setup(status, skb2, ct, &tcpopt,
-					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
-					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+			                          ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
+			                          ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 			if (ret != 0) {
 				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				consume_skb(skb2);
@@ -2136,9 +2136,9 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		}
 
 		if (ns->n.tcp_seq_offset && TCPH(l4)->ack && !(NS_NATCAP_TCPUDPENC & ns->n.status) &&
-				(NS_NATCAP_ENC & ns->n.status) && (IPS_SEEN_REPLY & ct->status) &&
-				!(NS_NATCAP_CONFUSION & ns->n.status) && !short_test_and_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->n.status) &&
-				nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq + 1)) != ns->n.tcp_seq_offset) {
+		        (NS_NATCAP_ENC & ns->n.status) && (IPS_SEEN_REPLY & ct->status) &&
+		        !(NS_NATCAP_CONFUSION & ns->n.status) && !short_test_and_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->n.status) &&
+		        nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq + 1)) != ns->n.tcp_seq_offset) {
 			struct natcap_TCPOPT *tcpopt;
 			int offset, add_len;
 			int size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
@@ -2450,25 +2450,25 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_client_post_master_out_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	u_int8_t pf = PF_INET;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_client_post_master_out_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	u_int8_t pf = ops->pf;
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_client_post_master_out_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -2476,8 +2476,8 @@ static unsigned int natcap_client_post_master_out_hook(const struct nf_hook_ops 
 	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_client_post_master_out_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -2593,17 +2593,17 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			struct nf_conntrack_tuple tuple;
 
 			if (cone_snat_array && (!(ns->n.status & NS_NATCAP_TCPUDPENC)) &&
-					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
-					ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
-					IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+			        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
+			        ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
+			        IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 				unsigned int idx;
 				struct cone_snat_session css;
 
 				idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, iph->saddr) % 32768;
 				memcpy(&css, &cone_snat_array[idx], sizeof(css));
 				if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip == css.lan_ip &&
-						ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port == css.lan_port &&
-						iph->saddr == css.wan_ip) {
+				        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port == css.lan_port &&
+				        iph->saddr == css.wan_ip) {
 					ns->n.new_source = css.wan_port;
 				}
 			}
@@ -2648,9 +2648,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		iph->daddr = ns->n.target_ip;
 
 		if (cone_nat_array && cone_snat_array && (!(ns->n.status & NS_NATCAP_TCPUDPENC)) &&
-				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
-				ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
-				IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+		        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
+		        ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
+		        IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 			unsigned int idx;
 			struct cone_nat_session cns;
 			struct cone_snat_session css;
@@ -2658,13 +2658,13 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			idx = ntohs(UDPH(l4)->source) % 65536;
 			memcpy(&cns, &cone_nat_array[idx], sizeof(cns));
 			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip != cns.ip ||
-					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port != cns.port) {
+			        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port != cns.port) {
 
 				NATCAP_INFO("(CPMO)" DEBUG_UDP_FMT ": update mapping from %pI4:%u to %pI4:%u @port=%u\n", DEBUG_UDP_ARG(iph,l4),
-						&cns.ip, ntohs(cns.port),
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip,
-						ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port),
-						idx);
+				            &cns.ip, ntohs(cns.port),
+				            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip,
+				            ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port),
+				            idx);
 
 				cns.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 				cns.port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port;
@@ -2674,14 +2674,14 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, iph->saddr) % 32768;
 			memcpy(&css, &cone_snat_array[idx], sizeof(css));
 			if ((css.wan_ip != iph->saddr || css.wan_port != UDPH(l4)->source) ||
-					css.lan_ip != ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip ||
-					css.lan_port != ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) {
+			        css.lan_ip != ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip ||
+			        css.lan_port != ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) {
 
 				NATCAP_INFO("(CPMO)" DEBUG_UDP_FMT ": update SNAT mapping from %pI4:%u=>%pI4:%u to %pI4:%u=>%pI4:%u\n", DEBUG_UDP_ARG(iph,l4),
-						&css.lan_ip, ntohs(css.lan_port),
-						&css.wan_ip, ntohs(css.wan_port),
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port),
-						&iph->saddr, ntohs(UDPH(l4)->source));
+				            &css.lan_ip, ntohs(css.lan_port),
+				            &css.wan_ip, ntohs(css.wan_port),
+				            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port),
+				            &iph->saddr, ntohs(UDPH(l4)->source));
 
 				css.wan_ip = iph->saddr;
 				css.wan_port = UDPH(l4)->source;
@@ -2713,12 +2713,12 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	master_ns = natcap_session_in(master);
 	if (NULL == master_ns) {
 		switch(iph->protocol) {
-			case IPPROTO_TCP:
-				NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
-				break;
-			case IPPROTO_UDP:
-				NATCAP_WARN("(CPMO)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
-				break;
+		case IPPROTO_TCP:
+			NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+			break;
+		case IPPROTO_UDP:
+			NATCAP_WARN("(CPMO)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+			break;
 		}
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 		consume_skb(skb);
@@ -2744,12 +2744,12 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		if (!(IPS_NATCAP & master->status) && !test_and_set_bit(IPS_NATCAP_BIT, &master->status)) {
 			if (natcap_session_init(master, GFP_ATOMIC) != 0) {
 				switch(iph->protocol) {
-					case IPPROTO_TCP:
-						NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
-						break;
-					case IPPROTO_UDP:
-						NATCAP_WARN("(CPMO)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
-						break;
+				case IPPROTO_TCP:
+					NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
+					break;
+				case IPPROTO_UDP:
+					NATCAP_WARN("(CPMO)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
+					break;
 				}
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				consume_skb(skb);
@@ -2770,32 +2770,32 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	if (master->master != ct) {
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 		switch (iph->protocol) {
-			case IPPROTO_TCP:
-				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
-						DEBUG_TCP_ARG(iph,l4),
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
-						&master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-						&master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-						&master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-						&master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
-						);
-				break;
-			case IPPROTO_UDP:
-				NATCAP_ERROR("(CPMO)" DEBUG_UDP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
-						DEBUG_UDP_ARG(iph,l4),
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
-						&master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-						&master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-						&master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-						&master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
-						);
-				break;
+		case IPPROTO_TCP:
+			NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
+			             DEBUG_TCP_ARG(iph,l4),
+			             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+			             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+			             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+			             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+			             &master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+			             &master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+			             &master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+			             &master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
+			            );
+			break;
+		case IPPROTO_UDP:
+			NATCAP_ERROR("(CPMO)" DEBUG_UDP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
+			             DEBUG_UDP_ARG(iph,l4),
+			             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+			             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+			             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+			             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+			             &master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+			             &master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+			             &master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+			             &master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
+			            );
+			break;
 		}
 		consume_skb(skb);
 		return NF_ACCEPT;
@@ -2814,8 +2814,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			status |= NATCAP_NEED_ENC;
 		}
 		ret = natcap_tcpopt_setup(status, skb, master, &tcpopt,
-				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
-				ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+		                          ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
+		                          ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 		if (ret != 0) {
 			/* skb cannot setup encode, means that tcp option space has no enough left
 			 * so we dup a skb and mark it with NATCAP_TCPOPT_SYN as a pioneer to 'kick the door'
@@ -2842,8 +2842,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			skb_rcsum_tcpudp(skb2);
 
 			ret = natcap_tcpopt_setup(status, skb2, master, &tcpopt,
-					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
-					ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
+			                          ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
+			                          ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 			if (ret != 0) {
 				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": natcap_tcpopt_setup() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -2898,9 +2898,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 
 		if (master_ns->n.tcp_seq_offset && TCPH(l4)->ack && !(NS_NATCAP_TCPUDPENC & master_ns->n.status) &&
-				(NS_NATCAP_ENC & master_ns->n.status) && (IPS_SEEN_REPLY & master->status) &&
-				!(NS_NATCAP_CONFUSION & master_ns->n.status) && !short_test_and_set_bit(NS_NATCAP_CONFUSION_BIT, &master_ns->n.status) &&
-				nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq + 1)) != master_ns->n.tcp_seq_offset) {
+		        (NS_NATCAP_ENC & master_ns->n.status) && (IPS_SEEN_REPLY & master->status) &&
+		        !(NS_NATCAP_CONFUSION & master_ns->n.status) && !short_test_and_set_bit(NS_NATCAP_CONFUSION_BIT, &master_ns->n.status) &&
+		        nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq + 1)) != master_ns->n.tcp_seq_offset) {
 			struct natcap_TCPOPT *tcpopt;
 			int offset, add_len;
 			int size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
@@ -3174,25 +3174,25 @@ eat:
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_client_pre_master_in_hook(unsigned int hooknum,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	u_int8_t pf = PF_INET;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 static unsigned int natcap_client_pre_master_in_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct net_device *in,
-		const struct net_device *out,
-		int (*okfn)(struct sk_buff *))
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
 {
 	u_int8_t pf = ops->pf;
 	unsigned int hooknum = ops->hooknum;
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
 static unsigned int natcap_client_pre_master_in_hook(const struct nf_hook_ops *ops,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -3200,8 +3200,8 @@ static unsigned int natcap_client_pre_master_in_hook(const struct nf_hook_ops *o
 	const struct net_device *out = state->out;
 #else
 static unsigned int natcap_client_pre_master_in_hook(void *priv,
-		struct sk_buff *skb,
-		const struct nf_hook_state *state)
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
 {
 	u_int8_t pf = state->pf;
 	unsigned int hooknum = state->hook;
@@ -3324,16 +3324,16 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			if ((struct nf_conn *)skb_nfct(skb) != master) {
 				NATCAP_ERROR("(CPMI)" DEBUG_TCP_FMT ": skb->nfct != master, ct=%p, master=%p, skb_nfct(skb)=%p\n", DEBUG_TCP_ARG(iph,l4), ct, master, skb_nfct(skb));
 				NATCAP_ERROR("(CPMI)" DEBUG_TCP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
-						DEBUG_TCP_ARG(iph,l4),
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
-						&master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-						&master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-						&master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-						&master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
-						);
+				             DEBUG_TCP_ARG(iph,l4),
+				             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+				             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+				             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+				             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+				             &master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+				             &master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+				             &master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+				             &master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
+				            );
 				return NF_DROP;
 			}
 
@@ -3341,7 +3341,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		} else {
 			if (TCPH(l4)->rst) {
 				if ((TCPH(l4)->source == __constant_htons(80) || TCPH(l4)->source == __constant_htons(443)) &&
-						IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
+				        IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
 					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": bypass get reset add target to gfwlist\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_add_src_ip(state, in, out, skb, "gfwlist");
 				}
@@ -3431,16 +3431,16 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			if ((struct nf_conn *)skb_nfct(skb) != master) {
 				NATCAP_ERROR("(CPMI)" DEBUG_UDP_FMT ": skb->nfct != master, ct=%p, master=%p, skb_nfct(skb)=%p\n", DEBUG_UDP_ARG(iph,l4), ct, master, skb_nfct(skb));
 				NATCAP_ERROR("(CPMI)" DEBUG_UDP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
-						DEBUG_UDP_ARG(iph,l4),
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-						&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-						&ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
-						&master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-						&master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-						&master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-						&master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
-						);
+				             DEBUG_UDP_ARG(iph,l4),
+				             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+				             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+				             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+				             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+				             &master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+				             &master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+				             &master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+				             &master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
+				            );
 				return NF_DROP;
 			}
 
@@ -3487,8 +3487,8 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			ns_count = ntohs(get_byte2(p + 8));
 			ar_count = ntohs(get_byte2(p + 10));
 			NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, flags=0x%04x, qd=%u, an=%u, ns=%u, ar=%u\n",
-					DEBUG_UDP_ARG(iph,l4),
-					id, flags, qd_count, an_count, ns_count, ar_count);
+			             DEBUG_UDP_ARG(iph,l4),
+			             id, flags, qd_count, an_count, ns_count, ar_count);
 
 			if (!(IPS_NATCAP & ct->status) && (flags & 0xf) != 0) {
 				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS flags=%04x, drop\n", DEBUG_UDP_ARG(iph,l4), id, flags);
@@ -3602,69 +3602,69 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 				switch(type)
 				{
-					case 1: //A
-						if (rdlength == 4) {
-							ip = get_byte4(p + pos);
-							NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n",
-									DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
-							do {
-								unsigned int old_ip;
+				case 1: //A
+					if (rdlength == 4) {
+						ip = get_byte4(p + pos);
+						NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n",
+						             DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
+						do {
+							unsigned int old_ip;
 
-								if ((IPS_NATCAP & ct->status)) {
-									old_ip = iph->daddr;
-									iph->daddr = ip;
-									if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 && dns_proxy_drop) {
-										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS is in cniplist ip = %pI4, ignore\n",
-												DEBUG_UDP_ARG(iph,l4), id, &ip);
-										return NF_DROP;
-									}
-									iph->daddr = old_ip;
-								} else {
-									old_ip = iph->daddr;
-									iph->daddr = ip;
-									if (IP_SET_test_dst_ip(state, in, out, skb, "dnsdroplist") > 0 || IP_SET_test_dst_ip(state, in, out, skb, "cniplist") <= 0) {
-										iph->daddr = old_ip;
-										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is not cniplist ip = %pI4, drop\n",
-												DEBUG_UDP_ARG(iph,l4), id, &ip);
-										return NF_DROP;
-									}
-									iph->daddr = old_ip;
+							if ((IPS_NATCAP & ct->status)) {
+								old_ip = iph->daddr;
+								iph->daddr = ip;
+								if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 && dns_proxy_drop) {
+									NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS is in cniplist ip = %pI4, ignore\n",
+									            DEBUG_UDP_ARG(iph,l4), id, &ip);
+									return NF_DROP;
 								}
-							} while (0);
-						}
-						break;
-
-					case 28: //AAAA
-						if (rdlength == 16) {
-							unsigned char *ipv6 = p + pos;
-							NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ipv6=%pI6\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, ipv6);
-						}
-						break;
-
-					case 2: //NS
-					case 3: //MD
-					case 4: //MF
-					case 5: //CNAME
-					case 15: //MX
-					case 16: //TXT
-						if (IS_NATCAP_DEBUG()) {
-							int name_len;
-							char *name = kmalloc(2048, GFP_ATOMIC);
-
-							if (name != NULL) {
-								if ((name_len = get_rdata(p, len, pos, name, 2047)) >= 0) {
-									name[name_len] = 0;
-									NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
+								iph->daddr = old_ip;
+							} else {
+								old_ip = iph->daddr;
+								iph->daddr = ip;
+								if (IP_SET_test_dst_ip(state, in, out, skb, "dnsdroplist") > 0 || IP_SET_test_dst_ip(state, in, out, skb, "cniplist") <= 0) {
+									iph->daddr = old_ip;
+									NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is not cniplist ip = %pI4, drop\n",
+									            DEBUG_UDP_ARG(iph,l4), id, &ip);
+									return NF_DROP;
 								}
-								kfree(name);
+								iph->daddr = old_ip;
 							}
-						}
-						NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
-						break;
+						} while (0);
+					}
+					break;
 
-					default:
-						NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
-						break;
+				case 28: //AAAA
+					if (rdlength == 16) {
+						unsigned char *ipv6 = p + pos;
+						NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ipv6=%pI6\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, ipv6);
+					}
+					break;
+
+				case 2: //NS
+				case 3: //MD
+				case 4: //MF
+				case 5: //CNAME
+				case 15: //MX
+				case 16: //TXT
+					if (IS_NATCAP_DEBUG()) {
+						int name_len;
+						char *name = kmalloc(2048, GFP_ATOMIC);
+
+						if (name != NULL) {
+							if ((name_len = get_rdata(p, len, pos, name, 2047)) >= 0) {
+								name[name_len] = 0;
+								NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
+							}
+							kfree(name);
+						}
+					}
+					NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
+					break;
+
+				default:
+					NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
+					break;
 				}
 
 				pos += rdlength;

@@ -71,86 +71,86 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 
 	if ((*pos) == 0) {
 		n = snprintf(natcap_ctl_buffer,
-				PAGE_SIZE - 1,
-				"# Version: %s\n"
-				"# Usage:\n"
-				"#    disabled=Number -- set disable/enable\n"
-				"#    debug=Number -- set debug value\n"
-				"#    server [ip]:[port]-[e/o] -- add one server\n"
-				"#    delete [ip]:[port]-[e/o] -- delete one server\n"
-				"#    clean -- remove all existing server(s)\n"
-				"#    change_server -- change current server\n"
-				"#\n"
-				"# Info:\n"
-				"#    mode=%s(%u)\n"
-				"#    current_server=" TUPLE_FMT "\n"
-				"#    default_mac_addr=%02x:%02x:%02x:%02x:%02x:%02x\n"
-				"#    u_hash=0x%08x(%u)\n"
-				"#    u_mask=0x%08x\n"
-				"#    si_mask=0x%08x\n"
-				"#    ni_mask=0x%08x\n"
-				"#    protocol=%u\n"
-				"#    server_seed=%u\n"
-				"#    auth_enabled=%u\n"
-				"#    tx_speed_limit=%d B/s\n"
-				"#    rx_speed_limit=%d B/s\n"
-				"#    tx_pkts_threshold=%d\n"
-				"#    rx_pkts_threshold=%d\n"
-				"#    http_confusion=%u\n"
-				"#    encode_http_only=%u\n"
-				"#    sproxy=%u\n"
-				"#    knock_port=%u\n"
-				"#    knock_flood=%u\n"
-				"#    natcap_redirect_port=%u\n"
-				"#    natcap_client_redirect_port=%u\n"
-				"#    natcap_max_pmtu=%u\n"
-				"#    natcap_touch_timeout=%u\n"
-				"#    flow_total_tx_bytes=%llu\n"
-				"#    flow_total_rx_bytes=%llu\n"
-				"#    auth_http_redirect_url=%s\n"
-				"#    htp_confusion_host=%s\n"
-				"#    server_persist_lock=%u\n"
-				"#    dns_proxy_drop=%u\n"
-				"#    peer_multipath=%u\n"
-				"#    macfilter=%s(%u)\n"
-				"#    ipfilter=%s(%u)\n"
-				"#\n"
-				"# Reload cmd:\n"
-				"\n"
-				"clean\n"
-				"disabled=%u\n"
-				"debug=%u\n"
-				"server_persist_timeout=%u\n"
-				"cnipwhitelist_mode=%u\n"
-				"dns_server=%pI4:%u\n"
-				"\n",
-				NATCAP_VERSION,
-				mode_str[mode], mode,
-				TUPLE_ARG(natcap_server_info_current()),
-				default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
-				ntohl(default_u_hash),
-				ntohl(default_u_hash),
-				user_mark_natcap_mask,
-				server_index_natcap_mask,
-				natcap_ignore_mask,
-				default_protocol,
-				server_seed, auth_enabled,
-				natcap_tx_speed_get(),
-				natcap_rx_speed_get(),
-				tx_pkts_threshold,
-				rx_pkts_threshold,
-				http_confusion, encode_http_only, sproxy, ntohs(knock_port), knock_flood,
-				ntohs(natcap_redirect_port), ntohs(natcap_client_redirect_port), natcap_max_pmtu, natcap_touch_timeout,
-				flow_total_tx_bytes, flow_total_rx_bytes,
-				auth_http_redirect_url,
-				htp_confusion_host,
-				server_persist_lock,
-				dns_proxy_drop,
-				peer_multipath,
-				macfilter_acl_str[macfilter], macfilter,
-				ipfilter_acl_str[ipfilter], ipfilter,
-				disabled, debug, server_persist_timeout,
-				cnipwhitelist_mode, &dns_server, ntohs(dns_port));
+		             PAGE_SIZE - 1,
+		             "# Version: %s\n"
+		             "# Usage:\n"
+		             "#    disabled=Number -- set disable/enable\n"
+		             "#    debug=Number -- set debug value\n"
+		             "#    server [ip]:[port]-[e/o] -- add one server\n"
+		             "#    delete [ip]:[port]-[e/o] -- delete one server\n"
+		             "#    clean -- remove all existing server(s)\n"
+		             "#    change_server -- change current server\n"
+		             "#\n"
+		             "# Info:\n"
+		             "#    mode=%s(%u)\n"
+		             "#    current_server=" TUPLE_FMT "\n"
+		             "#    default_mac_addr=%02x:%02x:%02x:%02x:%02x:%02x\n"
+		             "#    u_hash=0x%08x(%u)\n"
+		             "#    u_mask=0x%08x\n"
+		             "#    si_mask=0x%08x\n"
+		             "#    ni_mask=0x%08x\n"
+		             "#    protocol=%u\n"
+		             "#    server_seed=%u\n"
+		             "#    auth_enabled=%u\n"
+		             "#    tx_speed_limit=%d B/s\n"
+		             "#    rx_speed_limit=%d B/s\n"
+		             "#    tx_pkts_threshold=%d\n"
+		             "#    rx_pkts_threshold=%d\n"
+		             "#    http_confusion=%u\n"
+		             "#    encode_http_only=%u\n"
+		             "#    sproxy=%u\n"
+		             "#    knock_port=%u\n"
+		             "#    knock_flood=%u\n"
+		             "#    natcap_redirect_port=%u\n"
+		             "#    natcap_client_redirect_port=%u\n"
+		             "#    natcap_max_pmtu=%u\n"
+		             "#    natcap_touch_timeout=%u\n"
+		             "#    flow_total_tx_bytes=%llu\n"
+		             "#    flow_total_rx_bytes=%llu\n"
+		             "#    auth_http_redirect_url=%s\n"
+		             "#    htp_confusion_host=%s\n"
+		             "#    server_persist_lock=%u\n"
+		             "#    dns_proxy_drop=%u\n"
+		             "#    peer_multipath=%u\n"
+		             "#    macfilter=%s(%u)\n"
+		             "#    ipfilter=%s(%u)\n"
+		             "#\n"
+		             "# Reload cmd:\n"
+		             "\n"
+		             "clean\n"
+		             "disabled=%u\n"
+		             "debug=%u\n"
+		             "server_persist_timeout=%u\n"
+		             "cnipwhitelist_mode=%u\n"
+		             "dns_server=%pI4:%u\n"
+		             "\n",
+		             NATCAP_VERSION,
+		             mode_str[mode], mode,
+		             TUPLE_ARG(natcap_server_info_current()),
+		             default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
+		             ntohl(default_u_hash),
+		             ntohl(default_u_hash),
+		             user_mark_natcap_mask,
+		             server_index_natcap_mask,
+		             natcap_ignore_mask,
+		             default_protocol,
+		             server_seed, auth_enabled,
+		             natcap_tx_speed_get(),
+		             natcap_rx_speed_get(),
+		             tx_pkts_threshold,
+		             rx_pkts_threshold,
+		             http_confusion, encode_http_only, sproxy, ntohs(knock_port), knock_flood,
+		             ntohs(natcap_redirect_port), ntohs(natcap_client_redirect_port), natcap_max_pmtu, natcap_touch_timeout,
+		             flow_total_tx_bytes, flow_total_rx_bytes,
+		             auth_http_redirect_url,
+		             htp_confusion_host,
+		             server_persist_lock,
+		             dns_proxy_drop,
+		             peer_multipath,
+		             macfilter_acl_str[macfilter], macfilter,
+		             ipfilter_acl_str[ipfilter], ipfilter,
+		             disabled, debug, server_persist_timeout,
+		             cnipwhitelist_mode, &dns_server, ntohs(dns_port));
 		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
@@ -158,9 +158,9 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 
 		if (dst) {
 			n = snprintf(natcap_ctl_buffer,
-					PAGE_SIZE - 1,
-					"server " TUPLE_FMT "\n",
-					TUPLE_ARG(dst));
+			             PAGE_SIZE - 1,
+			             "server " TUPLE_FMT "\n",
+			             TUPLE_ARG(dst));
 			natcap_ctl_buffer[n] = 0;
 			return natcap_ctl_buffer;
 		}
@@ -251,10 +251,10 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			unsigned int a, b, c, d, e;
 			n = sscanf(data, "dns_server=%u.%u.%u.%u:%u", &a, &b, &c, &d, &e);
 			if ( (n == 5 && e <= 0xffff) &&
-					(((a & 0xff) == a) &&
-					 ((b & 0xff) == b) &&
-					 ((c & 0xff) == c) &&
-					 ((d & 0xff) == d)) ) {
+			        (((a & 0xff) == a) &&
+			         ((b & 0xff) == b) &&
+			         ((c & 0xff) == c) &&
+			         ((d & 0xff) == d)) ) {
 				dns_server = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 				dns_port = htons(e);
 				goto done;
@@ -266,13 +266,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			char f, g, h;
 			n = sscanf(data, "server %u.%u.%u.%u:%u-%c-%c-%c", &a, &b, &c, &d, &e, &f, &g, &h);
 			if ( (n == 8 && e <= 0xffff) &&
-					(f == 'e' || f == 'o') &&
-					(g == 'T' || g == 'U') &&
-					(h == 'U' || h == 'T') &&
-					(((a & 0xff) == a) &&
-					 ((b & 0xff) == b) &&
-					 ((c & 0xff) == c) &&
-					 ((d & 0xff) == d)) ) {
+			        (f == 'e' || f == 'o') &&
+			        (g == 'T' || g == 'U') &&
+			        (h == 'U' || h == 'T') &&
+			        (((a & 0xff) == a) &&
+			         ((b & 0xff) == b) &&
+			         ((c & 0xff) == c) &&
+			         ((d & 0xff) == d)) ) {
 				dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 				dst.port = htons(e);
 				dst.encryption = !!(f == 'e');
@@ -295,13 +295,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			char f, g, h;
 			n = sscanf(data, "delete %u.%u.%u.%u:%u-%c-%c-%c", &a, &b, &c, &d, &e, &f, &g, &h);
 			if ( (n == 8 && e <= 0xffff) &&
-					(f == 'e' || f == 'o') &&
-					(g == 'T' || g == 'U') &&
-					(h == 'U' || h == 'T') &&
-					(((a & 0xff) == a) &&
-					 ((b & 0xff) == b) &&
-					 ((c & 0xff) == c) &&
-					 ((d & 0xff) == d)) ) {
+			        (f == 'e' || f == 'o') &&
+			        (g == 'T' || g == 'U') &&
+			        (h == 'U' || h == 'T') &&
+			        (((a & 0xff) == a) &&
+			         ((b & 0xff) == b) &&
+			         ((c & 0xff) == c) &&
+			         ((d & 0xff) == d)) ) {
 				dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 				dst.port = htons(e);
 				dst.encryption = !!(f == 'e');
@@ -587,12 +587,12 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				n = sscanf(data, "default_mac_addr=%02x-%02x-%02x-%02x-%02x-%02x\n", &a, &b, &c, &d, &e, &f);
 			}
 			if ( n == 6 &&
-					((a & 0xff) == a) &&
-					((b & 0xff) == b) &&
-					((c & 0xff) == c) &&
-					((d & 0xff) == d) &&
-					((e & 0xff) == e) &&
-					((f & 0xff) == f) ) {
+			        ((a & 0xff) == a) &&
+			        ((b & 0xff) == b) &&
+			        ((c & 0xff) == c) &&
+			        ((d & 0xff) == d) &&
+			        ((e & 0xff) == e) &&
+			        ((f & 0xff) == f) ) {
 				default_mac_addr[0] = a;
 				default_mac_addr[1] = b;
 				default_mac_addr[2] = c;
@@ -607,10 +607,10 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			unsigned int a, b, c, d;
 			n = sscanf(data, "dns_server_node_add=%u.%u.%u.%u", &a, &b, &c, &d);
 			if ( (n == 4) &&
-					(((a & 0xff) == a) &&
-					 ((b & 0xff) == b) &&
-					 ((c & 0xff) == c) &&
-					 ((d & 0xff) == d)) ) {
+			        (((a & 0xff) == a) &&
+			         ((b & 0xff) == b) &&
+			         ((c & 0xff) == c) &&
+			         ((d & 0xff) == d)) ) {
 				err = dns_server_node_add( htonl((a<<24)|(b<<16)|(c<<8)|(d<<0)) );
 				if (err == 0) {
 					goto done;
@@ -679,52 +679,52 @@ static int natcap_mode_init(void)
 {
 	int ret = -1;
 	switch (mode) {
-		case CLIENT_MODE:
-			ret = natcap_client_init();
-			if (ret != 0) {
-				break;
-			}
-			ret = natcap_peer_init();
-			if (ret != 0) {
-				natcap_client_exit();
-				break;
-			}
+	case CLIENT_MODE:
+		ret = natcap_client_init();
+		if (ret != 0) {
 			break;
-		case SERVER_MODE:
-			ret = natcap_server_init();
-			if (ret != 0) {
-				break;
-			}
-			ret = natcap_peer_init();
-			if (ret != 0) {
-				natcap_server_exit();
-				break;
-			}
+		}
+		ret = natcap_peer_init();
+		if (ret != 0) {
+			natcap_client_exit();
 			break;
-		case MIXING_MODE:
-			ret = natcap_client_init();
-			if (ret != 0) {
-				break;
-			}
-			ret = natcap_server_init();
-			if (ret != 0) {
-				natcap_client_exit();
-				break;
-			}
-			ret = natcap_peer_init();
-			if (ret != 0) {
-				natcap_server_exit();
-				natcap_client_exit();
-				break;
-			}
+		}
+		break;
+	case SERVER_MODE:
+		ret = natcap_server_init();
+		if (ret != 0) {
 			break;
-		case KNOCK_MODE:
-			ret = natcap_knock_init();
+		}
+		ret = natcap_peer_init();
+		if (ret != 0) {
+			natcap_server_exit();
 			break;
-		case PEER_MODE:
-			ret = natcap_peer_init();
-		default:
+		}
+		break;
+	case MIXING_MODE:
+		ret = natcap_client_init();
+		if (ret != 0) {
 			break;
+		}
+		ret = natcap_server_init();
+		if (ret != 0) {
+			natcap_client_exit();
+			break;
+		}
+		ret = natcap_peer_init();
+		if (ret != 0) {
+			natcap_server_exit();
+			natcap_client_exit();
+			break;
+		}
+		break;
+	case KNOCK_MODE:
+		ret = natcap_knock_init();
+		break;
+	case PEER_MODE:
+		ret = natcap_peer_init();
+	default:
+		break;
 	}
 	return ret;
 }
@@ -732,26 +732,26 @@ static int natcap_mode_init(void)
 static void natcap_mode_exit(void)
 {
 	switch (mode) {
-		case CLIENT_MODE:
-			natcap_peer_exit();
-			natcap_client_exit();
-			break;
-		case SERVER_MODE:
-			natcap_peer_exit();
-			natcap_server_exit();
-			break;
-		case MIXING_MODE:
-			natcap_peer_exit();
-			natcap_server_exit();
-			natcap_client_exit();
-			break;
-		case KNOCK_MODE:
-			natcap_knock_exit();
-			break;
-		case PEER_MODE:
-			natcap_peer_exit();
-		default:
-			break;
+	case CLIENT_MODE:
+		natcap_peer_exit();
+		natcap_client_exit();
+		break;
+	case SERVER_MODE:
+		natcap_peer_exit();
+		natcap_server_exit();
+		break;
+	case MIXING_MODE:
+		natcap_peer_exit();
+		natcap_server_exit();
+		natcap_client_exit();
+		break;
+	case KNOCK_MODE:
+		natcap_knock_exit();
+		break;
+	case PEER_MODE:
+		natcap_peer_exit();
+	default:
+		break;
 	}
 }
 
