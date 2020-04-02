@@ -600,7 +600,7 @@ struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be16 spor
 	}
 	if (!(IPS_NATCAP_PEER & user->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &user->status)) {
 		newoff = ALIGN(user->ext->len, __ALIGN_64BITS);
-		new = __krealloc(user->ext, newoff + sizeof(struct fakeuser_expect), GFP_ATOMIC);
+		new = krealloc(user->ext, newoff + sizeof(struct fakeuser_expect), GFP_ATOMIC);
 		if (!new) {
 			NATCAP_ERROR("fakeuser create for ct[%pI4:%u->%pI4:%u] failed, realloc user->ext failed\n", &saddr, ntohs(sport), &daddr, ntohs(dport));
 			skb_nfct_reset(uskb);
@@ -715,7 +715,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	}
 	if (!nf_ct_is_confirmed(user) && !(IPS_NATCAP_PEER & user->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &user->status)) {
 		newoff = ALIGN(user->ext->len, __ALIGN_64BITS);
-		new = __krealloc(user->ext, newoff + sizeof(struct user_expect), GFP_ATOMIC);
+		new = krealloc(user->ext, newoff + sizeof(struct user_expect), GFP_ATOMIC);
 		if (!new) {
 			NATCAP_ERROR("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] failed, realloc user->ext failed\n",
 					client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
