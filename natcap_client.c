@@ -787,7 +787,7 @@ bypass_tcp:
 			}
 
 			if (x == -1) {
-				if (cnipwhitelist_mode) {
+				if (cnipwhitelist_mode == 1 || cnipwhitelist_mode == 2) {
 					goto bypass_tcp;
 				} else {
 					//dual out
@@ -912,7 +912,8 @@ bypass_tcp:
 			}
 		}
 
-		if (UDPH(l4)->dest == __constant_htons(53) && !is_natcap_server(iph->daddr)) {
+		if ((cnipwhitelist_mode == 0 || cnipwhitelist_mode == 1) && /* this work for China */
+		        UDPH(l4)->dest == __constant_htons(53) && !is_natcap_server(iph->daddr)) {
 natcap_dual_out_udp:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			if (!nf_ct_is_confirmed(ct)) {
@@ -962,6 +963,7 @@ natcap_dual_out_udp:
 		if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
 		        IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
 		        IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+bypass_udp:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
@@ -979,7 +981,11 @@ natcap_dual_out_udp:
 			}
 
 			if (x == -1) {
-				goto natcap_dual_out_udp;
+				if (cnipwhitelist_mode == 2) {
+					goto bypass_udp;
+				} else {
+					goto natcap_dual_out_udp;
+				}
 			}
 
 			natcap_server_info_select(x, skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
@@ -1043,7 +1049,7 @@ natcap_dual_out_udp:
 natcaped_out:
 	xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 	if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
-	if (iph->protocol == IPPROTO_TCP && !cnipwhitelist_mode) {
+	if (iph->protocol == IPPROTO_TCP && cnipwhitelist_mode == 0) {
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
 			return NF_DROP;
 		}
