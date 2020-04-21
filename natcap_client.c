@@ -1055,7 +1055,7 @@ natcaped_out:
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
-		if (TCPH(l4)->syn && !TCPH(l4)->ack) {
+		if (TCPH(l4)->syn && !TCPH(l4)->ack && cnipwhitelist_mode == 0) {
 			if (!(IPS_NATCAP_SYN1 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": natcaped syn1\n", DEBUG_TCP_ARG(iph,l4));
 				return NF_ACCEPT;
@@ -2028,7 +2028,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if ((IPS_NATCAP_BYPASS & ct->status)) {
-		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL && iph->protocol == IPPROTO_TCP) {
+		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL && iph->protocol == IPPROTO_TCP && cnipwhitelist_mode == 0) {
 			if (TCPH(l4)->syn && !TCPH(l4)->ack) {
 				if (!(IPS_NATCAP_SYN1 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
 					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn1\n", DEBUG_TCP_ARG(iph,l4));
@@ -3301,7 +3301,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": got cfm\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 
-				if (!TCPH(l4)->rst) {
+				if (!TCPH(l4)->rst && cnipwhitelist_mode == 0) {
 					__be32 saddr = iph->saddr;
 					__be16 dest = TCPH(l4)->dest;
 					__be16 source = TCPH(l4)->source;
@@ -3374,7 +3374,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 			NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": after natcap reply\n", DEBUG_TCP_ARG(iph,l4));
 		} else {
-			if (TCPH(l4)->rst) {
+			if (TCPH(l4)->rst && cnipwhitelist_mode == 0) {
 				if ((TCPH(l4)->source == __constant_htons(80) || TCPH(l4)->source == __constant_htons(443)) &&
 				        IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
 					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": bypass get reset add target to gfwlist0\n", DEBUG_TCP_ARG(iph,l4));
@@ -3384,7 +3384,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": got cfm\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-				if (!TCPH(l4)->rst && IP_SET_test_src_ip(state, in, out, skb, "cniplist") > 0) {
+				if (cnipwhitelist_mode == 0 && !TCPH(l4)->rst && IP_SET_test_src_ip(state, in, out, skb, "cniplist") > 0) {
 					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn bypass got response add target to bypasslist\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_add_src_ip(state, in, out, skb, "bypasslist");
 				}
