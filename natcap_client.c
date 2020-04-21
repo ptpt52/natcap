@@ -2531,10 +2531,9 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	/* XXX I am going to eat it, make the caller happy  */
-	ret = nf_conntrack_confirm(skb_orig);
-	if (ret != NF_ACCEPT) {
-		return ret;
+	if (nf_ct_is_confirmed(ct) && ns->n.new_source == 0) {
+		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+		return NF_ACCEPT;
 	}
 
 	skb = skb_copy(skb_orig, GFP_ATOMIC);
@@ -2758,20 +2757,11 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 	}
 
-	/* XXX I just confirm it first  */
-	ret = nf_conntrack_confirm(skb);
-	if (ret != NF_ACCEPT) {
-		if (ret != NF_STOLEN) {
-			consume_skb(skb);
-		}
-		return NF_ACCEPT;
-	}
-
 	if (master->master != ct) {
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 		switch (iph->protocol) {
 		case IPPROTO_TCP:
-			NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
+			NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
 			             DEBUG_TCP_ARG(iph,l4),
 			             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 			             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
@@ -2784,7 +2774,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			            );
 			break;
 		case IPPROTO_UDP:
-			NATCAP_ERROR("(CPMO)" DEBUG_UDP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
+			NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
 			             DEBUG_UDP_ARG(iph,l4),
 			             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 			             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
@@ -2799,6 +2789,22 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 		consume_skb(skb);
 		return NF_ACCEPT;
+	}
+
+	/* XXX I just confirm it first  */
+	ret = nf_conntrack_confirm(skb);
+	if (ret != NF_ACCEPT) {
+		if (ret != NF_STOLEN) {
+			consume_skb(skb);
+		}
+		return NF_ACCEPT;
+	}
+
+	/* XXX I am going to eat it, make the caller happy  */
+	ret = nf_conntrack_confirm(skb_orig);
+	if (ret != NF_ACCEPT) {
+		consume_skb(skb);
+		return ret;
 	}
 
 	if (!(NS_NATCAP_NOLIMIT & master_ns->n.status) && natcap_tx_flow_ctrl(skb, master) < 0) {
@@ -3322,8 +3328,8 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				return ret;
 			}
 			if ((struct nf_conn *)skb_nfct(skb) != master) {
-				NATCAP_ERROR("(CPMI)" DEBUG_TCP_FMT ": skb->nfct != master, ct=%p, master=%p, skb_nfct(skb)=%p\n", DEBUG_TCP_ARG(iph,l4), ct, master, skb_nfct(skb));
-				NATCAP_ERROR("(CPMI)" DEBUG_TCP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
+				NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": skb->nfct != master, ct=%p, master=%p, skb_nfct(skb)=%p\n", DEBUG_TCP_ARG(iph,l4), ct, master, skb_nfct(skb));
+				NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
 				             DEBUG_TCP_ARG(iph,l4),
 				             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 				             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
@@ -3429,8 +3435,8 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				return ret;
 			}
 			if ((struct nf_conn *)skb_nfct(skb) != master) {
-				NATCAP_ERROR("(CPMI)" DEBUG_UDP_FMT ": skb->nfct != master, ct=%p, master=%p, skb_nfct(skb)=%p\n", DEBUG_UDP_ARG(iph,l4), ct, master, skb_nfct(skb));
-				NATCAP_ERROR("(CPMI)" DEBUG_UDP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
+				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": skb->nfct != master, ct=%p, master=%p, skb_nfct(skb)=%p\n", DEBUG_UDP_ARG(iph,l4), ct, master, skb_nfct(skb));
+				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": bad ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
 				             DEBUG_UDP_ARG(iph,l4),
 				             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 				             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
