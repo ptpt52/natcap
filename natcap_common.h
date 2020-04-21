@@ -83,6 +83,28 @@ extern unsigned int natcap_ignore_mask;
 extern struct cone_nat_session *cone_nat_array;
 extern struct cone_snat_session *cone_snat_array;
 
+#define CONE_NAT_ARRAY_SIZE (65536/sizeof(unsigned long)/8)
+extern unsigned long cone_nat_array_status[CONE_NAT_ARRAY_SIZE];
+static inline int cone_nat_status_ok(long n)
+{
+	return !test_bit(n, cone_nat_array_status);
+}
+static inline void cone_nat_status_set(long n)
+{
+	set_bit(n, cone_nat_array_status);
+}
+static inline void cone_nat_status_set_range(long a, long b)
+{
+	long n;
+	for (n = a; n <= b; n++) {
+		set_bit(n, cone_nat_array_status);
+	}
+}
+static inline void cone_nat_status_reset(void)
+{
+	memset(cone_nat_array_status, 0, sizeof(unsigned long) * CONE_NAT_ARRAY_SIZE);
+}
+
 #define NATCAP_MIN_PMTU 68
 #define NATCAP_MAX_PMTU 9000
 

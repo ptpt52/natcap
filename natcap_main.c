@@ -620,6 +620,23 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	} else if (strncmp(data, "dns_server_node_clean", 21) == 0) {
 		dns_server_node_clean();
 		goto done;
+	} else if (strncmp(data, "cone_set=", 9) == 0) {
+		unsigned int x;
+		n = sscanf(data, "cone_set=%u", &x);
+		if ((n == 1) && ((x & 0xffff) == x)) {
+			cone_nat_status_set(x);
+			goto done;
+		}
+	} else if (strncmp(data, "cone_set_range=", 15) == 0) {
+		unsigned int a, b;
+		n = sscanf(data, "cone_set_range=%u-%u", &a, &b);
+		if ((n == 2) && ((a & 0xffff) == a) && ((b & 0xffff) == b) && a <= b) {
+			cone_nat_status_set_range(a, b);
+			goto done;
+		}
+	} else if (strncmp(data, "cone_reset", 10) == 0) {
+		cone_nat_status_reset();
+		goto done;
 	}
 
 	NATCAP_println("ignoring line[%s]", data);

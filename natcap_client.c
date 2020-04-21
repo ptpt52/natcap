@@ -2591,7 +2591,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			unsigned int range_size, min, i;
 			struct nf_conntrack_tuple tuple;
 
-			if (cone_nat_array && cone_snat_array && (!(ns->n.status & NS_NATCAP_TCPUDPENC)) &&
+			if (cone_nat_array && cone_snat_array &&
+			        (!(ns->n.status & NS_NATCAP_TCPUDPENC)) &&
 			        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 			        ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
 			        IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
@@ -2606,7 +2607,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				        iph->saddr == css.wan_ip) {
 					idx = ntohs(css.wan_port) % 65536;
 					memcpy(&cns, &cone_nat_array[idx], sizeof(cns));
-					if (cns.ip == css.lan_ip && cns.port == css.lan_port) {
+					if (cone_nat_status_ok(idx) && cns.ip == css.lan_ip && cns.port == css.lan_port) {
 						ns->n.new_source = css.wan_port;
 					}
 				}
@@ -2651,7 +2652,8 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		UDPH(l4)->dest = ns->n.target_port;
 		iph->daddr = ns->n.target_ip;
 
-		if (cone_nat_array && cone_snat_array && (!(ns->n.status & NS_NATCAP_TCPUDPENC)) &&
+		if (cone_nat_array && cone_snat_array && cone_nat_status_ok(ntohs(UDPH(l4)->source)) &&
+		        (!(ns->n.status & NS_NATCAP_TCPUDPENC)) &&
 		        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 		        ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
 		        IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
