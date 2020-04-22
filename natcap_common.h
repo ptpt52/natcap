@@ -83,28 +83,6 @@ extern unsigned int natcap_ignore_mask;
 extern struct cone_nat_session *cone_nat_array;
 extern struct cone_snat_session *cone_snat_array;
 
-#define CONE_NAT_ARRAY_SIZE (65536/sizeof(unsigned long)/8)
-extern unsigned long cone_nat_array_status[CONE_NAT_ARRAY_SIZE];
-static inline int cone_nat_status_ok(long n)
-{
-	return !test_bit(n, cone_nat_array_status);
-}
-static inline void cone_nat_status_set(long n)
-{
-	set_bit(n, cone_nat_array_status);
-}
-static inline void cone_nat_status_set_range(long a, long b)
-{
-	long n;
-	for (n = a; n <= b; n++) {
-		set_bit(n, cone_nat_array_status);
-	}
-}
-static inline void cone_nat_status_reset(void)
-{
-	memset(cone_nat_array_status, 0, sizeof(unsigned long) * CONE_NAT_ARRAY_SIZE);
-}
-
 #define NATCAP_MIN_PMTU 68
 #define NATCAP_MAX_PMTU 9000
 
@@ -481,6 +459,10 @@ extern int ip_set_del_dst_ip(const struct nf_hook_state *state, struct sk_buff *
 #define IP_SET_del_dst_ip(state, in, out, skb, name) ip_set_del_dst_ip(state, skb, name)
 extern int ip_set_test_src_mac(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name);
 #define IP_SET_test_src_mac(state, in, out, skb, name) ip_set_test_src_mac(state, skb, name)
+extern int __ip_set_test_src_port(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name, __be16 *port_addr, __be16 port);
+#define __IP_SET_test_src_port(state, in, out, skb, name, addr, port) __ip_set_test_src_port(state, skb, name, addr, port)
+extern int __ip_set_test_dst_port(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name, __be16 *port_addr, __be16 port);
+#define __IP_SET_test_dst_port(state, in, out, skb, name, addr, port) __ip_set_test_dst_port(state, skb, name, addr, port)
 #else
 extern int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
 #define IP_SET_test_src_ip(state, in, out, skb, name) ip_set_test_src_ip(in, out, skb, name)
@@ -496,7 +478,14 @@ extern int ip_set_del_dst_ip(const struct net_device *in, const struct net_devic
 #define IP_SET_del_dst_ip(state, in, out, skb, name) ip_set_del_dst_ip(in, out, skb, name)
 extern int ip_set_test_src_mac(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
 #define IP_SET_test_src_mac(state, in, out, skb, name) ip_set_test_src_mac(in, out, skb, name)
+extern int __ip_set_test_src_port(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, __be16 *port_addr, __be16 port);
+#define __IP_SET_test_src_port(state, in, out, skb, name, addr, port) __ip_set_test_src_port(in, out, skb, name, addr, port)
+extern int __ip_set_test_dst_port(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, __be16 *port_addr, __be16 port);
+#define __IP_SET_test_dst_port(state, in, out, skb, name, addr, port) __ip_set_test_dst_port(in, out, skb, name, addr, port)
 #endif
+
+#define IP_SET_test_src_port IP_SET_test_src_ip
+#define IP_SET_test_dst_port IP_SET_test_dst_ip
 
 extern unsigned int natcap_dnat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto);
 extern unsigned int natcap_snat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto);
