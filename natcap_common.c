@@ -1032,6 +1032,34 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+int __ip_set_test_src_port(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name, __be16 *port_addr, __be16 port)
+#else
+int __ip_set_test_src_port(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, __be16 *port_addr, __be16 port)
+#endif
+{
+	int ret = 0;
+	__be16 old_port = *port_addr;
+	*port_addr = port;
+	ret = IP_SET_test_src_port(state, in, out, skb, ip_set_name);
+	*port_addr = old_port;
+	return ret;
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+int __ip_set_test_dst_port(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name, __be16 *port_addr, __be16 port)
+#else
+int __ip_set_test_dst_port(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, __be16 *port_addr, __be16 port)
+#endif
+{
+	int ret = 0;
+	__be16 old_port = *port_addr;
+	*port_addr = port;
+	ret = IP_SET_test_dst_port(state, in, out, skb, ip_set_name);
+	*port_addr = old_port;
+	return ret;
+}
+
 static unsigned int __natcap_nat_setup(struct nf_conn *ct, __be32 addr, __be16 man_proto, int type)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)
@@ -1337,8 +1365,6 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 struct cone_nat_session *cone_nat_array = NULL;
 struct cone_snat_session *cone_snat_array = NULL;
 
-unsigned long cone_nat_array_status[CONE_NAT_ARRAY_SIZE];
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_common_cone_in_hook(unsigned int hooknum,
         struct sk_buff *skb,
@@ -1427,7 +1453,8 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (cone_nat_array && cone_snat_array && cone_nat_status_ok(ntohs(UDPH(l4)->dest)) &&
+	if (cone_nat_array && cone_snat_array &&
+	        __IP_SET_test_dst_port(state, in, out, skb, "cone_nat_unused_port", &UDPH(l4)->dest, UDPH(l4)->dest) <= 0 &&
 	        IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 		unsigned int idx;
 		memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->dest)], sizeof(cns));
@@ -1557,7 +1584,8 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (cone_nat_array && cone_snat_array && cone_nat_status_ok(ntohs(UDPH(l4)->source)) &&
+	if (cone_nat_array && cone_snat_array &&
+	        __IP_SET_test_src_port(state, in, out, skb, "cone_nat_unused_port", &UDPH(l4)->source, UDPH(l4)->source) <= 0 &&
 	        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 	        ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
 	        ((IPS_NATCAP & ct->status) ||
@@ -1777,7 +1805,8 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 		        css.wan_ip == newsrc && css.wan_port != 0) {
 			idx = ntohs(css.wan_port) % 65536;
 			memcpy(&cns, &cone_nat_array[idx], sizeof(cns));
-			if (cone_nat_status_ok(idx) && cns.ip == css.lan_ip && cns.port == css.lan_port) {
+			if (__IP_SET_test_src_port(state, in, out, skb, "cone_nat_unused_port", &UDPH(l4)->source, css.wan_port) <= 0 &&
+			        cns.ip == css.lan_ip && cns.port == css.lan_port) {
 				__be32 oldip;
 
 				oldip = iph->saddr;
@@ -1840,7 +1869,6 @@ int natcap_common_init(void)
 		goto err_alloc_cone_nat_array;
 	}
 	memset(cone_nat_array, 0, sizeof(struct cone_nat_session) * 65536);
-	cone_nat_status_reset();
 
 	cone_snat_array = vmalloc(sizeof(struct cone_snat_session) * 32768);
 	if (cone_snat_array == NULL) {
