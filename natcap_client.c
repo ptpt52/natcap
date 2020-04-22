@@ -1014,12 +1014,19 @@ bypass_udp:
 	}
 
 	if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
+		/* init natcap_session if needed */
 		switch (iph->protocol) {
 		case IPPROTO_TCP:
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+			if (natcap_session_in(ct) == NULL) {
+				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
+			}
 			break;
 		case IPPROTO_UDP:
 			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+			if (natcap_session_in(ct) == NULL) {
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
+			}
 			break;
 		}
 		if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
