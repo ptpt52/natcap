@@ -780,9 +780,9 @@ bypass_tcp:
 				x = SERVER_GROUP_0;
 			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
 				x = SERVER_GROUP_1;
-			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfw_tcp_port_list0") > 0) {
+			} else if (IP_SET_test_dst_port(state, in, out, skb, "gfw_tcp_port_list0") > 0) {
 				x = SERVER_GROUP_0;
-			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfw_tcp_port_list1") > 0) {
+			} else if (IP_SET_test_dst_port(state, in, out, skb, "gfw_tcp_port_list1") > 0) {
 				x = SERVER_GROUP_1;
 			}
 
@@ -974,9 +974,9 @@ bypass_udp:
 				x = SERVER_GROUP_0;
 			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
 				x = SERVER_GROUP_1;
-			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfw_udp_port_list0") > 0) {
+			} else if (IP_SET_test_dst_port(state, in, out, skb, "gfw_udp_port_list0") > 0) {
 				x = SERVER_GROUP_0;
-			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfw_udp_port_list1") > 0) {
+			} else if (IP_SET_test_dst_port(state, in, out, skb, "gfw_udp_port_list1") > 0) {
 				x = SERVER_GROUP_1;
 			}
 
