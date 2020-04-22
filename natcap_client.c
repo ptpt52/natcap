@@ -787,7 +787,9 @@ bypass_tcp:
 			}
 
 			if (x == -1) {
-				if (cnipwhitelist_mode == 1 || cnipwhitelist_mode == 2) {
+				if (cnipwhitelist_mode == 1) {
+					x = SERVER_GROUP_0;
+				} else if (cnipwhitelist_mode == 2) {
 					goto bypass_tcp;
 				} else {
 					//dual out
@@ -981,7 +983,9 @@ bypass_udp:
 			}
 
 			if (x == -1) {
-				if (cnipwhitelist_mode == 2) {
+				if (cnipwhitelist_mode == 1) {
+					x = SERVER_GROUP_0;
+				} else if (cnipwhitelist_mode == 2) {
 					goto bypass_udp;
 				} else {
 					goto natcap_dual_out_udp;
