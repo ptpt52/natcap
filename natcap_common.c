@@ -1454,7 +1454,7 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	}
 
 	if (cone_nat_array && cone_snat_array &&
-	        __IP_SET_test_dst_port(state, in, out, skb, "cone_nat_unused_port", &UDPH(l4)->dest, UDPH(l4)->dest) <= 0 &&
+	        IP_SET_test_dst_port(state, in, out, skb, "cone_nat_unused_port") <= 0 &&
 	        IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 		unsigned int idx;
 		memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->dest)], sizeof(cns));
@@ -1585,7 +1585,7 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 	}
 
 	if (cone_nat_array && cone_snat_array &&
-	        __IP_SET_test_src_port(state, in, out, skb, "cone_nat_unused_port", &UDPH(l4)->source, UDPH(l4)->source) <= 0 &&
+	        IP_SET_test_src_port(state, in, out, skb, "cone_nat_unused_port") <= 0 &&
 	        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 	        ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
 	        ((IPS_NATCAP & ct->status) ||

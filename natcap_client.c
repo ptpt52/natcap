@@ -2687,7 +2687,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		iph->daddr = ns->n.target_ip;
 
 		if (cone_nat_array && cone_snat_array &&
-		        __IP_SET_test_src_port(state, in, out, skb, "cone_nat_unused_port", &UDPH(l4)->source, UDPH(l4)->source) <= 0 &&
+		        IP_SET_test_src_port(state, in, out, skb, "cone_nat_unused_port") <= 0 &&
 		        (!(ns->n.status & NS_NATCAP_TCPUDPENC)) &&
 		        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 		        ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
