@@ -1486,7 +1486,6 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	struct iphdr *iph;
 	void *l4;
 	struct cone_nat_session cns;
-	struct cone_snat_session css;
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_UDP) {
@@ -1531,14 +1530,14 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	}
 
 	if (cone_nat_array && cone_snat_array &&
-	        IP_SET_test_dst_port(state, in, out, skb, "cone_nat_unused_port") <= 0 &&
 	        IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
-		unsigned int idx;
-		memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->dest)], sizeof(cns));
-		idx = cone_snat_hash(cns.ip, cns.port, iph->daddr) % 32768;
-		memcpy(&css, &cone_snat_array[idx], sizeof(css));
+		if (IP_SET_test_dst_port(state, in, out, skb, "cone_nat_unused_port") > 0 &&
+				!is_natcap_server(iph->saddr)) {
+			return NF_ACCEPT;
+		}
 
-		if (cns.ip != 0 && cns.port != 0 && cns.ip == css.lan_ip && cns.port == css.lan_port) {
+		memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->dest)], sizeof(cns));
+		if (cns.ip != 0 && cns.port != 0) {
 			if (natcap_dnat_setup(ct, cns.ip, cns.port) != NF_ACCEPT) {
 				NATCAP_ERROR("(CCI)" DEBUG_UDP_FMT ": do mapping failed, target=%pI4:%u @port=%u\n",
 				             DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
@@ -1667,10 +1666,6 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 	}
 
 	if (cone_nat_array && cone_snat_array &&
-	        __IP_SET_test_src_ipport(state, in, out, skb, "cone_nat_unused_dst",
-	                                 &iph->saddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip,
-	                                 &UDPH(l4)->source, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) <= 0 &&
-	        IP_SET_test_src_port(state, in, out, skb, "cone_nat_unused_port") <= 0 &&
 	        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 	        ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
 	        ((IPS_NATCAP & ct->status) ||

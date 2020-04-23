@@ -93,6 +93,8 @@ extern void natcap_rx_speed_set(int speed);
 extern int natcap_tx_speed_get(void);
 extern int natcap_rx_speed_get(void);
 
+extern int is_natcap_server(__be32 ip);
+
 /* for DNS decode */
 static inline int get_rdata(const unsigned char *src_ptr, int src_len, int src_pos, unsigned char *dst_ptr, int dst_size)
 {
