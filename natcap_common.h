@@ -467,6 +467,8 @@ extern int __ip_set_test_src_port(const struct nf_hook_state *state, struct sk_b
 #define __IP_SET_test_src_port(state, in, out, skb, name, addr, port) __ip_set_test_src_port(state, skb, name, addr, port)
 extern int __ip_set_test_dst_port(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name, __be16 *port_addr, __be16 port);
 #define __IP_SET_test_dst_port(state, in, out, skb, name, addr, port) __ip_set_test_dst_port(state, skb, name, addr, port)
+extern int ip_set_test_dst_netport(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name);
+#define IP_SET_test_dst_netport(state, in, out, skb, name) ip_set_test_dst_netport(state, skb, name)
 #else
 extern int ip_set_test_src_ipport(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
 #define IP_SET_test_src_ipport(state, in, out, skb, name) ip_set_test_src_ipport(in, out, skb, name)
@@ -490,6 +492,8 @@ extern int __ip_set_test_src_port(const struct net_device *in, const struct net_
 #define __IP_SET_test_src_port(state, in, out, skb, name, addr, port) __ip_set_test_src_port(in, out, skb, name, addr, port)
 extern int __ip_set_test_dst_port(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, __be16 *port_addr, __be16 port);
 #define __IP_SET_test_dst_port(state, in, out, skb, name, addr, port) __ip_set_test_dst_port(in, out, skb, name, addr, port)
+extern int ip_set_test_dst_netport(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
+#define IP_SET_test_dst_netport(state, in, out, skb, name) ip_set_test_dst_netport(in, out, skb, name)
 #endif
 
 #define IP_SET_test_src_port IP_SET_test_src_ip
