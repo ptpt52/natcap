@@ -7,31 +7,45 @@
 # command after changing this file, to see if there are
 # any tracked files which get ignored after the change.
 #
-# Normal rules
+# Normal rules (sorted alphabetically)
 #
 .*
+*.a
+*.asn1.[ch]
+*.bin
+*.bz2
+*.c.[012]*.*
+*.dt.yaml
+*.dtb
+*.dtb.S
+*.dwo
+*.elf
+*.gcno
+*.gz
+*.i
+*.ko
+*.lex.c
+*.ll
+*.lst
+*.lz4
+*.lzma
+*.lzo
+*.mod
+*.mod.c
 *.o
 *.o.*
-*.a
+*.patch
 *.s
-*.ko
 *.so
 *.so.dbg
-*.mod.c
-*.i
-*.lst
+*.su
 *.symtypes
-*.order
-modules.builtin
-*.elf
-*.bin
-*.gz
-*.bz2
-*.lzma
+*.tab.[ch]
+*.tar
 *.xz
-*.lzo
-*.patch
-*.gcno
+Module.symvers
+modules.builtin
+modules.order
 
 #
 # Top-level generic files
@@ -40,10 +54,18 @@ modules.builtin
 /TAGS
 /linux
 /vmlinux
+/vmlinux.32
+/vmlinux-gdb.py
 /vmlinuz
 /System.map
 /Module.markers
-/Module.symvers
+/modules.builtin.modinfo
+/modules.nsdeps
+
+#
+# RPM spec file (make rpm-pkg)
+#
+/*.spec
 
 #
 # Debian directory (make deb-pkg)
@@ -51,18 +73,32 @@ modules.builtin
 /debian/
 
 #
-# git files that we don't want to ignore even it they are dot-files
+# Snap directory (make snap-pkg)
 #
+/snap/
+
+#
+# tar directory (make tar*-pkg)
+#
+/tar-install/
+
+#
+# We don't want to ignore the following even if they are dot-files
+#
+!.clang-format
+!.cocciconfig
+!.get_maintainer.ignore
+!.gitattributes
 !.gitignore
 !.mailmap
 
 #
 # Generated include files
 #
-include/config
-include/linux/version.h
-include/generated
-arch/*/include/generated
+/include/config/
+/include/generated/
+/include/ksym/
+/arch/*/include/generated/
 
 # stgit generated dirs
 patches-*
@@ -81,6 +117,9 @@ GRTAGS
 GSYMS
 GTAGS
 
+# id-utils files
+ID
+
 *.orig
 *~
 \#*#
@@ -89,8 +128,23 @@ GTAGS
 # Leavings from module signing
 #
 extra_certificates
+signing_key.pem
 signing_key.priv
 signing_key.x509
 x509.genkey
-natcapd/natcapd-server
+
+# Kconfig presets
+/all.config
+/alldef.config
+/allmod.config
+/allno.config
+/allrandom.config
+/allyes.config
+
+# Kdevelop4
+*.kdev4
+
+# Clang's compilation database file
+/compile_commands.json
 natcapd/natcapd-client
+natcapd/natcapd-server
