@@ -810,6 +810,66 @@ int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+int ip_set_test_dst_netport(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
+#else
+int ip_set_test_dst_netport(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+#endif
+{
+	int ret = 0;
+	ip_set_id_t id;
+	struct ip_set *set;
+	struct ip_set_adt_opt opt;
+	struct xt_action_param par;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	struct net *net = state->net;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+	struct net *net = &init_net;
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
+#endif
+
+	memset(&opt, 0, sizeof(opt));
+	opt.family = NFPROTO_IPV4;
+	opt.dim = IPSET_DIM_TWO;
+	opt.flags = 0;
+	opt.cmdflags = 0;
+	opt.ext.timeout = UINT_MAX;
+
+	memset(&par, 0, sizeof(par));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	par.state = state;
+#else
+	par.in = in;
+	par.out = out;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
+	par.net = net;
+#endif
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+	id = ip_set_get_byname(net, ip_set_name, &set);
+#else
+	id = ip_set_get_byname(ip_set_name, &set);
+#endif
+	if (id == IPSET_INVALID_ID) {
+		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
+		return 0;
+	}
+
+	ret = ip_set_test(id, skb, &par, &opt);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+	ip_set_put_byindex(net, id);
+#else
+	ip_set_put_byindex(id);
+#endif
+
+	return ret;
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 int ip_set_add_src_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
 #else
 int ip_set_add_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
@@ -1532,7 +1592,7 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	if (cone_nat_array && cone_snat_array &&
 	        IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
 		if (IP_SET_test_dst_port(state, in, out, skb, "cone_nat_unused_port") > 0 &&
-				!is_natcap_server(iph->saddr)) {
+		        !is_natcap_server(iph->saddr)) {
 			return NF_ACCEPT;
 		}
 
