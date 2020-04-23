@@ -1630,6 +1630,9 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 		if ((NS_NATCAP_CONESNAT & ns->n.status)) {
 			return NF_ACCEPT;
 		}
+		if (ns->n.cone_pkts >= 8) { /* we try 8 times but not REPLY just bypass */
+			return NF_ACCEPT;
+		}
 		//store original src ip encode
 		if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip != ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip ||
 		        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all != ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all) {
@@ -1657,6 +1660,8 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 			skb_rcsum_tcpudp(skb);
 
 			if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
+			/* count the cone_pkts */
+			ns->n.cone_pkts++;
 		}
 		return NF_ACCEPT;
 	}
