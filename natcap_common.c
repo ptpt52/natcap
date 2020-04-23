@@ -1590,7 +1590,7 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	}
 
 	if (cone_nat_array && cone_snat_array &&
-	        IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+	        IP_SET_test_dst_ip(state, in, out, skb, "cone_wan_ip") > 0) {
 		if (IP_SET_test_dst_port(state, in, out, skb, "cone_nat_unused_port") > 0 &&
 		        !is_natcap_server(iph->saddr)) {
 			return NF_ACCEPT;
@@ -1730,7 +1730,7 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 	        ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
 	        ((IPS_NATCAP & ct->status) ||
 	         (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip != iph->saddr &&
-	          IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0))) {
+	          IP_SET_test_src_ip(state, in, out, skb, "cone_wan_ip") > 0))) {
 		unsigned int idx;
 
 		idx = ntohs(UDPH(l4)->source) % 65536;
@@ -1951,7 +1951,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 
 				oldip = iph->saddr;
 				iph->saddr = css.wan_ip;
-				if (IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+				if (IP_SET_test_src_ip(state, in, out, skb, "cone_wan_ip") > 0) {
 					iph->saddr = oldip;
 					NATCAP_INFO("(CCS)" DEBUG_UDP_FMT ": SNAT to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &css.wan_ip, ntohs(css.wan_port));
 					ret = natcap_snat_setup(ct, css.wan_ip, css.wan_port);

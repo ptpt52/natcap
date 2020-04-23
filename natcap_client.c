@@ -771,7 +771,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, knock select target server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		} else if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
 		           IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
-		           IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+		           IP_SET_test_dst_ip(state, in, out, skb, "cone_wan_ip") > 0) {
 bypass_tcp:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -969,7 +969,7 @@ natcap_dual_out_udp:
 
 		if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
 		        IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
-		        IP_SET_test_dst_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+		        IP_SET_test_dst_ip(state, in, out, skb, "cone_wan_ip") > 0) {
 bypass_udp:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -2635,7 +2635,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			        (!(ns->n.status & NS_NATCAP_TCPUDPENC)) &&
 			        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 			        ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
-			        IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+			        IP_SET_test_src_ip(state, in, out, skb, "cone_wan_ip") > 0) {
 				unsigned int idx;
 				struct cone_snat_session css;
 
@@ -2691,7 +2691,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		        (!(ns->n.status & NS_NATCAP_TCPUDPENC)) &&
 		        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 		        ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
-		        IP_SET_test_src_ip(state, in, out, skb, "natcap_wan_ip") > 0) {
+		        IP_SET_test_src_ip(state, in, out, skb, "cone_wan_ip") > 0) {
 			unsigned int idx;
 			struct cone_nat_session cns;
 			struct cone_snat_session css;
