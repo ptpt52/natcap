@@ -613,6 +613,83 @@ int natcap_tcp_encode_fwdupdate(struct sk_buff *skb, struct tcphdr *tcph, const 
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+int ip_set_test_src_ipport(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
+#else
+int ip_set_test_src_ipport(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
+#endif
+{
+	int ret = 0;
+	ip_set_id_t id;
+	struct ip_set *set;
+	struct ip_set_adt_opt opt;
+	struct xt_action_param par;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	struct net *net = state->net;
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+	struct net *net = &init_net;
+	if (in)
+		net = dev_net(in);
+	else if (out)
+		net = dev_net(out);
+#endif
+
+	memset(&opt, 0, sizeof(opt));
+	opt.family = NFPROTO_IPV4;
+	opt.dim = IPSET_DIM_TWO;
+	opt.flags = IPSET_DIM_ONE_SRC;
+	opt.cmdflags = 0;
+	opt.ext.timeout = UINT_MAX;
+
+	memset(&par, 0, sizeof(par));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	par.state = state;
+#else
+	par.in = in;
+	par.out = out;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
+	par.net = net;
+#endif
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+	id = ip_set_get_byname(net, ip_set_name, &set);
+#else
+	id = ip_set_get_byname(ip_set_name, &set);
+#endif
+	if (id == IPSET_INVALID_ID) {
+		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
+		return 0;
+	}
+
+	ret = ip_set_test(id, skb, &par, &opt);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+	ip_set_put_byindex(net, id);
+#else
+	ip_set_put_byindex(id);
+#endif
+
+	return ret;
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+int __ip_set_test_src_ipport(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name, __be32 *ip_addr, __be32 ip, __be16 *port_addr, __be16 port)
+#else
+int __ip_set_test_src_ipport(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, __be32 *ip_addr, __be32 ip, __be16 *port_addr, __be16 port)
+#endif
+{
+	int ret = 0;
+	__be32 old_ip = *ip_addr;
+	__be16 old_port = *port_addr;
+	*port_addr = port;
+	*ip_addr = ip;
+	ret = IP_SET_test_src_ipport(state, in, out, skb, ip_set_name);
+	*port_addr = old_port;
+	*ip_addr = old_ip;
+	return ret;
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 int ip_set_test_src_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
 #else
 int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name)
@@ -1585,6 +1662,9 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 	}
 
 	if (cone_nat_array && cone_snat_array &&
+	        __IP_SET_test_src_ipport(state, in, out, skb, "cone_nat_unused_dst",
+	                                 &iph->saddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip,
+	                                 &UDPH(l4)->source, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) <= 0 &&
 	        IP_SET_test_src_port(state, in, out, skb, "cone_nat_unused_port") <= 0 &&
 	        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 	        ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
@@ -1782,7 +1862,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (cone_nat_array && cone_snat_array) {
+	if (cone_nat_array && cone_snat_array && IP_SET_test_src_ipport(state, in, out, skb, "cone_nat_unused_dst") <= 0) {
 		int ret;
 		unsigned int idx;
 		const struct rtable *rt;

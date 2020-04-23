@@ -445,6 +445,10 @@ static inline int natcap_tcpmss_clamp_pmtu_adjust(struct sk_buff *skb, struct ne
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+extern int ip_set_test_src_ipport(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name);
+#define IP_SET_test_src_ipport(state, in, out, skb, name) ip_set_test_src_ipport(state, skb, name)
+extern int __ip_set_test_src_ipport(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name, __be32 *ip_addr, __be32 ip, __be16 *port_addr, __be16 port);
+#define __IP_SET_test_src_ipport(state, in, out, skb, name, ip_addr, ip, port_addr, port) __ip_set_test_src_ipport(state, skb, name, ip_addr, ip, port_addr, port)
 extern int ip_set_test_src_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name);
 #define IP_SET_test_src_ip(state, in, out, skb, name) ip_set_test_src_ip(state, skb, name)
 extern int ip_set_test_dst_ip(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name);
@@ -464,6 +468,10 @@ extern int __ip_set_test_src_port(const struct nf_hook_state *state, struct sk_b
 extern int __ip_set_test_dst_port(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name, __be16 *port_addr, __be16 port);
 #define __IP_SET_test_dst_port(state, in, out, skb, name, addr, port) __ip_set_test_dst_port(state, skb, name, addr, port)
 #else
+extern int ip_set_test_src_ipport(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
+#define IP_SET_test_src_ipport(state, in, out, skb, name) ip_set_test_src_ipport(in, out, skb, name)
+extern int __ip_set_test_src_ipport(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name, __be32 *ip_addr, __be32 ip, __be16 *port_addr, __be16 port);
+#define __IP_SET_test_src_ipport(state, in, out, skb, name, ip_addr, ip, port_addr, port) __ip_set_test_src_ipport(in, out, skb, name, ip_addr, ip, port_addr, port)
 extern int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
 #define IP_SET_test_src_ip(state, in, out, skb, name) ip_set_test_src_ip(in, out, skb, name)
 extern int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out, struct sk_buff *skb, const char *ip_set_name);
