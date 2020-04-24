@@ -732,6 +732,12 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
+	if (IP_SET_test_dst_netport(state, in, out, skb, "app_bypass_list") > 0) {
+		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+		return NF_ACCEPT;
+	}
+
 	if (iph->protocol == IPPROTO_TCP) { /* for TCP */
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
 			return NF_DROP;
