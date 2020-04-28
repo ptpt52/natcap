@@ -785,7 +785,8 @@ bypass_tcp:
 		} else {
 			int x = -1;
 
-			if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist0") > 0) {
+			if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist0") > 0 ||
+			        (cnipwhitelist_mode == 2 && IP_SET_test_dst_ip(state, in, out, skb, "wechat_iplist") > 0)) {
 				x = SERVER_GROUP_0;
 			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
 				x = SERVER_GROUP_1;
@@ -983,7 +984,8 @@ bypass_udp:
 		} else {
 			int x = -1;
 
-			if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist0") > 0) {
+			if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist0") > 0 ||
+			        (cnipwhitelist_mode == 2 && IP_SET_test_dst_ip(state, in, out, skb, "wechat_iplist") > 0)) {
 				x = SERVER_GROUP_0;
 			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
 				x = SERVER_GROUP_1;
