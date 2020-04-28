@@ -2054,23 +2054,6 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 	if ((IPS_NATCAP_BYPASS & ct->status)) {
-		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL && iph->protocol == IPPROTO_TCP && cnipwhitelist_mode == 0) {
-			if (TCPH(l4)->syn && !TCPH(l4)->ack) {
-				if (!(IPS_NATCAP_SYN1 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
-					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn1\n", DEBUG_TCP_ARG(iph,l4));
-					return NF_ACCEPT;
-				}
-				if (!(IPS_NATCAP_SYN2 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
-					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn2\n", DEBUG_TCP_ARG(iph,l4));
-					return NF_ACCEPT;
-				}
-				if ((IPS_NATCAP_SYN1 & ct->status) && (IPS_NATCAP_SYN2 & ct->status)) {
-					NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": bypass syn3 del target from bypasslist\n", DEBUG_TCP_ARG(iph,l4));
-					IP_SET_del_dst_ip(state, in, out, skb, "bypasslist");
-				}
-			}
-		}
-
 		/* match for WECHAT */
 		//	POST /mmtls/402f5d55 HTTP/1.1
 		//	Accept: */*
@@ -2111,6 +2094,24 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 			}
 		}
+
+		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL && iph->protocol == IPPROTO_TCP && cnipwhitelist_mode == 0) {
+			if (TCPH(l4)->syn && !TCPH(l4)->ack) {
+				if (!(IPS_NATCAP_SYN1 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
+					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn1\n", DEBUG_TCP_ARG(iph,l4));
+					return NF_ACCEPT;
+				}
+				if (!(IPS_NATCAP_SYN2 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
+					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn2\n", DEBUG_TCP_ARG(iph,l4));
+					return NF_ACCEPT;
+				}
+				if ((IPS_NATCAP_SYN1 & ct->status) && (IPS_NATCAP_SYN2 & ct->status)) {
+					NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": bypass syn3 del target from bypasslist\n", DEBUG_TCP_ARG(iph,l4));
+					IP_SET_del_dst_ip(state, in, out, skb, "bypasslist");
+				}
+			}
+		}
+
 		return NF_ACCEPT;
 	}
 	if (!(IPS_NATCAP & ct->status)) {
