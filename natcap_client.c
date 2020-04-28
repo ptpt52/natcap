@@ -2085,7 +2085,6 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 #define WECHAT_C_UA "User-Agent: MicroMessenger Client"
 		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL &&
 		        iph->protocol == IPPROTO_TCP &&
-		        cnipwhitelist_mode == 2 &&
 		        !(IPS_NATCAP & ct->status) &&
 		        (TCPH(l4)->dest == __constant_htons(80) || TCPH(l4)->dest == __constant_htons(8080))) {
 			int data_len;
