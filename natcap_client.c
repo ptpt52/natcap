@@ -2068,6 +2068,44 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				}
 			}
 		}
+
+		/* match for WECHAT */
+		//	POST /mmtls/402f5d55 HTTP/1.1
+		//	Accept: */*
+		//	Cache-Control: no-cache
+		//	Connection: close
+		//	Content-Length: 491
+		//	Content-Type: application/octet-stream
+		//	Host: szextshort.weixin.qq.com
+		//	Upgrade: mmtls
+		//	User-Agent: MicroMessenger Client
+#define WECHAT_C_POST "POST /mmtls"
+#define WECHAT_C_UA "User-Agent: MicroMessenger Client"
+		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL &&
+		        iph->protocol == IPPROTO_TCP &&
+		        cnipwhitelist_mode == 2 &&
+		        !(IPS_NATCAP & ct->status) &&
+		        (TCPH(l4)->dest == __constant_htons(80) || TCPH(l4)->dest == __constant_htons(8080))) {
+			int data_len;
+			unsigned char *data;
+			data = skb->data + (iph->ihl << 2) + (TCPH(l4)->doff << 2);
+			data_len = ntohs(iph->tot_len) - ((iph->ihl << 2) + (TCPH(l4)->doff << 2));
+			if (data_len > 0) {
+				int i = 0;
+				if (strncasecmp(data, WECHAT_C_POST, strlen(WECHAT_C_POST)) == 0) {
+					i += 11;
+					while (i < data_len) {
+						while (i < data_len && data[i] != '\n') i++;
+						i++;
+						if (i + strlen(WECHAT_C_UA) < data_len && strncasecmp(data + i, WECHAT_C_UA, strlen(WECHAT_C_UA)) == 0) {
+							IP_SET_add_dst_ip(state, in, out, skb, "wechat_iplist");
+							NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": add to wechat_iplist\n", DEBUG_TCP_ARG(iph,l4));
+						}
+					}
+				}
+				set_bit(IPS_NATCAP_BIT, &ct->status);
+			}
+		}
 		return NF_ACCEPT;
 	}
 	if (!(IPS_NATCAP & ct->status)) {
