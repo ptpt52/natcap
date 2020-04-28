@@ -2104,6 +2104,10 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 					}
 				}
 				set_bit(IPS_NATCAP_BIT, &ct->status);
+				clear_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
+			} else if (TCPH(l4)->syn && !TCPH(l4)->ack &&
+			           !(IPS_SEEN_REPLY & ct->status)) {
+				if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 			}
 		}
 		return NF_ACCEPT;
