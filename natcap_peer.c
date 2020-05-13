@@ -3927,9 +3927,10 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			spin_lock_bh(&ue->lock);
 			n = snprintf(natcap_peer_ctl_buffer,
 			             PAGE_SIZE - 1,
-			             "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds]\n",
+			             "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] pub=%d\n",
 			             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-			             &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
+			             &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1),
+			             !!(ue->status & PEER_SUBTYPE_PUB)
 			            );
 			spin_unlock_bh(&ue->lock);
 			put_peer_user(user);
