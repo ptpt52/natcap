@@ -788,8 +788,14 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 			return NULL;
 		}
 	}
-	if (ue->ip != saddr) ue->ip = saddr;
-	if (ue->local_ip != client_ip) ue->local_ip = client_ip;
+	if (ue->ip != saddr) {
+		ue->ip = saddr;
+		short_clear_bit(PEER_SUBTYPE_PUB_BIT, &ue->status);
+	}
+	if (ue->local_ip != client_ip) {
+		ue->local_ip = client_ip;
+		short_clear_bit(PEER_SUBTYPE_PUB_BIT, &ue->status);
+	}
 
 	for (i = 0; i < MAX_PEER_TUPLE; i++) {
 		if (ue->tuple[i].sip == saddr && ue->tuple[i].dip == daddr && ue->tuple[i].sport == sport && ue->tuple[i].dport) {
