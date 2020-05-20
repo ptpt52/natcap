@@ -869,11 +869,13 @@ static inline void natcap_peer_echo_request(const struct net_device *dev, struct
 	nskb->len = sizeof(struct iphdr) + sizeof(struct udphdr) + 14;
 
 	neth = eth_hdr(nskb);
-	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	//neth->h_proto = htons(ETH_P_IP);
-
 	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
 	memset(niph, 0, sizeof(struct iphdr));
 	niph->saddr = oiph->daddr;
 	niph->daddr = oiph->saddr;
@@ -931,11 +933,13 @@ static inline void natcap_peer_echo_reply(const struct net_device *dev, struct s
 	nskb->len = sizeof(struct iphdr) + sizeof(struct udphdr) + 14;
 
 	neth = eth_hdr(nskb);
-	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	//neth->h_proto = htons(ETH_P_IP);
-
 	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
 	memset(niph, 0, sizeof(struct iphdr));
 	niph->saddr = oiph->daddr;
 	niph->daddr = oiph->saddr;
@@ -1025,11 +1029,13 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 	}
 
 	neth = eth_hdr(nskb);
-	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	//neth->h_proto = htons(ETH_P_IP);
-
 	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
 	memset(niph, 0, sizeof(struct iphdr));
 	niph->saddr = oiph->daddr;
 	niph->daddr = oiph->saddr;
@@ -1214,10 +1220,13 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 
 	oeth = eth_hdr(oskb);
 	neth = eth_hdr(nskb);
+	niph = ip_hdr(nskb);
 	if (ops != NULL) {
-		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-		//neth->h_proto = htons(ETH_P_IP);
+		if ((char *)niph - (char *)neth >= ETH_HLEN) {
+			memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+			memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+			//neth->h_proto = htons(ETH_P_IP);
+		}
 		if (fue->mss == 0 && omss != 0) {
 			fue->mss = omss;
 		}
@@ -1237,7 +1246,6 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		}
 	}
 
-	niph = ip_hdr(nskb);
 	memset(niph, 0, sizeof(struct iphdr));
 	niph->saddr = user->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip;
 	niph->daddr = user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
@@ -1443,11 +1451,13 @@ static inline int peer_sni_send_synack(const struct net_device *dev, struct sk_b
 	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len + TCPOLEN_MSS;
 
 	neth = eth_hdr(nskb);
-	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	//neth->h_proto = htons(ETH_P_IP);
-
 	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
 	memset(niph, 0, sizeof(struct iphdr));
 	niph->saddr = oiph->daddr;
 	niph->daddr = oiph->saddr;
@@ -1610,11 +1620,13 @@ static inline void sni_ack_pass_back(struct sk_buff *oskb, struct sk_buff *cache
 	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
 
 	neth = eth_hdr(nskb);
-	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	//neth->h_proto = htons(ETH_P_IP);
-
 	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
 	memset(niph, 0, sizeof(struct iphdr));
 	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
@@ -1717,11 +1729,13 @@ static inline void sni_cache_skb_pass_back(struct sk_buff *oskb, struct sk_buff 
 	oiph = ip_hdr(cache_skb);
 
 	neth = eth_hdr(nskb);
-	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	//neth->h_proto = htons(ETH_P_IP);
-
 	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
 	memcpy(niph, oiph, nskb->len);
 
 	ntcph = (struct tcphdr *)((char *)niph + sizeof(struct iphdr));
@@ -3688,7 +3702,7 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 
 				neth = eth_hdr(nskb);
 				niph = ip_hdr(nskb);
-				if (neth->h_proto == htons(ETH_P_IP) && (void *)neth != (void *)niph) {
+				if ((char *)niph - (char *)neth >= ETH_HLEN) {
 					memcpy(neth->h_dest, eth_hdr(skb)->h_source, ETH_ALEN);
 					memcpy(neth->h_source, eth_hdr(skb)->h_dest, ETH_ALEN);
 					//neth->h_proto = htons(ETH_P_IP);

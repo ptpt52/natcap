@@ -573,11 +573,13 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len;
 
 	neth = eth_hdr(nskb);
-	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	//neth->h_proto = htons(ETH_P_IP);
-
 	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
 	memset(niph, 0, sizeof(struct iphdr));
 	niph->saddr = oiph->daddr;
 	niph->daddr = oiph->saddr;
@@ -1649,13 +1651,13 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 						break;
 
 					neth = eth_hdr(nskb);
-					if (neth->h_proto == htons(ETH_P_IP)) {
+					iph = ip_hdr(nskb);
+					if ((char *)iph - (char *)neth >= ETH_HLEN) {
 						unsigned char mac[ETH_ALEN];
 						memcpy(mac, neth->h_source, ETH_ALEN);
 						memcpy(neth->h_source, neth->h_dest, ETH_ALEN);
 						memcpy(neth->h_dest, mac, ETH_ALEN);
 					}
-					iph = ip_hdr(nskb);
 					l4 = (void *)iph + iph->ihl * 4;
 
 					iph->id = __constant_htons(jiffies);
@@ -1793,7 +1795,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			skb_nfct_reset(skb);
 
 			eth = eth_hdr(skb);
-			if (eth->h_proto == htons(ETH_P_IP)) {
+			if ((char *)iph - (char *)eth >= ETH_HLEN) {
 				unsigned char mac[ETH_ALEN];
 				memcpy(mac, eth->h_source, ETH_ALEN);
 				memcpy(eth->h_source, eth->h_dest, ETH_ALEN);
