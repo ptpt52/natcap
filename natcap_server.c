@@ -216,11 +216,13 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	nskb->len = sizeof(struct iphdr) + sizeof(struct udphdr) + 4;
 
 	neth = eth_hdr(nskb);
-	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	//neth->h_proto = htons(ETH_P_IP);
-
 	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
 	niph->saddr = oiph->daddr;
 	niph->daddr = oiph->saddr;
 	niph->version = oiph->version;
@@ -287,11 +289,13 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
 
 	neth = eth_hdr(nskb);
-	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	//neth->h_proto = htons(ETH_P_IP);
-
 	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
 	memset(niph, 0, sizeof(struct iphdr));
 	niph->saddr = ct->tuplehash[dir].tuple.dst.u3.ip;
 	niph->daddr = ct->tuplehash[dir].tuple.src.u3.ip;
@@ -386,11 +390,13 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
 
 	neth = eth_hdr(nskb);
-	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	//neth->h_proto = htons(ETH_P_IP);
-
 	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
 	memset(niph, 0, sizeof(struct iphdr));
 	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
@@ -486,11 +492,13 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len;
 
 	neth = eth_hdr(nskb);
-	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	//neth->h_proto = htons(ETH_P_IP);
-
 	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
 	memset(niph, 0, sizeof(struct iphdr));
 	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
@@ -707,11 +715,13 @@ static inline void natcap_confusion_tcp_reply_ack(const struct net_device *dev, 
 	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + size + ns->n.tcp_ack_offset;
 
 	neth = eth_hdr(nskb);
-	memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
-	memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
-	//neth->h_proto = htons(ETH_P_IP);
-
 	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
 	memset(niph, 0, sizeof(struct iphdr));
 	niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 	niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
@@ -1950,13 +1960,13 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						break;
 
 					neth = eth_hdr(nskb);
-					if (neth->h_proto == htons(ETH_P_IP)) {
+					iph = ip_hdr(nskb);
+					if ((char *)iph - (char *)neth >= ETH_HLEN) {
 						unsigned char mac[ETH_ALEN];
 						memcpy(mac, neth->h_source, ETH_ALEN);
 						memcpy(neth->h_source, neth->h_dest, ETH_ALEN);
 						memcpy(neth->h_dest, mac, ETH_ALEN);
 					}
-					iph = ip_hdr(nskb);
 					l4 = (void *)iph + iph->ihl * 4;
 
 					iph->id = __constant_htons(jiffies);
@@ -2102,7 +2112,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			skb_nfct_reset(skb);
 
 			eth = eth_hdr(skb);
-			if (eth->h_proto == htons(ETH_P_IP)) {
+			if ((char *)iph - (char *)eth >= ETH_HLEN) {
 				unsigned char mac[ETH_ALEN];
 				memcpy(mac, eth->h_source, ETH_ALEN);
 				memcpy(eth->h_source, eth->h_dest, ETH_ALEN);
