@@ -3676,7 +3676,7 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 				struct ethhdr *neth;
 				struct iphdr *niph;
 				struct udphdr *nudph;
-				int offset = sizeof(struct iphdr) + iph->ihl * 4 + 16 * qd_count - (skb_headlen(skb) + skb_tailroom(skb));
+				int offset = skb_headlen(skb) + 16 * qd_count - (skb_headlen(skb) + skb_tailroom(skb));
 				int add_len = offset < 0 ? 0 : offset;
 				offset += skb_tailroom(skb);
 				nskb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
