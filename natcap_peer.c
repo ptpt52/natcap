@@ -1098,14 +1098,37 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 				dst[i] = 0;
 			}
 		}
+		if (!ssyn && protocol == IPPROTO_TCP) {
+			//send syn,ack, then send ack with payload
+			oskb = skb_copy(nskb, GFP_ATOMIC);
+			if (oskb) {
+				oskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + ext_header_len;
+				oeth = eth_hdr(oskb);
+				oiph = ip_hdr(oskb);
+				oiph->id = htons(ntohs(oiph->id) - 1);
+				oiph->tot_len = htons(oskb->len);
+				otcph = (struct tcphdr *)((char *)ip_hdr(oskb) + sizeof(struct iphdr));
+				tcpopt = (struct natcap_TCPOPT *)((void *)otcph + sizeof(struct tcphdr));
+				tcpopt->header.opcode = TCPOPT_PEER;
+
+				oskb->ip_summed = CHECKSUM_UNNECESSARY;
+				skb_rcsum_tcpudp(oskb);
+				skb_push(oskb, (char *)oiph - (char *)oeth);
+				oskb->dev = (struct net_device *)dev;
+				dev_queue_xmit(oskb);
+
+				ntcph->seq = htonl(ntohl(ntcph->seq) + 1);
+				ntcph->syn = 0;
+			} else {
+				NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+			}
+		}
 	}
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
-
 	skb_push(nskb, (char *)niph - (char *)neth);
 	nskb->dev = (struct net_device *)dev;
-
 	dev_queue_xmit(nskb);
 }
 
