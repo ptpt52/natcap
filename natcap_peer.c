@@ -239,7 +239,7 @@ __be32 peer_xsyn_enumerate_addr(void)
 static __be32 peer_knock_ip = __constant_htonl(0);
 static __be16 peer_knock_port = __constant_htons(22);
 static unsigned char peer_knock_mac[ETH_ALEN] = { };
-static __be16 peer_knock_local_port = __constant_htons(997);
+__be16 peer_knock_local_port = __constant_htons(997);
 
 static inline __be32 gen_seq_number(void)
 {

@@ -145,4 +145,6 @@ extern __be32 peer_xsyn_enumerate_addr(void);
 #define PEER_PUB_NUM 256
 extern __be32 peer_pub_ip[PEER_PUB_NUM];
 
+extern __be16 peer_knock_local_port;
+
 #endif /* _NATCAP_PEER_H_ */
