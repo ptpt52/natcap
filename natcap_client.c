@@ -775,7 +775,8 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		}
 
 		if (IP_SET_test_dst_ip(state, in, out, skb, "knocklist") > 0) {
-			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == peer_knock_local_port) {
+			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == peer_knock_local_port ||
+			        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == peer_sni_port) {
 				goto bypass_tcp;
 			}
 			natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
