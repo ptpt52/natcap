@@ -178,6 +178,8 @@ static inline void peer_cache_cleanup(void)
 
 static int peer_stop = 1;
 
+static int peer_subtype = 0;
+
 static unsigned int peer_sni_auth = 0;
 
 static __be32 peer_sni_ip = __constant_htonl(0);
@@ -1309,10 +1311,9 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 
 		if (ops != NULL) {
 			tcpopt->header.subtype = SUBTYPE_PEER_ACK;
-		} else if ((ps->status & PEER_SUBTYPE_SSYN) ||
-		           (!(ps->status & PEER_SUBTYPE_SYN) && after(jiffies, fue->last_active + 64 * HZ))) {
+		} else if ((peer_subtype == 2) ||
+		           (peer_subtype == 0 && !(ps->status & PEER_SUBTYPE_SYN) && after(jiffies, fue->last_active + 64 * HZ))) {
 			//XXX auto switch to SSYN mode if fue no active for more than 64s
-			if (!(ps->status & PEER_SUBTYPE_SSYN)) short_set_bit(PEER_SUBTYPE_SSYN_BIT, &ps->status);
 			tcpopt->header.subtype = SUBTYPE_PEER_SSYN;
 		}
 	}
@@ -3898,6 +3899,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 		             "#    peer_mode=%u\n"
 		             "#    peer_max_pmtu=%u\n"
 		             "#    peer_sni_ban=%u\n"
+		             "#    peer_subtype=%u (auto=0, 1=SYN, 2=SSYN)\n"
 		             "#\n"
 		             "\n",
 		             &peer_local_ip, ntohs(peer_local_port),
@@ -3909,7 +3911,8 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 		             peer_sni_auth,
 		             peer_mode,
 		             peer_max_pmtu,
-		             peer_sni_ban
+		             peer_sni_ban,
+		             peer_subtype
 		            );
 		natcap_peer_ctl_buffer[n] = 0;
 		return natcap_peer_ctl_buffer;
@@ -4156,6 +4159,13 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 		n = sscanf(data, "peer_sni_ban=%u", &d);
 		if (n == 1) {
 			peer_sni_ban = d;
+			goto done;
+		}
+	} else if (strncmp(data, "peer_subtype=", 13) == 0) {
+		unsigned int d;
+		n = sscanf(data, "peer_subtype=%u", &d);
+		if (n == 1) {
+			peer_subtype = d;
 			goto done;
 		}
 	}
