@@ -2673,9 +2673,13 @@ sni_skip:
 					}
 					break;
 				case SUBTYPE_PEER_SSYN:
-					if (!(ue->status & PEER_SUBTYPE_SSYN)) short_set_bit(PEER_SUBTYPE_SSYN_BIT, &ue->status);
 				/* fall through */
 				case SUBTYPE_PEER_SYN:
+					if (tcpopt->header.subtype == SUBTYPE_PEER_SSYN) {
+						if (!(ue->status & PEER_SUBTYPE_SSYN)) short_set_bit(PEER_SUBTYPE_SSYN_BIT, &ue->status);
+					} else {
+						if ((ue->status & PEER_SUBTYPE_SSYN)) short_clear_bit(PEER_SUBTYPE_SSYN_BIT, &ue->status);
+					}
 					if (pt->local_seq != 0 &&
 					        pt->remote_seq != 0 &&
 					        pt->remote_seq + 1 == ntohl(TCPH(l4)->seq) &&
@@ -2711,6 +2715,8 @@ sni_skip:
 				pt->last_active = ue->last_active = jiffies;
 				if (tcpopt->header.subtype == SUBTYPE_PEER_SSYN) {
 					if (!(ue->status & PEER_SUBTYPE_SSYN)) short_set_bit(PEER_SUBTYPE_SSYN_BIT, &ue->status);
+				} else {
+					if ((ue->status & PEER_SUBTYPE_SSYN)) short_clear_bit(PEER_SUBTYPE_SSYN_BIT, &ue->status);
 				}
 			} else {
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, seq(=%u,remote_seq=%u) ack_seq(=%u,local_seq=%u) mismatch\n",
