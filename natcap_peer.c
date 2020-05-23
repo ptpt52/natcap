@@ -1203,10 +1203,10 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		__be32 saddr = (ops != NULL) ? oiph->daddr : oiph->saddr;
 		__be32 daddr = (ops != NULL) ? oiph->saddr : oiph->daddr;
 		user = peer_fakeuser_expect_new(saddr, daddr, sport, dport, pmi);
-	}
-	if (user == NULL) {
-		spin_unlock_bh(&ps->lock);
-		return NULL;
+		if (user == NULL) {
+			spin_unlock_bh(&ps->lock);
+			return NULL;
+		}
 	}
 	if (ps->port_map[pmi] == NULL) {
 		nf_conntrack_get(&user->ct_general);
