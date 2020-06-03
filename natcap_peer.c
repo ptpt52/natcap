@@ -49,6 +49,7 @@
 #include "natcap_client.h"
 #include "natcap_knock.h"
 
+static unsigned int peer_open_portmap = 0;
 static unsigned int peer_mode = 0;
 static unsigned int peer_max_pmtu = 1440;
 static unsigned int peer_sni_ban = 0;
@@ -3063,6 +3064,9 @@ h_out:
 		nf_ct_put(user);
 		return NF_ACCEPT;
 	} else {
+		if (peer_open_portmap == 0) {
+			return NF_ACCEPT;
+		}
 		port = ntohs(TCPH(l4)->dest);
 knock:
 		user = get_peer_user(port);
@@ -3922,6 +3926,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 		             "#    peer_conn_timeout=%us\n"
 		             "#    peer_port_map_timeout=%us\n"
 		             "#    KN=%pI4:%u MAC=%02x:%02x:%02x:%02x:%02x:%02x LP=%u\n"
+		             "#    peer_open_portmap=%u\n"
 		             "#    peer_sni_listen=%pI4:%u\n"
 		             "#    peer_sni_auth=%u\n"
 		             "#    peer_mode=%u\n"
@@ -3935,6 +3940,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 		             &peer_knock_ip, ntohs(peer_knock_port),
 		             peer_knock_mac[0], peer_knock_mac[1], peer_knock_mac[2], peer_knock_mac[3], peer_knock_mac[4], peer_knock_mac[5],
 		             ntohs(peer_knock_local_port),
+		             peer_open_portmap,
 		             &peer_sni_ip, ntohs(peer_sni_port),
 		             peer_sni_auth,
 		             peer_mode,
@@ -4148,6 +4154,13 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 				peer_knock_local_port = htons(f);
 				goto done;
 			}
+		}
+	} else if (strncmp(data, "peer_open_portmap=", 18) == 0) {
+		unsigned int d;
+		n = sscanf(data, "peer_open_portmap=%u", &d);
+		if (n == 1) {
+			peer_open_portmap = !!d;
+			goto done;
 		}
 	} else if (strncmp(data, "peer_sni_listen=", 16) == 0) {
 		unsigned int a, b, c, d, e;
