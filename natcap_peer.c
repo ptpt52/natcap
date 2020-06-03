@@ -787,8 +787,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 			NATCAP_WARN("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] alloc map_port fail\n",
 			            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 			            &saddr, ntohs(sport), &daddr, ntohs(dport));
-			nf_ct_put(user);
-			return NULL;
+			/* alloc_peer_port fail: portmap would not work, but sni should work */
 		}
 	}
 	if (ue->ip != saddr) {
