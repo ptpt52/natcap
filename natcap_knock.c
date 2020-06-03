@@ -251,7 +251,7 @@ static struct nf_hook_ops knock_hooks[] = {
 		.hook = natcap_knock_dnat_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_PRE_ROUTING,
-		.priority = NF_IP_PRI_NAT_DST - 10,
+		.priority = NF_IP_PRI_NAT_DST - 10 - 2,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -260,7 +260,7 @@ static struct nf_hook_ops knock_hooks[] = {
 		.hook = natcap_knock_dnat_hook,
 		.pf = PF_INET,
 		.hooknum = NF_INET_LOCAL_OUT,
-		.priority = NF_IP_PRI_NAT_DST - 10,
+		.priority = NF_IP_PRI_NAT_DST - 10 - 2,
 	},
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)

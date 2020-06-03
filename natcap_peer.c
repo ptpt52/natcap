@@ -2916,6 +2916,9 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 	if (NULL == ct) {
 		return NF_ACCEPT;
 	}
+	if ((IPS_NATCAP & ct->status)) {
+		return NF_ACCEPT;
+	}
 	if ((IPS_NATCAP_PEER & ct->status)) {
 		xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 		if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
