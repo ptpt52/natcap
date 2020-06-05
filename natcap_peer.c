@@ -177,6 +177,8 @@ static inline void peer_cache_cleanup(void)
 	spin_unlock_bh(&peer_cache_lock);
 }
 
+static unsigned int rt_out_magic = 0;
+
 static int peer_stop = 1;
 
 static int peer_subtype = 0;
@@ -1359,10 +1361,11 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		skb_push(nskb, (char *)niph - (char *)neth);
 		nskb->dev = (struct net_device *)dev;
 		//back l2 header
-		if (fue->rt_out.outdev == NULL) {
-			fue->rt_out.l2_head_len = (char *)niph - (char *)neth;
+		if (fue->rt_out_magic != rt_out_magic || fue->rt_out.outdev != nskb->dev) {
+			fue->rt_out.l2_head_len = (char *)niph - (char *)neth; //assume l2_head_len <= NF_L2_MAX_LEN
 			memcpy(fue->rt_out.l2_head, (char *)neth, (char *)niph - (char *)neth);
 			fue->rt_out.outdev = nskb->dev;
+			fue->rt_out_magic = rt_out_magic;
 		}
 		nf_ct_put(user);
 		spin_unlock_bh(&ps->lock);
@@ -1370,7 +1373,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		            ntcph->syn ? "sent ping(syn) SYN out" : "sent ping(ack) ACK out");
 		dev_queue_xmit(nskb);
 		return NULL;
-	} else if (fue->rt_out.outdev) {
+	} else if (fue->rt_out.outdev && fue->rt_out_magic == rt_out_magic) {
 		skb_push(nskb, fue->rt_out.l2_head_len);
 		skb_reset_mac_header(nskb);
 		memcpy(skb_mac_header(nskb), fue->rt_out.l2_head, fue->rt_out.l2_head_len);
@@ -2517,6 +2520,20 @@ sni_out:
 				goto syn_out;
 			}
 
+			if (ue->rt_out_magic != rt_out_magic || ue->rt_out.outdev != skb->dev) {
+				ue->rt_out.l2_head_len = (char *)iph - (char *)eth_hdr(skb);
+				if (ue->rt_out.l2_head_len <= NF_L2_MAX_LEN) {
+					if (ue->rt_out.l2_head_len >= ETH_HLEN) {
+						memcpy(((struct ethhdr *)ue->rt_out.l2_head)->h_dest, eth_hdr(skb)->h_source, ETH_ALEN);
+						memcpy(((struct ethhdr *)ue->rt_out.l2_head)->h_source, eth_hdr(skb)->h_dest, ETH_ALEN);
+						((struct ethhdr *)ue->rt_out.l2_head)->h_proto = eth_hdr(skb)->h_proto;
+						memcpy(ue->rt_out.l2_head + ETH_HLEN, (char *)eth_hdr(skb) + ETH_HLEN, ue->rt_out.l2_head_len - ETH_HLEN);
+					}
+					ue->rt_out.outdev = skb->dev;
+					ue->rt_out_magic = rt_out_magic;
+				}
+			}
+
 			if (pt->sni_ban != tcpopt->header.encryption)
 				pt->sni_ban = tcpopt->header.encryption;
 
@@ -2671,6 +2688,20 @@ sni_skip:
 				goto ack_out;
 			}
 
+			if (ue->rt_out_magic != rt_out_magic || ue->rt_out.outdev != skb->dev) {
+				ue->rt_out.l2_head_len = (char *)iph - (char *)eth_hdr(skb);
+				if (ue->rt_out.l2_head_len <= NF_L2_MAX_LEN) {
+					if (ue->rt_out.l2_head_len >= ETH_HLEN) {
+						memcpy(((struct ethhdr *)ue->rt_out.l2_head)->h_dest, eth_hdr(skb)->h_source, ETH_ALEN);
+						memcpy(((struct ethhdr *)ue->rt_out.l2_head)->h_source, eth_hdr(skb)->h_dest, ETH_ALEN);
+						((struct ethhdr *)ue->rt_out.l2_head)->h_proto = eth_hdr(skb)->h_proto;
+						memcpy(ue->rt_out.l2_head + ETH_HLEN, (char *)eth_hdr(skb) + ETH_HLEN, ue->rt_out.l2_head_len - ETH_HLEN);
+					}
+					ue->rt_out.outdev = skb->dev;
+					ue->rt_out_magic = rt_out_magic;
+				}
+			}
+
 			if (pt->sni_ban != tcpopt->header.encryption)
 				pt->sni_ban = tcpopt->header.encryption;
 
@@ -2772,6 +2803,151 @@ ack_out:
 	return NF_ACCEPT;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+static unsigned int natcap_icmpv6_pre_in_hook(unsigned int hooknum,
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
+{
+	//u_int8_t pf = PF_INET6;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+static unsigned int natcap_icmpv6_pre_in_hook(const struct nf_hook_ops *ops,
+        struct sk_buff *skb,
+        const struct net_device *in,
+        const struct net_device *out,
+        int (*okfn)(struct sk_buff *))
+{
+	//u_int8_t pf = ops->pf;
+	unsigned int hooknum = ops->hooknum;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+static unsigned int natcap_icmpv6_pre_in_hook(const struct nf_hook_ops *ops,
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
+{
+	//u_int8_t pf = state->pf;
+	unsigned int hooknum = state->hook;
+	//const struct net_device *in = state->in;
+	//const struct net_device *out = state->out;
+#else
+static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
+        struct sk_buff *skb,
+        const struct nf_hook_state *state)
+{
+	//u_int8_t pf = state->pf;
+	unsigned int hooknum = state->hook;
+	//const struct net_device *in = state->in;
+	//const struct net_device *out = state->out;
+#endif
+	struct ipv6hdr *ipv6h;
+	unsigned char client_mac[ETH_ALEN];
+	struct nf_conntrack_tuple tuple;
+	struct nf_conntrack_tuple_hash *h;
+	struct net *net = &init_net;
+
+	if (peer_stop)
+		return NF_ACCEPT;
+
+	ipv6h = ipv6_hdr(skb);
+	if (hooknum != NF_INET_LOCAL_OUT ||
+	        ipv6h->nexthdr != NEXTHDR_ICMP ||
+	        ipv6h->hop_limit != 1) {
+		return NF_ACCEPT;
+	}
+
+	memcpy(client_mac, (void *)&ipv6h->daddr, ETH_ALEN);
+
+	memset(&tuple, 0, sizeof(tuple));
+	tuple.src.u3.ip = get_byte4(client_mac);
+	tuple.src.u.udp.port = get_byte2(client_mac + 4);
+	tuple.dst.u3.ip = PEER_FAKEUSER_DADDR;
+	tuple.dst.u.udp.port = __constant_htons(65535);
+	tuple.src.l3num = PF_INET;
+	tuple.dst.protonum = IPPROTO_UDP;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+	h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
+	h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
+
+	if (h) {
+		struct peer_tuple pt_m;
+		struct peer_tuple *pt = NULL;
+		struct user_expect *ue;
+		unsigned long mindiff = peer_port_map_timeout * HZ;
+		int i;
+		struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
+		if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_ORIGINAL) {
+			nf_ct_put(user);
+			return NF_ACCEPT;
+		}
+
+		ue = peer_user_expect(user);
+		if (ue->rt_out_magic != rt_out_magic) {
+			nf_ct_put(user);
+			return NF_ACCEPT;
+		}
+
+		for (i = 0; i < MAX_PEER_TUPLE; i++) {
+			if (ue->tuple[i].connected && ue->tuple[i].sip != 0 && mindiff > uintdiff(jiffies, ue->tuple[i].last_active)) {
+				pt = &ue->tuple[i];
+				mindiff = uintdiff(jiffies, ue->tuple[i].last_active);
+			}
+		}
+
+		if (pt == NULL) {
+			NATCAP_WARN("(IPI): no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
+			           );
+			put_peer_user(user);
+			return NF_ACCEPT;
+		}
+
+		spin_lock_bh(&ue->lock);
+		//re-check-in-lock
+		if (pt->sip == 0) {
+			spin_unlock_bh(&ue->lock);
+			NATCAP_WARN("(IPI): no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1]
+			           );
+			put_peer_user(user);
+			return NF_ACCEPT;
+		}
+		if (pt->connected == 0 || pt->local_seq == 0 || pt->remote_seq == 0) {
+			NATCAP_WARN("(IPI): port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x](%s,local_seq=%u,remote_seq=%u) last_active(%u,%u) not ok\n",
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[3],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[0],
+			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all)[1],
+			            pt->connected ? "connected" : "disconnected",
+			            pt->local_seq, pt->remote_seq, pt->last_active, (unsigned int)jiffies);
+			spin_unlock_bh(&ue->lock);
+			put_peer_user(user);
+			return NF_ACCEPT;
+		}
+		memcpy(&pt_m, pt, sizeof(struct peer_tuple));
+		spin_unlock_bh(&ue->lock);
+
+		nf_ct_put(user);
+	} else {
+		NATCAP_WARN("ICMP6: target %02x:%02x:%02x:%02x:%02x:%02x not found\n",
+		       client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
+	}
+
+	return NF_ACCEPT;
+}
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_peer_post_out_hook(unsigned int hooknum,
@@ -3895,6 +4071,15 @@ static struct nf_hook_ops peer_hooks[] = {
 		.hooknum = NF_INET_LOCAL_IN,
 		.priority = NF_IP_PRI_NAT_SRC - 10 + 1,
 	},
+	{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+		.owner = THIS_MODULE,
+#endif
+		.hook = natcap_icmpv6_pre_in_hook,
+		.pf = PF_INET6,
+		.hooknum = NF_INET_LOCAL_OUT,
+		.priority = NF_IP_PRI_CONNTRACK - 5,
+	},
 };
 
 
@@ -4285,13 +4470,15 @@ static int peer_netdev_event(struct notifier_block *this, unsigned long event, v
 			if (user != NULL) {
 				struct fakeuser_expect *fue = peer_fakeuser_expect(user);
 				if (fue->rt_out.outdev == dev) {
-					peer_server[i].port_map[j] = NULL;
+					ps->port_map[j] = NULL;
 					nf_ct_put(user);
 				}
 			}
 		}
 		spin_unlock_bh(&ps->lock);
 	}
+
+	rt_out_magic += 1;
 
 	NATCAP_WARN("catch unregister event for dev=%s\n", dev ? dev->name : "(null)");
 
@@ -4313,6 +4500,8 @@ int natcap_peer_init(void)
 	if (mode != CLIENT_MODE) {
 		default_mac_addr_init();
 	}
+
+	rt_out_magic = jiffies + prandom_u32();
 
 	memset(peer_pub_ip, 0, sizeof(peer_pub_ip));
 	memset(peer_pub_active, 0, sizeof(peer_pub_active));

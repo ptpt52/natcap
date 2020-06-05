@@ -63,6 +63,7 @@ struct fakeuser_expect {
 	unsigned int local_seq;
 	unsigned int remote_seq;
 	unsigned int last_active;
+	unsigned int rt_out_magic;
 	struct natcap_route rt_out;
 };
 
@@ -97,6 +98,9 @@ struct user_expect {
 	unsigned short status;
 #define MAX_PEER_TUPLE 8
 	struct peer_tuple tuple[MAX_PEER_TUPLE];
+
+	unsigned int rt_out_magic;
+	struct natcap_route rt_out;
 };
 
 static inline struct user_expect *peer_user_expect(struct nf_conn *ct)
