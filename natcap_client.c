@@ -2743,7 +2743,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		UDPH(l4)->dest = ns->n.target_port;
 		iph->daddr = ns->n.target_ip;
 
-		if (cone_nat_array && cone_snat_array &&
+		if (cone_nat_array && cone_snat_array && ntohs(UDPH(l4)->source) >= 1024 &&
 		        (!(ns->n.status & NS_NATCAP_TCPUDPENC)) &&
 		        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53) &&
 		        ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53) &&
