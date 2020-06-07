@@ -2849,6 +2849,7 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 	//const struct net_device *out = state->out;
 #endif
 	struct ipv6hdr *ipv6h;
+	struct icmp6hdr *icmp6h;
 	unsigned char client_mac[ETH_ALEN];
 	struct nf_conntrack_tuple tuple;
 	struct nf_conntrack_tuple_hash *h;
@@ -2860,11 +2861,13 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 	ipv6h = ipv6_hdr(skb);
 	if (hooknum != NF_INET_LOCAL_OUT ||
 	        ipv6h->nexthdr != NEXTHDR_ICMP ||
-	        ipv6h->hop_limit != 1) {
+	        ipv6h->hop_limit != 1 ||
+	        (ipv6h->daddr.s6_addr[0] != 0xff || ipv6h->daddr.s6_addr[1] != 0x99)) {
 		return NF_ACCEPT;
 	}
 
-	memcpy(client_mac, (void *)&ipv6h->daddr, ETH_ALEN);
+	//ping6 ff99:AABB:CCDD:EEFF:: -t1 -s1 -w1
+	memcpy(client_mac, &ipv6h->daddr.s6_addr[2], ETH_ALEN);
 
 	memset(&tuple, 0, sizeof(tuple));
 	tuple.src.u3.ip = get_byte4(client_mac);
@@ -3021,6 +3024,10 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 
 			skb_push(nskb, (char *)ip_hdr(nskb) - (char *)eth_hdr(nskb));
 			dev_queue_xmit(nskb);
+
+			icmp6h = (struct icmp6hdr *)((char *)ipv6h + sizeof(struct ipv6hdr));
+			//printk("%pI6->%pI6\n", &ipv6h->saddr, &ipv6h->daddr);
+			//TODO ack icmp6 reply back
 
 			consume_skb(skb);
 			return NF_STOLEN;
