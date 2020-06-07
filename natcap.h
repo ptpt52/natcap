@@ -66,6 +66,7 @@
 #define SUBTYPE_PEER_FSYNACK    69
 #define SUBTYPE_PEER_XSYN       70
 #define SUBTYPE_PEER_SSYN       71
+#define SUBTYPE_PEER_FMSG       72
 
 struct natcap_TCPOPT_header {
 	u8 opcode;

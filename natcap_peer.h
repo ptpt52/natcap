@@ -121,7 +121,8 @@ static inline struct natcap_TCPOPT *natcap_peer_decode_header(struct tcphdr *tcp
 	          opt->header.subtype == SUBTYPE_PEER_SSYN ||
 	          opt->header.subtype == SUBTYPE_PEER_SYNACK ||
 	          opt->header.subtype == SUBTYPE_PEER_ACK ||
-	          opt->header.subtype == SUBTYPE_PEER_FSYNACK) &&
+	          opt->header.subtype == SUBTYPE_PEER_FSYNACK ||
+	          opt->header.subtype == SUBTYPE_PEER_FMSG) &&
 	         opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int))) ||
 	        (tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)) &&
 	         (opt->header.opcode == TCPOPT_PEER || opt->header.opcode == TCPOPT_PEER_V2) &&

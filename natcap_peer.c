@@ -2321,7 +2321,8 @@ sni_out:
 	if ((TCPH(l4)->syn && TCPH(l4)->ack) ||
 	        tcpopt->header.subtype == SUBTYPE_PEER_FSYN ||
 	        tcpopt->header.subtype == SUBTYPE_PEER_XSYN ||
-	        tcpopt->header.subtype == SUBTYPE_PEER_FSYNACK) {
+	        tcpopt->header.subtype == SUBTYPE_PEER_FSYNACK ||
+	        tcpopt->header.subtype == SUBTYPE_PEER_FMSG) {
 		//got syn ack
 		//first. lookup fakeuser_expect
 		struct nf_conntrack_tuple tuple;
@@ -2358,6 +2359,14 @@ sni_out:
 				skb_rcsum_tcpudp(skb);
 				nf_ct_put(user);
 				return NF_ACCEPT;
+			}
+
+			if (tcpopt->header.subtype == SUBTYPE_PEER_FMSG) {
+				//TODO get FMSG
+				NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": get SUBTYPE_PEER_FMSG\n", DEBUG_TCP_ARG(iph,l4));
+				nf_ct_put(user);
+				consume_skb(skb);
+				return NF_STOLEN;
 			}
 
 			if (tcpopt->header.subtype == SUBTYPE_PEER_SYNACK || tcpopt->header.subtype == SUBTYPE_PEER_FSYNACK) {
@@ -2939,11 +2948,88 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 		}
 		memcpy(&pt_m, pt, sizeof(struct peer_tuple));
 		spin_unlock_bh(&ue->lock);
+		pt = &pt_m;
 
+		do {
+			struct sk_buff *nskb;
+			struct iphdr *niph;
+			struct tcphdr *ntcph;
+			struct natcap_TCPOPT *tcpopt;
+
+			u8 protocol = IPPROTO_TCP;
+			int opt_header_len = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
+			int nlen = ue->rt_out.l2_head_len + sizeof(struct iphdr) + sizeof(struct tcphdr) + opt_header_len;
+
+			if (pt->mode == PT_MODE_UDP) {
+				protocol = IPPROTO_UDP;
+				nlen += 8;
+			}
+
+			nskb = netdev_alloc_skb(ue->rt_out.outdev, nlen + NET_IP_ALIGN);
+			if (nskb == NULL) {
+				break;
+			}
+			skb_reserve(nskb, NET_IP_ALIGN);
+			skb_put(nskb, nlen);
+			skb_reset_mac_header(nskb);
+			skb_pull(nskb, ue->rt_out.l2_head_len);
+			skb_reset_network_header(nskb);
+
+			memcpy((void *)eth_hdr(nskb), ue->rt_out.l2_head, ue->rt_out.l2_head_len);
+
+			niph = ip_hdr(nskb);
+			memset(niph, 0, sizeof(struct iphdr));
+			niph->saddr = pt->dip;
+			niph->daddr = pt->sip;
+			niph->version = 4;
+			niph->ihl = sizeof(struct iphdr) / 4;
+			niph->tos = 0;
+			niph->tot_len = htons(nskb->len);
+			niph->ttl = 255;
+			niph->protocol = protocol;
+			niph->id = __constant_htons(jiffies);
+			niph->frag_off = 0x0;
+
+			ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
+			ntcph->source = pt->dport;
+			ntcph->dest = pt->sport;
+			if (protocol == IPPROTO_UDP) {
+				UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
+				set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_C_MAGIC));
+				ntcph = (struct tcphdr *)((char *)ntcph + 8);
+			}
+			ntcph->ack_seq = htonl(pt->remote_seq + 1);
+			ntcph->seq = htonl(pt->local_seq + 1);
+			tcp_flag_word(ntcph) = (TCP_FLAG_ACK);
+			ntcph->res1 = 0;
+			ntcph->doff = (sizeof(struct tcphdr) + opt_header_len) / 4;
+			ntcph->window = __constant_htons(65535);
+			ntcph->check = 0;
+			ntcph->urg_ptr = 0;
+
+			tcpopt = (struct natcap_TCPOPT *)((void *)ntcph + sizeof(struct tcphdr));
+			tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
+			tcpopt->header.opcode = TCPOPT_PEER_V2;
+			tcpopt->header.opsize = opt_header_len;
+			tcpopt->header.encryption = 0;
+			tcpopt->header.subtype =  SUBTYPE_PEER_FMSG;
+
+			NATCAP_ERROR("(IPI)" DEBUG_TCP_FMT ": send FMSG nlen=%d,%d\n", DEBUG_TCP_ARG(niph,ntcph), nlen, nskb->len);
+
+			nskb->ip_summed = CHECKSUM_UNNECESSARY;
+			skb_rcsum_tcpudp(nskb);
+
+			skb_push(nskb, (char *)ip_hdr(nskb) - (char *)eth_hdr(nskb));
+			dev_queue_xmit(nskb);
+
+			consume_skb(skb);
+			return NF_STOLEN;
+		} while (0);
+		//TODO
 		nf_ct_put(user);
 	} else {
 		NATCAP_WARN("ICMP6: target %02x:%02x:%02x:%02x:%02x:%02x not found\n",
-		       client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
+		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
 	}
 
 	return NF_ACCEPT;
