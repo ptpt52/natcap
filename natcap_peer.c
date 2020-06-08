@@ -1180,6 +1180,11 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		} else {
 			pmi = ntohs(ICMPH(otcph)->un.echo.sequence) % ps->conn;
 			if (pmi != 0) {
+				/* change connection in every 512s */
+				if ((jiffies / HZ) % 512 == 0 && ps->port_map[0] != NULL) {
+					nf_ct_put(ps->port_map[0]);
+					ps->port_map[0] = NULL;
+				}
 				spin_unlock_bh(&ps->lock);
 				return NULL;
 			}
