@@ -31,6 +31,8 @@ struct peer_server_node {
 #define PEER_SUBTYPE_SYN (1 << PEER_SUBTYPE_SYN_BIT)
 #define PEER_SUBTYPE_PUB_BIT 2
 #define PEER_SUBTYPE_PUB (1 << PEER_SUBTYPE_PUB_BIT)
+#define PEER_SUBTYPE_AUTH_BIT 3
+#define PEER_SUBTYPE_AUTH (1 << PEER_SUBTYPE_AUTH_BIT)
 	unsigned short status;
 	__be32 ip;
 	__be16 map_port;
@@ -92,6 +94,7 @@ struct user_expect {
 	spinlock_t lock;
 	unsigned int last_active;
 	unsigned int last_active_peer;
+	unsigned int last_active_auth;
 	__be32 local_ip;
 	__be32 ip;
 	__be16 map_port;
@@ -153,5 +156,7 @@ extern __be32 peer_pub_ip[PEER_PUB_NUM];
 extern __be16 peer_knock_local_port;
 
 extern __be16 peer_sni_port;
+
+extern int natcap_auth_by_user(const unsigned char *client_mac);
 
 #endif /* _NATCAP_PEER_H_ */

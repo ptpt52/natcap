@@ -850,6 +850,166 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	return user;
 }
 
+/*
+ * return
+ * <= 0 auth fail
+ * >  0 auth success
+ */
+int natcap_auth_by_user(const unsigned char *client_mac)
+{
+	int ret = 0;
+	//unsigned int i;
+	//struct peer_tuple *pt = NULL;
+	int check_auth = 0;
+	struct user_expect *ue;
+	struct nf_conn *user;
+	struct nf_ct_ext *new = NULL;
+	enum ip_conntrack_info ctinfo;
+	unsigned int newoff = 0;
+	struct sk_buff *uskb;
+	struct iphdr *iph;
+	struct udphdr *udph;
+	//unsigned long last_jiffies = jiffies;
+
+	uskb = uskb_of_this_cpu(smp_processor_id());
+	if (uskb == NULL) {
+		return 0;
+	}
+
+	skb_reset_transport_header(uskb);
+	skb_reset_network_header(uskb);
+	skb_reset_mac_len(uskb);
+
+	uskb->protocol = __constant_htons(ETH_P_IP);
+	skb_set_tail_pointer(uskb, PEER_USKB_SIZE);
+	uskb->len = PEER_USKB_SIZE;
+	uskb->pkt_type = PACKET_HOST;
+	uskb->transport_header = uskb->network_header + sizeof(struct iphdr);
+
+	iph = ip_hdr(uskb);
+	iph->version = 4;
+	iph->ihl = 5;
+	iph->saddr = get_byte4(client_mac);
+	iph->daddr = PEER_FAKEUSER_DADDR;
+	iph->tos = 0;
+	iph->tot_len = htons(PEER_USKB_SIZE);
+	iph->ttl=255;
+	iph->protocol = IPPROTO_UDP;
+	iph->id = __constant_htons(0xdead);
+	iph->frag_off = 0;
+	iph->check = 0;
+	iph->check = ip_fast_csum(iph, iph->ihl);
+
+	udph = (struct udphdr *)((char *)iph + sizeof(struct iphdr));
+	udph->source = get_byte2(client_mac + 4);
+	udph->dest = __constant_htons(65535);
+	udph->len = __constant_htons(sizeof(struct udphdr));
+	udph->check = 0;
+
+	ret = nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, uskb);
+	if (ret != NF_ACCEPT) {
+		return 0;
+	}
+	user = nf_ct_get(uskb, &ctinfo);
+
+	if (!user) {
+		NATCAP_ERROR("auth user [%02x:%02x:%02x:%02x:%02x:%02x] not found\n",
+		             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
+		return 0;
+	}
+
+	if (!user->ext) {
+		NATCAP_ERROR("auth user [%02x:%02x:%02x:%02x:%02x:%02x] not found, user->ext is NULL\n",
+		             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
+		skb_nfct_reset(uskb);
+		return 0;
+	}
+	if (!nf_ct_is_confirmed(user) && !(IPS_NATCAP_PEER & user->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &user->status)) {
+		newoff = ALIGN(user->ext->len, __ALIGN_64BITS);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0)
+		new = __krealloc(user->ext, newoff + sizeof(struct user_expect), GFP_ATOMIC);
+#else
+		new = krealloc(user->ext, newoff + sizeof(struct user_expect), GFP_ATOMIC);
+#endif
+		if (!new) {
+			NATCAP_ERROR("auth user [%02x:%02x:%02x:%02x:%02x:%02x] not found, realloc user->ext failed\n",
+			             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
+			skb_nfct_reset(uskb);
+			return 0;
+		}
+
+		if (user->ext != new) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
+			kfree_rcu(user->ext, rcu);
+			user->ext = new;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0)
+			kfree_rcu(user->ext, rcu);
+			rcu_assign_pointer(user->ext, new);
+#else
+			user->ext = new;
+#endif
+		}
+		new->len = newoff;
+		memset((void *)new + newoff, 0, sizeof(struct user_expect));
+
+		//Repeated initialization cannot happen, it is safe.
+		ue = peer_user_expect(user);
+		spin_lock_init(&ue->lock);
+
+		spin_lock_bh(&ue->lock);
+		ue->ip = 0;
+		ue->local_ip = 0;
+		ue->map_port = alloc_peer_port(user, client_mac);
+		spin_unlock_bh(&ue->lock);
+	}
+
+	ret = nf_conntrack_confirm(uskb);
+	if (ret != NF_ACCEPT) {
+		skb_nfct_reset(uskb);
+		return 0;
+	}
+
+	natcap_user_timeout_touch(user, peer_port_map_timeout);
+	ue = peer_user_expect(user);
+
+	if (user != peer_port_map[ntohs(ue->map_port)]) {
+		//XXX this can only happen when alloc_peer_port get 0 or old user got timeout.
+		//    so we re-alloc it
+		spin_lock_bh(&ue->lock);
+		//re-check-in-lock
+		if (user != peer_port_map[ntohs(ue->map_port)]) {
+			//re-alloc-map_port
+			ue->map_port = alloc_peer_port(user, client_mac);
+		}
+		spin_unlock_bh(&ue->lock);
+
+		if (user != peer_port_map[ntohs(ue->map_port)]) {
+			NATCAP_WARN("auth user [%02x:%02x:%02x:%02x:%02x:%02x] alloc map_port fail\n",
+			            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
+			/* alloc_peer_port fail: portmap would not work, but sni should work */
+		}
+	}
+
+	if ((ue->status & PEER_SUBTYPE_AUTH)) {
+		ret = 1;
+		if (uintdiff(jiffies, ue->last_active_auth) >= 300 * HZ) {
+			check_auth = 1;
+		}
+	} else {
+		if (uintdiff(jiffies, ue->last_active_auth) >= 60 * HZ) {
+			check_auth = 1;
+		}
+	}
+
+	skb_nfct_reset(uskb);
+
+	if (check_auth) {
+		//TODO check upstream auth
+	}
+
+	return ret;
+}
+
 static inline void natcap_peer_echo_request(const struct net_device *dev, struct sk_buff *oskb, unsigned char *client_mac)
 {
 	struct sk_buff *nskb;
