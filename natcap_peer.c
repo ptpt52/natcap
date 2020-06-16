@@ -850,12 +850,117 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	return user;
 }
 
+static __be32 peer_upstream_auth_ip = 0;
+
+void natcap_check_upstream_auth(const unsigned char *client_mac, __be32 client_ip)
+{
+	struct nf_conn *user;
+	struct sk_buff *skb;
+	struct iphdr *iph;
+	struct tcphdr *tcph;
+	struct natcap_TCPOPT *tcpopt;
+	struct peer_server_node *ps = NULL;
+	struct fakeuser_expect *fue;
+	u8 protocol = IPPROTO_TCP;
+	int opt_header_len = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
+	int nlen;
+
+	ps = peer_server_node_in(peer_upstream_auth_ip, 0, 0);
+	if (ps == NULL) {
+		return;
+	}
+
+	spin_lock_bh(&ps->lock);
+
+	user = ps->port_map[0];
+	if (user == NULL) {
+		spin_unlock_bh(&ps->lock);
+		return;
+	}
+	nf_conntrack_get(&user->ct_general);
+
+	fue = peer_fakeuser_expect(user);
+	if (fue->pmi != 0 || fue->state != FUE_STATE_CONNECTED || fue->rt_out_magic != rt_out_magic) {
+		nf_ct_put(user);
+		spin_unlock_bh(&ps->lock);
+		return;
+	}
+
+	nlen = fue->rt_out.l2_head_len + sizeof(struct iphdr) + sizeof(struct tcphdr) + opt_header_len;
+
+	if (fue->mode == FUE_MODE_UDP) {
+		protocol = IPPROTO_UDP;
+		nlen += 8;
+	}
+
+	skb = netdev_alloc_skb(fue->rt_out.outdev, nlen + NET_IP_ALIGN);
+	if (skb == NULL) {
+		nf_ct_put(user);
+		spin_unlock_bh(&ps->lock);
+		return;
+	}
+
+	skb_reserve(skb, NET_IP_ALIGN);
+	skb_put(skb, nlen);
+	skb_reset_mac_header(skb);
+	skb_pull(skb, fue->rt_out.l2_head_len);
+	skb_reset_network_header(skb);
+
+	memcpy((void *)eth_hdr(skb), fue->rt_out.l2_head, fue->rt_out.l2_head_len);
+
+	iph = ip_hdr(skb);
+	memset(iph, 0, sizeof(struct iphdr));
+	iph->saddr = user->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip;
+	iph->daddr = user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
+	iph->version = 4;
+	iph->ihl = sizeof(struct iphdr) / 4;
+	iph->tos = 0;
+	iph->tot_len = htons(skb->len);
+	iph->ttl = 255;
+	iph->protocol = protocol;
+	iph->id = __constant_htons(jiffies);
+	iph->frag_off = 0x0;
+
+	tcph = (struct tcphdr *)((char *)ip_hdr(skb) + sizeof(struct iphdr));
+	tcph->source = user->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all;
+	tcph->dest = user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all;
+	if (protocol == IPPROTO_UDP) {
+		UDPH(tcph)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
+		set_byte4((void *)UDPH(tcph) + 8, __constant_htonl(NATCAP_C_MAGIC));
+		tcph = (struct tcphdr *)((char *)tcph + 8);
+	}
+	tcph->ack_seq = htonl(fue->remote_seq + 1);
+	tcph->seq = htonl(fue->local_seq + 1);
+	tcp_flag_word(tcph) = TCP_FLAG_ACK;
+	tcph->res1 = 0;
+	tcph->doff = (sizeof(struct tcphdr) + opt_header_len) / 4;
+	tcph->window = __constant_htons(65535);
+	tcph->check = 0;
+	tcph->urg_ptr = 0;
+
+	tcpopt = (struct natcap_TCPOPT *)((void *)tcph + sizeof(struct tcphdr));
+	tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
+	tcpopt->header.opcode = TCPOPT_PEER_V2;
+	tcpopt->header.opsize = opt_header_len;
+	tcpopt->header.encryption = 0;
+	tcpopt->header.subtype =  SUBTYPE_PEER_AUTH;
+
+	set_byte4((void *)&tcpopt->peer.data.user.ip, client_ip);
+	memcpy(tcpopt->peer.data.user.mac_addr, client_mac, ETH_ALEN);
+
+	skb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(skb);
+
+	skb_push(skb, (char *)ip_hdr(skb) - (char *)eth_hdr(skb));
+	dev_queue_xmit(skb);
+}
+
 /*
  * return
  * <= 0 auth fail
  * >  0 auth success
  */
-int natcap_auth_by_user(const unsigned char *client_mac)
+int natcap_auth_by_user(const unsigned char *client_mac, __be32 client_ip)
 {
 	int ret = 0;
 	//unsigned int i;
@@ -961,6 +1066,8 @@ int natcap_auth_by_user(const unsigned char *client_mac)
 		ue->local_ip = 0;
 		ue->map_port = alloc_peer_port(user, client_mac);
 		spin_unlock_bh(&ue->lock);
+
+		natcap_user_timeout_touch(user, peer_port_map_timeout);
 	}
 
 	ret = nf_conntrack_confirm(uskb);
@@ -969,7 +1076,6 @@ int natcap_auth_by_user(const unsigned char *client_mac)
 		return 0;
 	}
 
-	natcap_user_timeout_touch(user, peer_port_map_timeout);
 	ue = peer_user_expect(user);
 
 	if (user != peer_port_map[ntohs(ue->map_port)]) {
@@ -992,10 +1098,12 @@ int natcap_auth_by_user(const unsigned char *client_mac)
 
 	if ((ue->status & PEER_SUBTYPE_AUTH)) {
 		ret = 1;
+		/*check upstream auth every 300s if AUTH */
 		if (uintdiff(jiffies, ue->last_active_auth) >= 300 * HZ) {
 			check_auth = 1;
 		}
 	} else {
+		/*check upstream auth every 60s if not AUTH */
 		if (uintdiff(jiffies, ue->last_active_auth) >= 60 * HZ) {
 			check_auth = 1;
 		}
@@ -1004,7 +1112,8 @@ int natcap_auth_by_user(const unsigned char *client_mac)
 	skb_nfct_reset(uskb);
 
 	if (check_auth) {
-		//TODO check upstream auth
+		//check upstream auth
+		natcap_check_upstream_auth(client_mac, client_ip);
 	}
 
 	return ret;
@@ -2754,6 +2863,13 @@ syn_out:
 		struct nf_conn *user = NULL;
 		__be32 client_ip;
 		unsigned char client_mac[ETH_ALEN];
+
+		if (tcpopt->header.subtype == SUBTYPE_PEER_AUTH) {
+			client_ip = get_byte4((const void *)&tcpopt->peer.data.user.ip);
+			memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
+			//TODO
+			return NF_STOLEN;
+		}
 
 		if (tcpopt->header.subtype == SUBTYPE_PEER_FACK) {
 			struct nf_conntrack_tuple tuple;

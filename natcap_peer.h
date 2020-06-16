@@ -125,7 +125,8 @@ static inline struct natcap_TCPOPT *natcap_peer_decode_header(struct tcphdr *tcp
 	          opt->header.subtype == SUBTYPE_PEER_SYNACK ||
 	          opt->header.subtype == SUBTYPE_PEER_ACK ||
 	          opt->header.subtype == SUBTYPE_PEER_FSYNACK ||
-	          opt->header.subtype == SUBTYPE_PEER_FMSG) &&
+	          opt->header.subtype == SUBTYPE_PEER_FMSG ||
+	          opt->header.subtype == SUBTYPE_PEER_AUTH) &&
 	         opt->header.opsize >= ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int))) ||
 	        (tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int)) &&
 	         (opt->header.opcode == TCPOPT_PEER || opt->header.opcode == TCPOPT_PEER_V2) &&
@@ -157,6 +158,6 @@ extern __be16 peer_knock_local_port;
 
 extern __be16 peer_sni_port;
 
-extern int natcap_auth_by_user(const unsigned char *client_mac);
+extern int natcap_auth_by_user(const unsigned char *client_mac, __be32 client_ip);
 
 #endif /* _NATCAP_PEER_H_ */
