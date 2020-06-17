@@ -2825,8 +2825,8 @@ sni_out:
 				unsigned char client_mac[ETH_ALEN];
 				int auth = !!get_byte2((const void *)&tcpopt->peer.data.map_port);
 				memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
-				NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": get SUBTYPE_PEER_AUTHACK, mac=%02x:%02x:%02x:%02x:%02x:%02x auth=%d\n",
-				             DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], auth);
+				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": get SUBTYPE_PEER_AUTHACK, mac=%02x:%02x:%02x:%02x:%02x:%02x auth=%d\n",
+				            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], auth);
 				natcap_auth_user_confirm(client_mac, auth);
 				nf_ct_put(user);
 				consume_skb(skb);
@@ -3075,6 +3075,14 @@ syn_out:
 			memcpy(eth->h_source, client_mac, ETH_ALEN);
 			ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
 			memcpy(eth->h_source, old_mac, ETH_ALEN);
+
+			if (ret <= 0) {
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 auth fail\n",
+				            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], &client_ip);
+			} else {
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 auth success\n",
+				            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], &client_ip);
+			}
 
 			natcap_auth_reply(in, skb, pt_mode, client_mac, ret);
 
