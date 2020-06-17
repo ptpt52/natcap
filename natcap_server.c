@@ -133,7 +133,7 @@ static inline int natcap_auth(const struct net_device *in,
 			if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
 				ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
 			if (ret <= 0) {
-				ret = natcap_auth_by_user(tcpopt->all.data.mac_addr, iph->saddr);
+				ret = natcap_auth_request(tcpopt->all.data.mac_addr, iph->saddr);
 			}
 			if (ret <= 0) {
 				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed\n",
@@ -163,7 +163,7 @@ static inline int natcap_auth(const struct net_device *in,
 			if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
 				ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
 			if (ret <= 0) {
-				ret = natcap_auth_by_user(tcpopt->user.data.mac_addr, iph->saddr);
+				ret = natcap_auth_request(tcpopt->user.data.mac_addr, iph->saddr);
 			}
 			if (ret <= 0) {
 				NATCAP_WARN("(%s)" DEBUG_FMT_TCP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed\n",

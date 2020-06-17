@@ -852,7 +852,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 
 static __be32 peer_upstream_auth_ip = 0;
 
-void natcap_check_upstream_auth(const unsigned char *client_mac, __be32 client_ip)
+void natcap_auth_request_upstream(const unsigned char *client_mac, __be32 client_ip)
 {
 	struct nf_conn *user;
 	struct sk_buff *skb;
@@ -963,7 +963,7 @@ void natcap_check_upstream_auth(const unsigned char *client_mac, __be32 client_i
  * <= 0 auth fail
  * >  0 auth success
  */
-int natcap_auth_by_user(const unsigned char *client_mac, __be32 client_ip)
+int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 {
 	int ret = 0;
 	int check_auth = 0;
@@ -1115,7 +1115,7 @@ int natcap_auth_by_user(const unsigned char *client_mac, __be32 client_ip)
 
 	if (check_auth) {
 		//check upstream auth
-		natcap_check_upstream_auth(client_mac, client_ip);
+		natcap_auth_request_upstream(client_mac, client_ip);
 	}
 
 	return ret;
