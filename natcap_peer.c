@@ -1066,8 +1066,6 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 		ue->local_ip = 0;
 		ue->map_port = alloc_peer_port(user, client_mac);
 		spin_unlock_bh(&ue->lock);
-
-		natcap_user_timeout_touch(user, peer_port_map_timeout);
 	}
 
 	ret = nf_conntrack_confirm(uskb);
@@ -1103,6 +1101,7 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 			ue->last_active_auth = jiffies;
 			check_auth = 1;
 		}
+		natcap_user_timeout_touch(user, 3600 * 12); //12 hours
 	} else {
 		ret = -1;
 		/*check upstream auth every 60s if not AUTH */
@@ -1110,6 +1109,7 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 			ue->last_active_auth = jiffies;
 			check_auth = 1;
 		}
+		natcap_user_timeout_touch(user, peer_port_map_timeout);
 	}
 
 	skb_nfct_reset(uskb);
