@@ -3063,9 +3063,10 @@ syn_out:
 		unsigned char client_mac[ETH_ALEN];
 
 		if (tcpopt->header.subtype == SUBTYPE_PEER_AUTH) {
-			int ret;
+			int ret = 1;
 			struct ethhdr *eth;
 			unsigned char old_mac[ETH_ALEN];
+			__be32 old_ip;
 
 			client_ip = get_byte4((const void *)&tcpopt->peer.data.user.ip);
 			memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
@@ -3073,7 +3074,15 @@ syn_out:
 			eth = eth_hdr(skb);
 			memcpy(old_mac, eth->h_source, ETH_ALEN);
 			memcpy(eth->h_source, client_mac, ETH_ALEN);
-			ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
+			if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
+				ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
+				if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP)) {
+					old_ip = iph->saddr;
+					iph->saddr = client_ip;
+					ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
+					iph->saddr = old_ip;
+				}
+			}
 			memcpy(eth->h_source, old_mac, ETH_ALEN);
 
 			if (ret <= 0) {
