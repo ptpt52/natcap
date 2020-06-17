@@ -1119,6 +1119,92 @@ int natcap_auth_by_user(const unsigned char *client_mac, __be32 client_ip)
 	return ret;
 }
 
+static inline void natcap_auth_user_confirm(const unsigned char *client_mac, int auth)
+{
+	int ret;
+	struct user_expect *ue;
+	struct nf_conn *user;
+	enum ip_conntrack_info ctinfo;
+	struct sk_buff *uskb;
+	struct iphdr *iph;
+	struct udphdr *udph;
+
+	uskb = uskb_of_this_cpu(smp_processor_id());
+	if (uskb == NULL) {
+		return;
+	}
+
+	skb_reset_transport_header(uskb);
+	skb_reset_network_header(uskb);
+	skb_reset_mac_len(uskb);
+
+	uskb->protocol = __constant_htons(ETH_P_IP);
+	skb_set_tail_pointer(uskb, PEER_USKB_SIZE);
+	uskb->len = PEER_USKB_SIZE;
+	uskb->pkt_type = PACKET_HOST;
+	uskb->transport_header = uskb->network_header + sizeof(struct iphdr);
+
+	iph = ip_hdr(uskb);
+	iph->version = 4;
+	iph->ihl = 5;
+	iph->saddr = get_byte4(client_mac);
+	iph->daddr = PEER_FAKEUSER_DADDR;
+	iph->tos = 0;
+	iph->tot_len = htons(PEER_USKB_SIZE);
+	iph->ttl=255;
+	iph->protocol = IPPROTO_UDP;
+	iph->id = __constant_htons(0xdead);
+	iph->frag_off = 0;
+	iph->check = 0;
+	iph->check = ip_fast_csum(iph, iph->ihl);
+
+	udph = (struct udphdr *)((char *)iph + sizeof(struct iphdr));
+	udph->source = get_byte2(client_mac + 4);
+	udph->dest = __constant_htons(65535);
+	udph->len = __constant_htons(sizeof(struct udphdr));
+	udph->check = 0;
+
+	ret = nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, uskb);
+	if (ret != NF_ACCEPT) {
+		return;
+	}
+	user = nf_ct_get(uskb, &ctinfo);
+
+	if (!user) {
+		NATCAP_ERROR("auth user [%02x:%02x:%02x:%02x:%02x:%02x] not found\n",
+		             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
+		return;
+	}
+
+	if (!user->ext) {
+		NATCAP_ERROR("auth user [%02x:%02x:%02x:%02x:%02x:%02x] not found, user->ext is NULL\n",
+		             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
+		skb_nfct_reset(uskb);
+		return;
+	}
+	if (!nf_ct_is_confirmed(user) || !(IPS_NATCAP_PEER & user->status)) {
+		return;
+	}
+
+	ret = nf_conntrack_confirm(uskb);
+	if (ret != NF_ACCEPT) {
+		skb_nfct_reset(uskb);
+		return;
+	}
+
+	ue = peer_user_expect(user);
+
+	if (auth) {
+		ue->status |= PEER_SUBTYPE_AUTH;
+		natcap_user_timeout_touch(user, 3600 * 12); //12 hours
+	} else {
+		ue->status &= ~PEER_SUBTYPE_AUTH;
+		natcap_user_timeout_touch(user, peer_port_map_timeout);
+	}
+
+	skb_nfct_reset(uskb);
+}
+
 static inline void natcap_auth_reply(const struct net_device *dev, struct sk_buff *oskb, int pt_mode, unsigned char *client_mac, int auth)
 {
 	struct sk_buff *nskb;
@@ -2736,6 +2822,7 @@ sni_out:
 				memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
 				NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": get SUBTYPE_PEER_AUTHACK, mac=%02x:%02x:%02x:%02x:%02x:%02x auth=%d\n",
 				             DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], auth);
+				natcap_auth_user_confirm(client_mac, auth);
 				nf_ct_put(user);
 				consume_skb(skb);
 				return NF_STOLEN;
