@@ -2729,6 +2729,18 @@ sni_out:
 				return NF_ACCEPT;
 			}
 
+			if (tcpopt->header.subtype == SUBTYPE_PEER_AUTHACK) {
+				//TODO get AUTHACK
+				unsigned char client_mac[ETH_ALEN];
+				int auth = !!get_byte2((const void *)&tcpopt->peer.data.map_port);
+				memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
+				NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": get SUBTYPE_PEER_AUTHACK, mac=%02x:%02x:%02x:%02x:%02x:%02x auth=%d\n",
+				             DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], auth);
+				nf_ct_put(user);
+				consume_skb(skb);
+				return NF_STOLEN;
+			}
+
 			if (tcpopt->header.subtype == SUBTYPE_PEER_FMSG) {
 				//TODO get FMSG
 				NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": get SUBTYPE_PEER_FMSG\n", DEBUG_TCP_ARG(iph,l4));
