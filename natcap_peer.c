@@ -966,8 +966,6 @@ void natcap_check_upstream_auth(const unsigned char *client_mac, __be32 client_i
 int natcap_auth_by_user(const unsigned char *client_mac, __be32 client_ip)
 {
 	int ret = 0;
-	//unsigned int i;
-	//struct peer_tuple *pt = NULL;
 	int check_auth = 0;
 	struct user_expect *ue;
 	struct nf_conn *user;
@@ -977,7 +975,6 @@ int natcap_auth_by_user(const unsigned char *client_mac, __be32 client_ip)
 	struct sk_buff *uskb;
 	struct iphdr *iph;
 	struct udphdr *udph;
-	//unsigned long last_jiffies = jiffies;
 
 	uskb = uskb_of_this_cpu(smp_processor_id());
 	if (uskb == NULL) {
@@ -1103,11 +1100,13 @@ int natcap_auth_by_user(const unsigned char *client_mac, __be32 client_ip)
 		ret = 1;
 		/*check upstream auth every 300s if AUTH */
 		if (uintdiff(jiffies, ue->last_active_auth) >= 300 * HZ) {
+			ue->last_active_auth = jiffies;
 			check_auth = 1;
 		}
 	} else {
 		/*check upstream auth every 60s if not AUTH */
 		if (uintdiff(jiffies, ue->last_active_auth) >= 60 * HZ) {
+			ue->last_active_auth = jiffies;
 			check_auth = 1;
 		}
 	}
@@ -1198,10 +1197,12 @@ static inline void natcap_auth_user_confirm(const unsigned char *client_mac, int
 	ue = peer_user_expect(user);
 
 	if (auth) {
-		ue->status |= PEER_SUBTYPE_AUTH;
+		if (!(ue->status & PEER_SUBTYPE_AUTH))
+			ue->status |= PEER_SUBTYPE_AUTH;
 		natcap_user_timeout_touch(user, 3600 * 12); //12 hours
 	} else {
-		ue->status &= ~PEER_SUBTYPE_AUTH;
+		if ((ue->status & PEER_SUBTYPE_AUTH))
+			ue->status &= ~PEER_SUBTYPE_AUTH;
 		natcap_user_timeout_touch(user, peer_port_map_timeout);
 	}
 
