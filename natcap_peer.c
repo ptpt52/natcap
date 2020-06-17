@@ -1104,6 +1104,7 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 			check_auth = 1;
 		}
 	} else {
+		ret = -1;
 		/*check upstream auth every 60s if not AUTH */
 		if (uintdiff(jiffies, ue->last_active_auth) >= 60 * HZ) {
 			ue->last_active_auth = jiffies;
