@@ -953,6 +953,9 @@ void natcap_check_upstream_auth(const unsigned char *client_mac, __be32 client_i
 
 	skb_push(skb, (char *)ip_hdr(skb) - (char *)eth_hdr(skb));
 	dev_queue_xmit(skb);
+
+	nf_ct_put(user);
+	spin_unlock_bh(&ps->lock);
 }
 
 /*
