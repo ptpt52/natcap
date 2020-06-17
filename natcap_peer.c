@@ -4699,6 +4699,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 		             "#    peer_max_pmtu=%u\n"
 		             "#    peer_sni_ban=%u\n"
 		             "#    peer_subtype=%u (auto=0, 1=SYN, 2=SSYN)\n"
+		             "#    peer_upstream_auth_ip=%pI4\n"
 		             "#\n"
 		             "\n",
 		             &peer_local_ip, ntohs(peer_local_port),
@@ -4712,7 +4713,8 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 		             peer_mode,
 		             peer_max_pmtu,
 		             peer_sni_ban,
-		             peer_subtype
+		             peer_subtype,
+		             &peer_upstream_auth_ip
 		            );
 		natcap_peer_ctl_buffer[n] = 0;
 		return natcap_peer_ctl_buffer;
@@ -4973,6 +4975,17 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 		n = sscanf(data, "peer_subtype=%u", &d);
 		if (n == 1) {
 			peer_subtype = d;
+			goto done;
+		}
+	} else if (strncmp(data, "peer_upstream_auth_ip=", 22) == 0) {
+		unsigned int a, b, c, d;
+		n = sscanf(data, "peer_upstream_auth_ip=%u.%u.%u.%u", &a, &b, &c, &d);
+		if ( (n == 4) &&
+		        (((a & 0xff) == a) &&
+		         ((b & 0xff) == b) &&
+		         ((c & 0xff) == c) &&
+		         ((d & 0xff) == d)) ) {
+			peer_upstream_auth_ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 			goto done;
 		}
 	}
