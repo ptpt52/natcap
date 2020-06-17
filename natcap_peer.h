@@ -159,6 +159,6 @@ extern __be16 peer_knock_local_port;
 
 extern __be16 peer_sni_port;
 
-extern int natcap_auth_by_user(const unsigned char *client_mac, __be32 client_ip);
+extern int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip);
 
 #endif /* _NATCAP_PEER_H_ */
