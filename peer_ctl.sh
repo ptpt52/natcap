@@ -52,7 +52,7 @@ list_cli()
 		things=`echo $timeout $dst $dport | grep -o [0-9]*`
 		things=`echo $things`
 		echo "$things" | while read T ip1 ip2 ip3 ip4 port; do
-			printf "mac=%02x:%02x:%02x:%02x:%02x:%02x %s T=%d\n" $ip1 $ip2 $ip3 $ip4 $((port/256)) $((port&255)) $src $T
+			printf "mac=%02x:%02x:%02x:%02x:%02x:%02x %-19s T=%d\n" $ip1 $ip2 $ip3 $ip4 $((port/256)) $((port&255)) $src $T
 		done
 	done
 }
