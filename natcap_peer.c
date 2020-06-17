@@ -1119,6 +1119,99 @@ int natcap_auth_by_user(const unsigned char *client_mac, __be32 client_ip)
 	return ret;
 }
 
+static inline void natcap_auth_reply(const struct net_device *dev, struct sk_buff *oskb, int pt_mode, unsigned char *client_mac, int auth)
+{
+	struct sk_buff *nskb;
+	struct ethhdr *neth, *oeth;
+	struct iphdr *niph, *oiph;
+	struct tcphdr *otcph, *ntcph;
+	struct natcap_TCPOPT *tcpopt;
+	int offset, add_len;
+	int header_len = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
+	u8 protocol = IPPROTO_TCP;
+
+	oeth = (struct ethhdr *)skb_mac_header(oskb);
+	oiph = ip_hdr(oskb);
+	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
+	tcpopt = (struct natcap_TCPOPT *)((void *)otcph + sizeof(struct tcphdr));
+	if (tcpopt->header.opsize > header_len) {
+		header_len = tcpopt->header.opsize;
+	}
+	if (pt_mode == PT_MODE_UDP) {
+		protocol = IPPROTO_UDP;
+		header_len += 8;
+	}
+
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len - (skb_headlen(oskb) + skb_tailroom(oskb));
+	add_len = offset < 0 ? 0 : offset;
+	offset += skb_tailroom(oskb);
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
+	if (!nskb) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		return;
+	}
+	nskb->tail += offset;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len;
+
+	neth = eth_hdr(nskb);
+	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
+	memset(niph, 0, sizeof(struct iphdr));
+	niph->saddr = oiph->daddr;
+	niph->daddr = oiph->saddr;
+	niph->version = oiph->version;
+	niph->ihl = oiph->ihl;
+	niph->tos = 0;
+	niph->tot_len = htons(nskb->len);
+	niph->ttl = 255;
+	niph->protocol = protocol;
+	niph->id = __constant_htons(jiffies);
+	niph->frag_off = 0x0;
+
+	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
+	//memset(ntcph, 0, sizeof(sizeof(struct tcphdr) + header_len + TCPOLEN_MSS));
+	ntcph->source = otcph->dest;
+	ntcph->dest = otcph->source;
+	if (protocol == IPPROTO_UDP) {
+		int offlen = skb_tail_pointer(nskb) - (unsigned char *)UDPH(ntcph) - 4 - 8;
+		BUG_ON(offlen < 0);
+		memmove((void *)UDPH(ntcph) + 4 + 8, (void *)UDPH(ntcph) + 4, offlen);
+		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
+		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_C_MAGIC));
+		UDPH(ntcph)->check = CSUM_MANGLED_0;
+		ntcph = (struct tcphdr *)((char *)ntcph + 8);
+		header_len -= 8;
+	}
+
+	ntcph->ack_seq = otcph->seq;
+	ntcph->seq = otcph->ack_seq;
+	tcp_flag_word(ntcph) = TCP_FLAG_ACK;
+	ntcph->res1 = 0;
+	ntcph->doff = (sizeof(struct tcphdr) + header_len) / 4;
+	ntcph->window = __constant_htons(65535);
+	ntcph->check = 0;
+	ntcph->urg_ptr = 0;
+
+	tcpopt = (struct natcap_TCPOPT *)((void *)ntcph + sizeof(struct tcphdr));
+	tcpopt->header.type = NATCAP_TCPOPT_TYPE_PEER;
+	tcpopt->header.opcode = TCPOPT_PEER_V2;
+	tcpopt->header.opsize = header_len;
+	tcpopt->header.encryption = 0;
+	tcpopt->header.subtype = SUBTYPE_PEER_AUTHACK;
+	set_byte2((void *)&tcpopt->peer.data.map_port, auth <= 0 ? 0 : 65535);
+
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(nskb);
+	skb_push(nskb, (char *)niph - (char *)neth);
+	nskb->dev = (struct net_device *)dev;
+	dev_queue_xmit(nskb);
+}
+
 static inline void natcap_peer_echo_request(const struct net_device *dev, struct sk_buff *oskb, unsigned char *client_mac)
 {
 	struct sk_buff *nskb;
@@ -2596,7 +2689,8 @@ sni_out:
 	        tcpopt->header.subtype == SUBTYPE_PEER_FSYN ||
 	        tcpopt->header.subtype == SUBTYPE_PEER_XSYN ||
 	        tcpopt->header.subtype == SUBTYPE_PEER_FSYNACK ||
-	        tcpopt->header.subtype == SUBTYPE_PEER_FMSG) {
+	        tcpopt->header.subtype == SUBTYPE_PEER_FMSG ||
+	        tcpopt->header.subtype == SUBTYPE_PEER_AUTHACK) {
 		//got syn ack
 		//first. lookup fakeuser_expect
 		struct nf_conntrack_tuple tuple;
@@ -2865,10 +2959,22 @@ syn_out:
 		unsigned char client_mac[ETH_ALEN];
 
 		if (tcpopt->header.subtype == SUBTYPE_PEER_AUTH) {
+			int ret;
+			struct ethhdr *eth;
+			unsigned char old_mac[ETH_ALEN];
+
 			client_ip = get_byte4((const void *)&tcpopt->peer.data.user.ip);
 			memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
-			//TODO
-			return NF_STOLEN;
+
+			eth = eth_hdr(skb);
+			memcpy(old_mac, eth->h_source, ETH_ALEN);
+			memcpy(eth->h_source, client_mac, ETH_ALEN);
+			ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
+			memcpy(eth->h_source, old_mac, ETH_ALEN);
+
+			natcap_auth_reply(in, skb, pt_mode, client_mac, ret);
+
+			goto ack_out;
 		}
 
 		if (tcpopt->header.subtype == SUBTYPE_PEER_FACK) {
