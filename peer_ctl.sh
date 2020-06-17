@@ -46,6 +46,17 @@ send_ps()
 	done
 }
 
+list_cli()
+{
+	cat /proc/net/nf_conntrack | grep "udp.*src=127.255.255.254 dst=.* sport=65535.*" | while read _ _ _ _ timeout src _ _ _ _ _ _ _ dst _ dport _ _ _ _ _; do
+		things=`echo $timeout $dst $dport | grep -o [0-9]*`
+		things=`echo $things`
+		echo "$things" | while read T ip1 ip2 ip3 ip4 port; do
+			printf "mac=%02x:%02x:%02x:%02x:%02x:%02x %s T=%d\n" $ip1 $ip2 $ip3 $ip4 $((port/256)) $((port&255)) $src $T
+		done
+	done
+}
+
 case $1 in
 	msg)
 		send_msg $2
@@ -56,9 +67,13 @@ case $1 in
 	ps)
 		send_ps $2
 	;;
+	list_cli)
+		list_cli
+	;;
 	*)
 		echo "peer_ctl msg <mac>"
 		echo "peer_ctl conn <mac>"
 		echo "peer_ctl ps <mac>"
+		echo "peer_ctl list_cli"
 	;;
 esac
