@@ -1228,9 +1228,41 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				server.port = get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 8);
 
 				if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC)) {
+					struct ethhdr *eth;
+					unsigned char client_mac[ETH_ALEN];
+					unsigned char old_mac[ETH_ALEN];
 					unsigned int u_hash = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 12);
 					ns->n.u_hash = ntohl(u_hash);
 					off = 24;
+					get_byte6((void *)UDPH(l4) + sizeof(struct udphdr) + 16, client_mac);
+
+					if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
+						eth = eth_hdr(skb);
+						memcpy(old_mac, eth->h_source, ETH_ALEN);
+						memcpy(eth->h_source, client_mac, ETH_ALEN);
+						ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
+						memcpy(eth->h_source, old_mac, ETH_ALEN);
+						if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
+							ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
+						if (ret <= 0) {
+							ret = natcap_auth_request(client_mac, iph->saddr);
+						}
+						if (ret <= 0) {
+							NATCAP_WARN("(SPCI)" DEBUG_FMT_UDP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed\n",
+							            DEBUG_ARG_UDP(iph,l4),
+							            client_mac[0], client_mac[1], client_mac[2],
+							            client_mac[3], client_mac[4], client_mac[5],
+							            ns->n.u_hash);
+							//mark drop
+							short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
+						} else {
+							NATCAP_DEBUG("(SPCI)" DEBUG_FMT_UDP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth ok\n",
+							             DEBUG_ARG_UDP(iph,l4),
+							             client_mac[0], client_mac[1], client_mac[2],
+							             client_mac[3], client_mac[4], client_mac[5],
+							             ns->n.u_hash);
+						}
+					}
 				}
 
 				if (NATCAP_UDP_GET_TARGET(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TARGET) {
