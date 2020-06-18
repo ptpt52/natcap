@@ -354,7 +354,7 @@ static void peer_timer_flush(struct timer_list *ignore)
 	mod_timer(&peer_timer, jiffies + HZ / 2);
 }
 
-static void peer_port_map_kill(unsigned short idx)
+static inline void peer_port_map_kill(unsigned short idx)
 {
 	struct nf_conn *user;
 	spin_lock_bh(&peer_port_map_lock);
@@ -365,9 +365,9 @@ static void peer_port_map_kill(unsigned short idx)
 		set_byte4(client_mac, get_byte4((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip));
 		set_byte2(client_mac + 4, get_byte2((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all));
 		NATCAP_INFO(DEBUG_FMT_PREFIX "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] killed\n", DEBUG_ARG_PREFIX,
-				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-				&ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
-				);
+		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+		            &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
+		           );
 		peer_port_map[idx] = NULL;
 		nf_ct_put(user);
 	}
@@ -679,7 +679,6 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 {
 	int ret;
 	unsigned int i;
-	unsigned short repeat_status = 0;
 	struct peer_tuple *pt = NULL;
 	struct user_expect *ue;
 	struct nf_conn *user;
@@ -691,7 +690,6 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	struct udphdr *udph;
 	unsigned long last_jiffies = jiffies;
 
-repeat:
 	uskb = uskb_of_this_cpu(smp_processor_id());
 	if (uskb == NULL) {
 		return NULL;
@@ -783,10 +781,9 @@ repeat:
 		ue->ip = saddr;
 		ue->local_ip = client_ip;
 		ue->map_port = alloc_peer_port(user, client_mac);
-		ue->status |= repeat_status;
 		spin_unlock_bh(&ue->lock);
 
-		natcap_dnat_setup(user, saddr, __constant_htons(0));
+		user->mark = ntohl(saddr);
 	}
 
 	ret = nf_conntrack_confirm(uskb);
@@ -816,22 +813,16 @@ repeat:
 		}
 	}
 
-	if (saddr != user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
+	if (ntohl(saddr) != user->mark) {
+		__be32 old_ip = htonl(user->mark);
 		NATCAP_WARN("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] change ip from %pI4 to %pI4 P=%u AS=%d\n",
-				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-				&saddr, ntohs(sport), &daddr, ntohs(dport),
-				&user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, &saddr, ntohs(ue->map_port),
-				ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1));
-		natcap_user_timeout_touch(user, 1);
-		if (nf_ct_kill(user)) {
-			repeat_status = (ue->status & PEER_SUBTYPE_AUTH);
-			peer_port_map_kill(ntohs(ue->map_port));
-			skb_nfct_reset(uskb);
-			goto repeat;
-		}
-	} else {
-		natcap_user_timeout_touch(user, peer_port_map_timeout);
+		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+		            &saddr, ntohs(sport), &daddr, ntohs(dport),
+		            &old_ip, &saddr, ntohs(ue->map_port),
+		            ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1));
+		user->mark = ntohl(saddr);
 	}
+	natcap_user_timeout_touch(user, peer_port_map_timeout);
 
 	if (ue->ip != saddr) {
 		ue->ip = saddr;
@@ -1011,7 +1002,6 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 {
 	int ret = 0;
 	int check_auth = 0;
-	unsigned short repeat_status = 0;
 	struct user_expect *ue;
 	struct nf_conn *user;
 	struct nf_ct_ext *new;
@@ -1021,7 +1011,6 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 	struct iphdr *iph;
 	struct udphdr *udph;
 
-repeat:
 	uskb = uskb_of_this_cpu(smp_processor_id());
 	if (uskb == NULL) {
 		return 0;
@@ -1111,10 +1100,9 @@ repeat:
 		ue->ip = 0;
 		ue->local_ip = 0;
 		ue->map_port = alloc_peer_port(user, client_mac);
-		ue->status |= repeat_status;
 		spin_unlock_bh(&ue->lock);
 
-		natcap_dnat_setup(user, client_ip, __constant_htons(0));
+		user->mark = ntohl(client_ip);
 	}
 
 	ret = nf_conntrack_confirm(uskb);
@@ -1143,36 +1131,31 @@ repeat:
 		}
 	}
 
-	if (client_ip != user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
+	if (ntohl(client_ip) != user->mark) {
+		__be32 old_ip = htonl(user->mark);
 		NATCAP_WARN("auth user [%02x:%02x:%02x:%02x:%02x:%02x] change ip from %pI4 to %pI4 P=%u AS=%d\n",
-				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-				&user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, &client_ip, ntohs(ue->map_port),
-				ue->last_active_auth != 0 ? (uintdiff(ue->last_active_auth, jiffies) + HZ / 2) / HZ : (-1));
-		natcap_user_timeout_touch(user, 1);
-		if (nf_ct_kill(user)) {
-			repeat_status = (ue->status & PEER_SUBTYPE_AUTH);
-			peer_port_map_kill(ntohs(ue->map_port));
-			skb_nfct_reset(uskb);
-			goto repeat;
+		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+		            &old_ip, &client_ip, ntohs(ue->map_port),
+		            ue->last_active_auth != 0 ? (uintdiff(ue->last_active_auth, jiffies) + HZ / 2) / HZ : (-1));
+		user->mark = ntohl(client_ip);
+	}
+
+	if ((ue->status & PEER_SUBTYPE_AUTH)) {
+		ret = 1;
+		/*check upstream auth every 300s if AUTH */
+		if (uintdiff(jiffies, ue->last_active_auth) >= 300 * HZ) {
+			ue->last_active_auth = jiffies;
+			check_auth = 1;
 		}
+		natcap_user_timeout_touch(user, 3600 * 12); //12 hours
 	} else {
-		if ((ue->status & PEER_SUBTYPE_AUTH)) {
-			ret = 1;
-			/*check upstream auth every 300s if AUTH */
-			if (uintdiff(jiffies, ue->last_active_auth) >= 300 * HZ) {
-				ue->last_active_auth = jiffies;
-				check_auth = 1;
-			}
-			natcap_user_timeout_touch(user, 3600 * 12); //12 hours
-		} else {
-			ret = -1;
-			/*check upstream auth every 60s if not AUTH */
-			if (uintdiff(jiffies, ue->last_active_auth) >= 60 * HZ) {
-				ue->last_active_auth = jiffies;
-				check_auth = 1;
-			}
-			natcap_user_timeout_touch(user, peer_port_map_timeout);
+		ret = -1;
+		/*check upstream auth every 60s if not AUTH */
+		if (uintdiff(jiffies, ue->last_active_auth) >= 60 * HZ) {
+			ue->last_active_auth = jiffies;
+			check_auth = 1;
 		}
+		natcap_user_timeout_touch(user, peer_port_map_timeout);
 	}
 
 	skb_nfct_reset(uskb);
