@@ -762,6 +762,8 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 		ue->local_ip = client_ip;
 		ue->map_port = alloc_peer_port(user, client_mac);
 		spin_unlock_bh(&ue->lock);
+
+		natcap_snat_setup(user, saddr, __constant_htons(0));
 	}
 
 	ret = nf_conntrack_confirm(uskb);
@@ -1068,6 +1070,8 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 		ue->local_ip = 0;
 		ue->map_port = alloc_peer_port(user, client_mac);
 		spin_unlock_bh(&ue->lock);
+
+		natcap_snat_setup(user, client_ip, __constant_htons(0));
 	}
 
 	ret = nf_conntrack_confirm(uskb);
