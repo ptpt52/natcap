@@ -817,10 +817,11 @@ repeat:
 	}
 
 	if (saddr != user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
-		NATCAP_WARN("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] change ip from %pI4 to %pI4\n",
+		NATCAP_WARN("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] change ip from %pI4 to %pI4 AS=%d\n",
 				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 				&saddr, ntohs(sport), &daddr, ntohs(dport),
-				&user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, &saddr);
+				&user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, &saddr,
+				ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1));
 		natcap_user_timeout_touch(user, 1);
 		if (nf_ct_kill(user)) {
 			repeat_status = (ue->status & PEER_SUBTYPE_AUTH);
@@ -1143,9 +1144,10 @@ repeat:
 	}
 
 	if (client_ip != user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
-		NATCAP_WARN("auth user [%02x:%02x:%02x:%02x:%02x:%02x] change ip from %pI4 to %pI4\n",
+		NATCAP_WARN("auth user [%02x:%02x:%02x:%02x:%02x:%02x] change ip from %pI4 to %pI4 AS=%d\n",
 				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-				&user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, &client_ip);
+				&user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, &client_ip,
+				ue->last_active_auth != 0 ? (uintdiff(ue->last_active_auth, jiffies) + HZ / 2) / HZ : (-1));
 		natcap_user_timeout_touch(user, 1);
 		if (nf_ct_kill(user)) {
 			repeat_status = (ue->status & PEER_SUBTYPE_AUTH);
