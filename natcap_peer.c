@@ -354,6 +354,26 @@ static void peer_timer_flush(struct timer_list *ignore)
 	mod_timer(&peer_timer, jiffies + HZ / 2);
 }
 
+static void peer_port_map_kill(unsigned short idx)
+{
+	struct nf_conn *user;
+	spin_lock_bh(&peer_port_map_lock);
+	user = peer_port_map[idx];
+	if (user != NULL) {
+		unsigned char client_mac[ETH_ALEN];
+		struct user_expect *ue = peer_user_expect(user);
+		set_byte4(client_mac, get_byte4((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip));
+		set_byte2(client_mac + 4, get_byte2((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all));
+		NATCAP_INFO(DEBUG_FMT_PREFIX "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] killed\n", DEBUG_ARG_PREFIX,
+				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+				&ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
+				);
+		peer_port_map[idx] = NULL;
+		nf_ct_put(user);
+	}
+	spin_unlock_bh(&peer_port_map_lock);
+}
+
 static int peer_timer_init(void)
 {
 	struct timer_list *timer = &peer_timer;
@@ -659,17 +679,19 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 {
 	int ret;
 	unsigned int i;
+	unsigned short repeat_status = 0;
 	struct peer_tuple *pt = NULL;
 	struct user_expect *ue;
 	struct nf_conn *user;
-	struct nf_ct_ext *new = NULL;
+	struct nf_ct_ext *new;
 	enum ip_conntrack_info ctinfo;
-	unsigned int newoff = 0;
+	unsigned int newoff;
 	struct sk_buff *uskb;
 	struct iphdr *iph;
 	struct udphdr *udph;
 	unsigned long last_jiffies = jiffies;
 
+repeat:
 	uskb = uskb_of_this_cpu(smp_processor_id());
 	if (uskb == NULL) {
 		return NULL;
@@ -761,28 +783,16 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 		ue->ip = saddr;
 		ue->local_ip = client_ip;
 		ue->map_port = alloc_peer_port(user, client_mac);
+		ue->status |= repeat_status;
 		spin_unlock_bh(&ue->lock);
 
-		natcap_snat_setup(user, saddr, __constant_htons(0));
+		natcap_dnat_setup(user, saddr, __constant_htons(0));
 	}
 
 	ret = nf_conntrack_confirm(uskb);
 	if (ret != NF_ACCEPT) {
 		skb_nfct_reset(uskb);
 		return NULL;
-	}
-
-	nf_conntrack_get(&user->ct_general);
-	skb_nfct_reset(uskb);
-	if (saddr != user->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip) {
-		NATCAP_WARN("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] change ip from %pI4 to %pI4\n",
-				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-				&saddr, ntohs(sport), &daddr, ntohs(dport),
-				&user->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, &saddr);
-		natcap_user_timeout_touch(user, 1);
-		nf_ct_kill(user);
-	} else {
-		natcap_user_timeout_touch(user, peer_port_map_timeout);
 	}
 
 	ue = peer_user_expect(user);
@@ -805,6 +815,23 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 			/* alloc_peer_port fail: portmap would not work, but sni should work */
 		}
 	}
+
+	if (saddr != user->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip) {
+		NATCAP_WARN("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] change ip from %pI4 to %pI4\n",
+				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
+				&saddr, ntohs(sport), &daddr, ntohs(dport),
+				&user->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, &saddr);
+		natcap_user_timeout_touch(user, 1);
+		if (nf_ct_kill(user)) {
+			repeat_status = (ue->status & PEER_SUBTYPE_AUTH);
+			peer_port_map_kill(ue->map_port);
+			skb_nfct_reset(uskb);
+			goto repeat;
+		}
+	} else {
+		natcap_user_timeout_touch(user, peer_port_map_timeout);
+	}
+
 	if (ue->ip != saddr) {
 		ue->ip = saddr;
 		short_clear_bit(PEER_SUBTYPE_PUB_BIT, &ue->status);
@@ -859,6 +886,9 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	if (ppt && pt) {
 		*ppt = pt;
 	}
+
+	nf_conntrack_get(&user->ct_general);
+	skb_nfct_reset(uskb);
 
 	return user;
 }
@@ -980,15 +1010,17 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 {
 	int ret = 0;
 	int check_auth = 0;
+	unsigned short repeat_status = 0;
 	struct user_expect *ue;
 	struct nf_conn *user;
-	struct nf_ct_ext *new = NULL;
+	struct nf_ct_ext *new;
 	enum ip_conntrack_info ctinfo;
-	unsigned int newoff = 0;
+	unsigned int newoff;
 	struct sk_buff *uskb;
 	struct iphdr *iph;
 	struct udphdr *udph;
 
+repeat:
 	uskb = uskb_of_this_cpu(smp_processor_id());
 	if (uskb == NULL) {
 		return 0;
@@ -1078,9 +1110,10 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 		ue->ip = 0;
 		ue->local_ip = 0;
 		ue->map_port = alloc_peer_port(user, client_mac);
+		ue->status |= repeat_status;
 		spin_unlock_bh(&ue->lock);
 
-		natcap_snat_setup(user, client_ip, __constant_htons(0));
+		natcap_dnat_setup(user, client_ip, __constant_htons(0));
 	}
 
 	ret = nf_conntrack_confirm(uskb);
@@ -1109,12 +1142,17 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 		}
 	}
 
-	if (client_ip != user->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip) {
+	if (client_ip != user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip) {
 		NATCAP_WARN("auth user [%02x:%02x:%02x:%02x:%02x:%02x] change ip from %pI4 to %pI4\n",
 				client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-				&user->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, &client_ip);
+				&user->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, &client_ip);
 		natcap_user_timeout_touch(user, 1);
-		nf_ct_kill(user);
+		if (nf_ct_kill(user)) {
+			repeat_status = (ue->status & PEER_SUBTYPE_AUTH);
+			peer_port_map_kill(ue->map_port);
+			skb_nfct_reset(uskb);
+			goto repeat;
+		}
 	} else {
 		if ((ue->status & PEER_SUBTYPE_AUTH)) {
 			ret = 1;
