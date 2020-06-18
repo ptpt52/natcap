@@ -39,6 +39,11 @@
 #include <linux/inetdevice.h>
 #include "natcap.h"
 
+#if defined(CONFIG_NF_CONNTRACK_MARK)
+#else
+#error "Please enable CONFIG_NF_CONNTRACK_MARK in kernel config"
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
 #include <net/netfilter/nf_nat_core.h>
 #else
