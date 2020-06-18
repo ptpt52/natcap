@@ -93,7 +93,7 @@ static inline int natcap_auth(const struct nf_hook_state *state,
                               struct sk_buff *skb,
                               struct nf_conn *ct,
                               struct natcap_session *ns,
-                              const struct natcap_TCPOPT *tcpopt,
+                              struct natcap_TCPOPT *tcpopt,
                               struct tuple *server)
 #define NATCAP_AUTH(state, in, out, skb, ct, ns, tcpopt, server) natcap_auth(state, in, out, skb, ct, ns, tcpopt, server)
 #else
@@ -102,7 +102,7 @@ static inline int natcap_auth(const struct net_device *in,
                               struct sk_buff *skb,
                               struct nf_conn *ct,
                               struct natcap_session *ns,
-                              const struct natcap_TCPOPT *tcpopt,
+                              struct natcap_TCPOPT *tcpopt,
                               struct tuple *server)
 #define NATCAP_AUTH(state, in, out, skb, ct, ns, tcpopt, server) natcap_auth(in, out, skb, ct, ns, tcpopt, server)
 #endif
@@ -179,6 +179,8 @@ static inline int natcap_auth(const struct net_device *in,
 			             tcpopt->user.data.mac_addr[3], tcpopt->user.data.mac_addr[4], tcpopt->user.data.mac_addr[5],
 			             ntohl(tcpopt->user.data.u_hash));
 		}
+		//clear NATCAP_TCPOPT_SPROXY if not ALL
+		tcpopt->header.type &= ~NATCAP_TCPOPT_SPROXY;
 	} else if (NATCAP_TCPOPT_TYPE(tcpopt->header.type) == NATCAP_TCPOPT_TYPE_DST) {
 		if (server) {
 			server->ip = tcpopt->dst.data.ip;
@@ -189,6 +191,8 @@ static inline int natcap_auth(const struct net_device *in,
 			} else if ((tcpopt->header.type & NATCAP_TCPOPT_TARGET)) {
 				server->ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 			}
+			//clear NATCAP_TCPOPT_SPROXY if not ALL
+			tcpopt->header.type &= ~NATCAP_TCPOPT_SPROXY;
 		} else if (!tcph->syn || tcph->ack) {
 			return E_NATCAP_INVAL;
 		}
@@ -1147,7 +1151,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					short_set_bit(NS_NATCAP_ENC_BIT, &ns->n.status);
 				}
 
-				if (natcap_redirect_port != 0 && (tcpopt.header.type & NATCAP_TCPOPT_SPROXY)) {
+				if (natcap_redirect_port != 0 && (tcpopt.header.type & NATCAP_TCPOPT_SPROXY) &&
+				        (!(NS_NATCAP_AUTH & ns->n.status) && !(NS_NATCAP_DROP & ns->n.status))) {
 					__be32 newdst = 0;
 					struct in_device *indev;
 					struct in_ifaddr *ifa;
