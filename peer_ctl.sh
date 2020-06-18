@@ -48,11 +48,11 @@ send_ps()
 
 list_cli()
 {
-	cat /proc/net/nf_conntrack | grep "udp.*src=127.255.255.254 dst=.* sport=65535.*" | while read _ _ _ _ timeout src _ _ _ _ _ _ _ dst _ dport _ _ _ _ _; do
-		things=`echo $timeout $dst $dport | grep -o [0-9]*`
+	cat /proc/net/nf_conntrack | grep "udp.*src=.*dst=127.255.255.254 sport=.* dport=65535.*" | while read _ _ _ _ timeout src _ sport _ _ _ _ _src _ _ _ _ _ _ _ _; do
+		things=`echo $timeout $src $sport | grep -o [0-9]*`
 		things=`echo $things`
 		echo "$things" | while read T ip1 ip2 ip3 ip4 port; do
-			printf "mac=%02x:%02x:%02x:%02x:%02x:%02x %-19s T=%d\n" $ip1 $ip2 $ip3 $ip4 $((port/256)) $((port&255)) $src $T
+			printf "mac=%02x:%02x:%02x:%02x:%02x:%02x %-19s T=%d\n" $ip1 $ip2 $ip3 $ip4 $((port/256)) $((port&255)) $_src $T
 		done
 	done
 }
