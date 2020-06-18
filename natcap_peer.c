@@ -452,6 +452,8 @@ struct peer_server_node *peer_server_node_in(__be32 ip, unsigned short conn, int
 
 	if (conn <= 0)
 		conn = 1;
+	if (ip == 0)
+		return NULL;
 
 	for (i = 0; i < MAX_PEER_SERVER; i++) {
 		if (peer_server[i].ip == ip) {
