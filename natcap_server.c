@@ -1227,6 +1227,10 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				server.ip = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4);
 				server.port = get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 8);
 
+				if (NATCAP_UDP_GET_TARGET(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TARGET) {
+					server.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+				}
+
 				if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC)) {
 					struct ethhdr *eth;
 					unsigned char client_mac[ETH_ALEN];
@@ -1248,13 +1252,21 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 							ret = natcap_auth_request(client_mac, iph->saddr);
 						}
 						if (ret <= 0) {
-							NATCAP_WARN("(SPCI)" DEBUG_FMT_UDP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed\n",
-							            DEBUG_ARG_UDP(iph,l4),
-							            client_mac[0], client_mac[1], client_mac[2],
-							            client_mac[3], client_mac[4], client_mac[5],
-							            ns->n.u_hash);
-							//mark drop
-							short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
+							//if not DNS port 53 then mark drop, we allow DNS forward
+							if (server.port != __constant_htons(53)) {
+								NATCAP_WARN("(SPCI)" DEBUG_FMT_UDP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed\n",
+								            DEBUG_ARG_UDP(iph,l4),
+								            client_mac[0], client_mac[1], client_mac[2],
+								            client_mac[3], client_mac[4], client_mac[5],
+								            ns->n.u_hash);
+								short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
+							} else {
+								NATCAP_WARN("(SPCI)" DEBUG_FMT_UDP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth failed, but forward DNS port 53\n",
+								            DEBUG_ARG_UDP(iph,l4),
+								            client_mac[0], client_mac[1], client_mac[2],
+								            client_mac[3], client_mac[4], client_mac[5],
+								            ns->n.u_hash);
+							}
 						} else {
 							NATCAP_DEBUG("(SPCI)" DEBUG_FMT_UDP ": client=%02x:%02x:%02x:%02x:%02x:%02x u_hash=%u auth ok\n",
 							             DEBUG_ARG_UDP(iph,l4),
@@ -1263,10 +1275,6 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 							             ns->n.u_hash);
 						}
 					}
-				}
-
-				if (NATCAP_UDP_GET_TARGET(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TARGET) {
-					server.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 				}
 
 				if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
