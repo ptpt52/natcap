@@ -838,7 +838,8 @@ static unsigned int natcap_server_forward_hook(void *priv,
 				}
 			}
 		}
-		return NF_DROP;
+		//not drop here
+		return NF_ACCEPT;
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
@@ -1421,6 +1422,20 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	if (NULL == ns) {
 		NATCAP_ERROR("(SPO)" DEBUG_TCP_FMT ": natcap_session_get failed\n", DEBUG_TCP_ARG(iph,l4));
 		return NF_ACCEPT;
+	}
+
+	if ((NS_NATCAP_DROP & ns->n.status)) {
+		if (iph->protocol == IPPROTO_TCP) {
+			void *l4 = (void *)iph + iph->ihl * 4;
+			if (TCPH(l4)->fin || TCPH(l4)->rst) {
+				return NF_ACCEPT;
+			}
+		}
+		ret = nf_conntrack_confirm(skb);
+		if (ret != NF_ACCEPT) {
+			return ret;
+		}
+		return NF_DROP;
 	}
 
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
