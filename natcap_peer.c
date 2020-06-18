@@ -825,7 +825,7 @@ repeat:
 		natcap_user_timeout_touch(user, 1);
 		if (nf_ct_kill(user)) {
 			repeat_status = (ue->status & PEER_SUBTYPE_AUTH);
-			peer_port_map_kill(ue->map_port);
+			peer_port_map_kill(ntohs(ue->map_port));
 			skb_nfct_reset(uskb);
 			goto repeat;
 		}
@@ -1151,7 +1151,7 @@ repeat:
 		natcap_user_timeout_touch(user, 1);
 		if (nf_ct_kill(user)) {
 			repeat_status = (ue->status & PEER_SUBTYPE_AUTH);
-			peer_port_map_kill(ue->map_port);
+			peer_port_map_kill(ntohs(ue->map_port));
 			skb_nfct_reset(uskb);
 			goto repeat;
 		}
