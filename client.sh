@@ -39,10 +39,10 @@ ipset add udproxylist 8.8.8.8
 #          e=encryption o=non-encryption
 # port ==> 65535,1-65535,0
 #          65535=Random port, 1-65534=Specific port, 0=Original port
-# .example line: server 1.2.3.4:65535-e-T-U
-# .example line: server 1.2.3.4:65535-e-U-T
-# .example line: server 1.2.3.4:22-e-T-T
-# .example line: server 1.2.3.4:0-e-U-T
+# .example line: server 0 1.2.3.4:65535-e-T-U
+# .example line: server 0 1.2.3.4:65535-e-U-T
+# .example line: server 0 1.2.3.4:22-e-T-T
+# .example line: server 0 1.2.3.4:0-e-U-T
 # sproxy=1 MUST make sure server running natcapd-server app
 rmmod natcap >/dev/null 2>&1
 ( modprobe natcap mode=0 2>/dev/null || insmod ./natcap.ko mode=0 ) && {
@@ -52,6 +52,6 @@ debug=3
 disabled=0
 server_persist_timeout=86400
 sproxy=1
-server 1.2.3.4:65535-e-T-U
+server 0 1.2.3.4:65535-e-T-U
 EOF
 }
