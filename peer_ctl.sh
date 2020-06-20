@@ -68,7 +68,7 @@ case $1 in
 	ps)
 		send_ps $2
 	;;
-	list_cli)
+	list|list_cli)
 		list_cli
 	;;
 	*)
