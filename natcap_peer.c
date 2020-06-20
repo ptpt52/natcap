@@ -2617,12 +2617,9 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 			if (peer_sni_auth) {
 				int ret;
-				unsigned char old_mac[ETH_ALEN];
-				struct ethhdr *eth = eth_hdr(skb);
-				memcpy(old_mac, eth->h_source, ETH_ALEN);
-				memcpy(eth->h_source, client_mac, ETH_ALEN);
-				ret = IP_SET_test_src_mac(state, in, out, skb, "snilist");
-				memcpy(eth->h_source, old_mac, ETH_ALEN);
+				struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+				memcpy(eth_hdr(uskb)->h_source, client_mac, ETH_ALEN);
+				ret = IP_SET_test_src_mac(state, in, out, uskb, "snilist");
 				if (ret <= 0) {
 					return NF_DROP;
 				}
@@ -3097,26 +3094,21 @@ syn_out:
 
 		if (tcpopt->header.subtype == SUBTYPE_PEER_AUTH) {
 			int ret = 1;
-			struct ethhdr *eth;
-			unsigned char old_mac[ETH_ALEN];
-			__be32 old_ip;
 
 			client_ip = get_byte4((const void *)&tcpopt->peer.data.user.ip);
 			memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
 
-			eth = eth_hdr(skb);
-			memcpy(old_mac, eth->h_source, ETH_ALEN);
-			memcpy(eth->h_source, client_mac, ETH_ALEN);
 			if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
-				ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
+				struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+				memcpy(eth_hdr(uskb)->h_source, client_mac, ETH_ALEN);
+				ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
 				if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP)) {
-					old_ip = iph->saddr;
+					__be32 old_ip = iph->saddr;
 					iph->saddr = client_ip;
 					ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
 					iph->saddr = old_ip;
 				}
 			}
-			memcpy(eth->h_source, old_mac, ETH_ALEN);
 
 			if (ret <= 0) {
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 auth fail\n",
