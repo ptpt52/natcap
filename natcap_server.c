@@ -108,8 +108,6 @@ static inline int natcap_auth(const struct net_device *in,
 #endif
 {
 	int ret;
-	unsigned char old_mac[ETH_ALEN];
-	struct ethhdr *eth;
 	struct iphdr *iph = ip_hdr(skb);
 	struct tcphdr *tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
@@ -125,11 +123,9 @@ static inline int natcap_auth(const struct net_device *in,
 			}
 		}
 		if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
-			eth = eth_hdr(skb);
-			memcpy(old_mac, eth->h_source, ETH_ALEN);
-			memcpy(eth->h_source, tcpopt->all.data.mac_addr, ETH_ALEN);
-			ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
-			memcpy(eth->h_source, old_mac, ETH_ALEN);
+			struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+			memcpy(eth_hdr(uskb)->h_source, tcpopt->all.data.mac_addr, ETH_ALEN);
+			ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
 			if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
 				ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
 			if (ret <= 0) {
@@ -155,11 +151,9 @@ static inline int natcap_auth(const struct net_device *in,
 			return E_NATCAP_INVAL;
 		}
 		if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
-			eth = eth_hdr(skb);
-			memcpy(old_mac, eth->h_source, ETH_ALEN);
-			memcpy(eth->h_source, tcpopt->user.data.mac_addr, ETH_ALEN);
-			ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
-			memcpy(eth->h_source, old_mac, ETH_ALEN);
+			struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+			memcpy(eth_hdr(uskb)->h_source, tcpopt->user.data.mac_addr, ETH_ALEN);
+			ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
 			if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
 				ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
 			if (ret <= 0) {
@@ -1238,20 +1232,16 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				}
 
 				if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC)) {
-					struct ethhdr *eth;
 					unsigned char client_mac[ETH_ALEN];
-					unsigned char old_mac[ETH_ALEN];
 					unsigned int u_hash = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 12);
 					ns->n.u_hash = ntohl(u_hash);
 					off = 24;
 					get_byte6((void *)UDPH(l4) + sizeof(struct udphdr) + 16, client_mac);
 
 					if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
-						eth = eth_hdr(skb);
-						memcpy(old_mac, eth->h_source, ETH_ALEN);
-						memcpy(eth->h_source, client_mac, ETH_ALEN);
-						ret = IP_SET_test_src_mac(state, in, out, skb, "vclist");
-						memcpy(eth->h_source, old_mac, ETH_ALEN);
+						struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+						memcpy(eth_hdr(uskb)->h_source, client_mac, ETH_ALEN);
+						ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
 						if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
 							ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
 						if (ret <= 0) {
