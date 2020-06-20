@@ -533,19 +533,6 @@ init_out:
 	return ps;
 }
 
-static struct sk_buff *peer_user_uskbs[NR_CPUS];
-#define PEER_USKB_SIZE (sizeof(struct iphdr) + sizeof(struct udphdr))
-#define PEER_FAKEUSER_DADDR __constant_htonl(0x7ffffffe)
-
-static inline struct sk_buff *uskb_of_this_cpu(unsigned int id)
-{
-	BUG_ON(id >= NR_CPUS);
-	if (!peer_user_uskbs[id]) {
-		peer_user_uskbs[id] = __alloc_skb(PEER_USKB_SIZE, GFP_ATOMIC, 0, numa_node_id());
-	}
-	return peer_user_uskbs[id];
-}
-
 void natcap_user_timeout_touch(struct nf_conn *ct, unsigned long timeout)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
@@ -5171,9 +5158,6 @@ int natcap_peer_init(void)
 	for (i = 0; i < MAX_PEER_SERVER; i++) {
 		spin_lock_init(&peer_server[i].lock);
 	}
-	for (i = 0; i < NR_CPUS; i++) {
-		peer_user_uskbs[i] = NULL;
-	}
 	peer_port_map = vmalloc(sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
 	if (peer_port_map == NULL) {
 		return -ENOMEM;
@@ -5277,13 +5261,6 @@ void natcap_peer_exit(void)
 	}
 	spin_unlock_bh(&peer_port_map_lock);
 	vfree(peer_port_map);
-
-	for (i = 0; i < NR_CPUS; i++) {
-		if (peer_user_uskbs[i]) {
-			kfree(peer_user_uskbs[i]);
-			peer_user_uskbs[i] = NULL;
-		}
-	}
 
 	for (i = 0; i < MAX_PEER_SERVER; i++) {
 		unsigned int j;
