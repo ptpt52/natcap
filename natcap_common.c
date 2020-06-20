@@ -1998,9 +1998,30 @@ static struct nf_hook_ops common_hooks[] = {
 	},
 };
 
+static struct sk_buff *peer_user_uskbs[NR_CPUS];
+struct sk_buff *uskb_of_this_cpu(unsigned int id)
+{
+	BUG_ON(id >= NR_CPUS);
+	if (!peer_user_uskbs[id]) {
+		struct ethhdr *eth;
+		peer_user_uskbs[id] = __alloc_skb(PEER_USKB_SIZE + sizeof(struct ethhdr), GFP_ATOMIC, 0, numa_node_id());
+		skb_reset_mac_header(peer_user_uskbs[id]);
+		skb_pull(peer_user_uskbs[id], sizeof(struct ethhdr));
+		eth = eth_hdr(peer_user_uskbs[id]);
+		memset(eth, 0, sizeof(*eth));
+		eth->h_proto = __constant_htons(ETH_P_IP);
+	}
+	return peer_user_uskbs[id];
+}
+
 int natcap_common_init(void)
 {
+	int i;
 	int ret = 0;
+
+	for (i = 0; i < NR_CPUS; i++) {
+		peer_user_uskbs[i] = NULL;
+	}
 
 	dnatcap_map_init();
 	cone_nat_array = vmalloc(sizeof(struct cone_nat_session) * 65536);
@@ -2036,6 +2057,7 @@ err_alloc_cone_nat_array:
 
 void natcap_common_exit(void)
 {
+	int i;
 	nf_unregister_hooks(common_hooks, ARRAY_SIZE(common_hooks));
 
 	if (cone_nat_array) {
@@ -2050,5 +2072,12 @@ void natcap_common_exit(void)
 		cone_snat_array = NULL;
 		synchronize_rcu();
 		vfree(tmp);
+	}
+
+	for (i = 0; i < NR_CPUS; i++) {
+		if (peer_user_uskbs[i]) {
+			kfree(peer_user_uskbs[i]);
+			peer_user_uskbs[i] = NULL;
+		}
 	}
 }
