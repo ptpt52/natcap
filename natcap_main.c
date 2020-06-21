@@ -115,6 +115,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             "#    peer_multipath=%u\n"
 		             "#    macfilter=%s(%u)\n"
 		             "#    ipfilter=%s(%u)\n"
+		             "#    dns_proxy_server=" TUPLE_FMT "\n"
 		             "#\n"
 		             "# Reload cmd:\n"
 		             "\n"
@@ -151,6 +152,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             peer_multipath,
 		             macfilter_acl_str[macfilter], macfilter,
 		             ipfilter_acl_str[ipfilter], ipfilter,
+		             TUPLE_ARG(dns_proxy_server),
 		             disabled, debug, server_persist_timeout,
 		             cnipwhitelist_mode, &dns_server, ntohs(dns_port));
 		natcap_ctl_buffer[n] = 0;
@@ -294,6 +296,26 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				}
 				NATCAP_println("natcap_server_add() failed ret=%d", err);
 			}
+		}
+	} else if (strncmp(data, "dns_proxy_server=", 17) == 0) {
+		unsigned int a, b, c, d, e;
+		char f, g, h;
+		n = sscanf(data, "dns_proxy_server=%u.%u.%u.%u:%u-%c-%c-%c", &a, &b, &c, &d, &e, &f, &g, &h);
+		if ( (n == 8 && e <= 0xffff) &&
+		        (f == 'e' || f == 'o') &&
+		        (g == 'T' || g == 'U') &&
+		        (h == 'U' || h == 'T') &&
+		        (((a & 0xff) == a) &&
+		         ((b & 0xff) == b) &&
+		         ((c & 0xff) == c) &&
+		         ((d & 0xff) == d)) ) {
+			dst.ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+			dst.port = htons(e);
+			dst.encryption = !!(f == 'e');
+			dst.tcp_encode = g == 'T' ? TCP_ENCODE : UDP_ENCODE;
+			dst.udp_encode = h == 'U' ? UDP_ENCODE : TCP_ENCODE;
+			tuple_copy(dns_proxy_server, &dst);
+			goto done;
 		}
 	} else if (strncmp(data, "change_server", 13) == 0) {
 		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
