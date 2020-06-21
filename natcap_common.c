@@ -2006,6 +2006,7 @@ struct sk_buff *uskb_of_this_cpu(unsigned int id)
 		struct ethhdr *eth;
 		peer_user_uskbs[id] = __alloc_skb(PEER_USKB_SIZE + sizeof(struct ethhdr), GFP_ATOMIC, 0, numa_node_id());
 		skb_reset_mac_header(peer_user_uskbs[id]);
+		skb_put(peer_user_uskbs[id], sizeof(struct ethhdr));
 		skb_pull(peer_user_uskbs[id], sizeof(struct ethhdr));
 		eth = eth_hdr(peer_user_uskbs[id]);
 		memset(eth, 0, sizeof(*eth));
