@@ -72,3 +72,5 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 Buy me a beer!
 
 [<img src="https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif">](https://paypal.me/ptpt52)
+
+BITCOIN ADDR: `3CJ5VwxL8ageKpA3jJ561rvhkFW4FmZiqc`
