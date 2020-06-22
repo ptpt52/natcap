@@ -1229,6 +1229,11 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 				if (NATCAP_UDP_GET_TARGET(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_TARGET) {
 					server.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+				} else {
+					//XXX overwrite DNS server
+					if (server.port == __constant_htons(53)) {
+						dns_server_node_random_select(&server.ip);
+					}
 				}
 
 				if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC)) {
@@ -1274,10 +1279,6 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				}
 
 				if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time in*/
-					//XXX overwrite DNS server
-					if (server.port == __constant_htons(53)) {
-						dns_server_node_random_select(&server.ip);
-					}
 					NATCAP_INFO("(SPCI)" DEBUG_UDP_FMT ": new connection, after decode target=" TUPLE_FMT " u_hash=0x%08x(%u)\n",
 					            DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server), ns->n.u_hash, ns->n.u_hash);
 					if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
