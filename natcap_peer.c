@@ -1379,8 +1379,8 @@ static inline void natcap_peer_echo_request(const struct net_device *dev, struct
 	niph->frag_off = 0x0;
 
 	l4 = (void *)niph + niph->ihl * 4;
-	UDPH(l4)->source = prandom_u32() % (65536 - 1024) + 1024;
-	UDPH(l4)->dest = prandom_u32() % (65536 - 1024) + 1024;
+	UDPH(l4)->source = htons(prandom_u32() % (65536 - 1024) + 1024);
+	UDPH(l4)->dest = htons(prandom_u32() % (65536 - 1024) + 1024);
 	UDPH(l4)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
 	UDPH(l4)->check = CSUM_MANGLED_0;
 
@@ -1691,8 +1691,8 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 	if (user != NULL) {
 		nf_conntrack_get(&user->ct_general);
 	} else {
-		__be16 sport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
-		__be16 dport = htons(1024 + prandom_u32() % (65535 - 1024 + 1));
+		__be16 sport = htons(prandom_u32() % (65536 - 1024) + 1024);
+		__be16 dport = htons(prandom_u32() % (65536 - 1024) + 1024);
 		__be32 saddr = (ops != NULL) ? oiph->daddr : oiph->saddr;
 		__be32 daddr = (ops != NULL) ? oiph->saddr : oiph->daddr;
 		user = peer_fakeuser_expect_new(saddr, daddr, sport, dport, pmi);
