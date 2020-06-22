@@ -2499,7 +2499,14 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				set_byte4(l4 + sizeof(struct udphdr), default_protocol == 1 ? __constant_htonl(NATCAP_D_MAGIC) : __constant_htonl(NATCAP_E_MAGIC));
 				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
-				if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
+
+				//check and overwirte DNS
+				if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53) && iph->daddr == dns_proxy_server->ip) {
+					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_proxy_server->ip);
+					set_byte2(l4 + sizeof(struct udphdr) + 8, __constant_htons(53));
+				}
+
+				if (iph->daddr == get_byte4(l4 + sizeof(struct udphdr) + 4)) {
 					uflag |= NATCAP_UDP_TARGET;
 				}
 				if ((NS_NATCAP_ENC & ns->n.status)) {
@@ -2551,7 +2558,13 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
 
-				if (iph->daddr == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip) {
+				//check and overwirte DNS
+				if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53) && iph->daddr == dns_proxy_server->ip) {
+					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_proxy_server->ip);
+					set_byte2(l4 + sizeof(struct udphdr) + 8, __constant_htons(53));
+				}
+
+				if (iph->daddr == get_byte4(l4 + sizeof(struct udphdr) + 4)) {
 					uflag |= NATCAP_UDP_TARGET;
 				}
 				if ((NS_NATCAP_ENC & ns->n.status)) {
@@ -3202,25 +3215,16 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				iph->tot_len = htons(nskb->len);
 				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
 				set_byte4(l4 + sizeof(struct udphdr), default_protocol == 1 ? __constant_htonl(NATCAP_D_MAGIC) : __constant_htonl(NATCAP_E_MAGIC));
-
-				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
-				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
-				//check and overwirte DNS
-				if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53)) {
-					if (iph->daddr == dns_proxy_server->ip) {
-						set_byte4(l4 + sizeof(struct udphdr) + 4, dns_proxy_server->ip);
-						set_byte2(l4 + sizeof(struct udphdr) + 8, __constant_htons(53));
-					} else {
-						if (dns_server != 0) {
-							set_byte4(l4 + sizeof(struct udphdr) + 4, dns_server);
-							set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
-							if (iph->daddr == dns_server) {
-								if (!(IPS_NATCAP_ACK & master->status)) set_bit(IPS_NATCAP_ACK_BIT, &master->status);
-							}
-						}
+				if (dns_server == 0 || ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53)) {
+					set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
+					set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
+				} else {
+					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_server);
+					set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
+					if (iph->daddr == dns_server) {
+						if (!(IPS_NATCAP_ACK & master->status)) set_bit(IPS_NATCAP_ACK_BIT, &master->status);
 					}
 				}
-
 				if (iph->daddr == get_byte4(l4 + sizeof(struct udphdr) + 4)) {
 					uflag |= NATCAP_UDP_TARGET;
 				}
@@ -3266,25 +3270,16 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				skb->len += off;
 				skb->tail += off;
 				set_byte4(l4 + sizeof(struct udphdr), default_protocol == 1 ? __constant_htonl(NATCAP_D_MAGIC) : __constant_htonl(NATCAP_E_MAGIC));
-
-				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
-				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
-				//check and overwirte DNS
-				if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53)) {
-					if (iph->daddr == dns_proxy_server->ip) {
-						set_byte4(l4 + sizeof(struct udphdr) + 4, dns_proxy_server->ip);
-						set_byte2(l4 + sizeof(struct udphdr) + 8, __constant_htons(53));
-					} else {
-						if (dns_server != 0) {
-							set_byte4(l4 + sizeof(struct udphdr) + 4, dns_server);
-							set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
-							if (iph->daddr == dns_server) {
-								if (!(IPS_NATCAP_ACK & master->status)) set_bit(IPS_NATCAP_ACK_BIT, &master->status);
-							}
-						}
+				if (dns_server == 0 || ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all != __constant_htons(53)) {
+					set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
+					set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
+				} else {
+					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_server);
+					set_byte2(l4 + sizeof(struct udphdr) + 8, dns_port);
+					if (iph->daddr == dns_server) {
+						if (!(IPS_NATCAP_ACK & master->status)) set_bit(IPS_NATCAP_ACK_BIT, &master->status);
 					}
 				}
-
 				if (iph->daddr == get_byte4(l4 + sizeof(struct udphdr) + 4)) {
 					uflag |= NATCAP_UDP_TARGET;
 				}
