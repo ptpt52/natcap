@@ -1735,10 +1735,13 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			__be16 port;
 			unsigned int i, idx;
 			unsigned int off = prandom_u32();
+			struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
 			for (i = 0; i < PEER_PUB_NUM; i++) {
 				idx = (i + off) % PEER_PUB_NUM;
 				ip = peer_pub_ip[idx];
-				if (ip != 0 && ip != iph->saddr && ip != iph->daddr) {
+				ip_hdr(uskb)->daddr = ip;
+				if (ip != 0 && ip != iph->saddr && ip != iph->daddr &&
+				        IP_SET_test_dst_ip(state, in, out, uskb, "ignorelist") <= 0) {
 					port = htons(prandom_u32() % (65536 - 1024) + 1024);
 					natcap_dnat_setup(ct, ip, port);
 					break;
