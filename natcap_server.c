@@ -2039,7 +2039,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					}
 					l4 = (void *)iph + iph->ihl * 4;
 
-					iph->id = __constant_htons(jiffies);
+					iph->id = htons(jiffies);
 					iph->daddr = ns->peer_tuple3[i].dip;
 					UDPH(l4)->dest = ns->peer_tuple3[i].dport;
 					UDPH(l4)->source = ns->peer_tuple3[i].sport;
@@ -2189,7 +2189,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 				memcpy(eth->h_dest, mac, ETH_ALEN);
 			}
 
-			iph->id = __constant_htons(jiffies);
+			iph->id = htons(jiffies);
 
 			tmp = iph->daddr;
 			iph->daddr = iph->saddr;

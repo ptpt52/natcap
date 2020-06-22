@@ -759,7 +759,7 @@ static inline struct sk_buff *natcap_peer_ctrl_alloc(struct sk_buff *oskb)
 
 	niph = ip_hdr(nskb);
 	niph->tot_len = htons(nskb->len);
-	niph->id = __constant_htons(jiffies);
+	niph->id = htons(jiffies);
 
 	l4 = (void *)niph + niph->ihl * 4;
 	UDPH(l4)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
