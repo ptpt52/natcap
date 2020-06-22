@@ -1731,20 +1731,22 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 	}
 	if (!nf_ct_is_confirmed(master)) {
 		if (skb->mark & natcap_ignore_mask) {
-			__be32 ip;
-			__be16 port;
-			unsigned int i, idx;
-			unsigned int off = prandom_u32();
-			struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
-			for (i = 0; i < PEER_PUB_NUM; i++) {
-				idx = (i + off) % PEER_PUB_NUM;
-				ip = peer_pub_ip[idx];
-				ip_hdr(uskb)->daddr = ip;
-				if (ip != 0 && ip != iph->saddr && ip != iph->daddr &&
-				        IP_SET_test_dst_ip(state, in, out, uskb, "ignorelist") <= 0) {
-					port = htons(prandom_u32() % (65536 - 1024) + 1024);
-					natcap_dnat_setup(ct, ip, port);
-					break;
+			if (natcap_ignore_forward) {
+				__be32 ip;
+				__be16 port;
+				unsigned int i, idx;
+				unsigned int off = prandom_u32();
+				struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+				for (i = 0; i < PEER_PUB_NUM; i++) {
+					idx = (i + off) % PEER_PUB_NUM;
+					ip = peer_pub_ip[idx];
+					ip_hdr(uskb)->daddr = ip;
+					if (ip != 0 && ip != iph->saddr && ip != iph->daddr &&
+					        IP_SET_test_dst_ip(state, in, out, uskb, "ignorelist") <= 0) {
+						port = htons(prandom_u32() % (65536 - 1024) + 1024);
+						natcap_dnat_setup(master, ip, port);
+						break;
+					}
 				}
 			}
 			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
