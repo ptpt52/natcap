@@ -296,7 +296,7 @@ static inline void get_dns_proxy_server(__be16 port, struct tuple *dst)
 	if (dst->port == __constant_htons(0)) {
 		dst->port = port;
 	} else if (dst->port == __constant_htons(65535)) {
-		dst->port = prandom_u32() % (65536 - 1024) + 1024;
+		dst->port = htons(prandom_u32() % (65536 - 1024) + 1024);
 	}
 }
 
@@ -1668,8 +1668,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 									if (ns->peer_tuple3[j].dip == 0) {
 										ns->peer_cnt++;
 										ns->peer_tuple3[j].dip = ip;
-										ns->peer_tuple3[j].dport = prandom_u32() % (65536 - 1024) + 1024;
-										ns->peer_tuple3[j].sport = prandom_u32() % (65536 - 1024) + 1024;
+										ns->peer_tuple3[j].dport = htons(prandom_u32() % (65536 - 1024) + 1024);
+										ns->peer_tuple3[j].sport = htons(prandom_u32() % (65536 - 1024) + 1024);
 										NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": peer%px select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
 										             ntohs(ns->peer_tuple3[j].sport), &ns->peer_tuple3[j].dip, ntohs(ns->peer_tuple3[j].dport), j);
 										break;
@@ -1759,7 +1759,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 			if (!nf_ct_is_confirmed(master)) {
 				__be32 dip = get_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2 + 2);
-				__be16 dport = prandom_u32() % (65536 - 1024) + 1024;
+				__be16 dport = htons(prandom_u32() % (65536 - 1024) + 1024);
 				if (natcap_dnat_setup(master, dip, dport) != NF_ACCEPT) {
 					return NF_DROP;
 				}

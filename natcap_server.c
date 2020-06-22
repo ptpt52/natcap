@@ -1739,7 +1739,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 				idx = (i + off) % PEER_PUB_NUM;
 				ip = peer_pub_ip[idx];
 				if (ip != 0 && ip != iph->saddr && ip != iph->daddr) {
-					port = prandom_u32() % (65536 - 1024) + 1024;
+					port = htons(prandom_u32() % (65536 - 1024) + 1024);
 					natcap_dnat_setup(ct, ip, port);
 					break;
 				}
@@ -2003,8 +2003,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 									if (ns->peer_tuple3[j].dip == 0) {
 										ns->peer_cnt++;
 										ns->peer_tuple3[j].dip = ip;
-										ns->peer_tuple3[j].dport = prandom_u32() % (65536 - 1024) + 1024;
-										ns->peer_tuple3[j].sport = prandom_u32() % (65536 - 1024) + 1024;
+										ns->peer_tuple3[j].dport = htons(prandom_u32() % (65536 - 1024) + 1024);
+										ns->peer_tuple3[j].sport = htons(prandom_u32() % (65536 - 1024) + 1024);
 										NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer%px select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
 										             ntohs(ns->peer_tuple3[j].sport), &ns->peer_tuple3[j].dip, ntohs(ns->peer_tuple3[j].dport), j);
 										break;
@@ -2102,7 +2102,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 			if (!nf_ct_is_confirmed(master)) {
 				__be32 dip = get_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2 + 2);
-				__be16 dport = prandom_u32() % (65536 - 1024) + 1024;
+				__be16 dport = htons(prandom_u32() % (65536 - 1024) + 1024);
 				if (natcap_dnat_setup(master, dip, dport) != NF_ACCEPT) {
 					return NF_DROP;
 				}
