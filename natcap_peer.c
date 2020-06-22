@@ -940,7 +940,7 @@ void natcap_auth_request_upstream(const unsigned char *client_mac, __be32 client
 	iph->tot_len = htons(skb->len);
 	iph->ttl = 255;
 	iph->protocol = protocol;
-	iph->id = __constant_htons(jiffies);
+	iph->id = htons(jiffies);
 	iph->frag_off = 0x0;
 
 	tcph = (struct tcphdr *)((char *)ip_hdr(skb) + sizeof(struct iphdr));
@@ -1294,7 +1294,7 @@ static inline void natcap_auth_reply(const struct net_device *dev, struct sk_buf
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 255;
 	niph->protocol = protocol;
-	niph->id = __constant_htons(jiffies);
+	niph->id = htons(jiffies);
 	niph->frag_off = 0x0;
 
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
@@ -1375,7 +1375,7 @@ static inline void natcap_peer_echo_request(const struct net_device *dev, struct
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 255;
 	niph->protocol = IPPROTO_UDP;
-	niph->id = __constant_htons(jiffies);
+	niph->id = htons(jiffies);
 	niph->frag_off = 0x0;
 
 	l4 = (void *)niph + niph->ihl * 4;
@@ -1439,7 +1439,7 @@ static inline void natcap_peer_echo_reply(const struct net_device *dev, struct s
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 255;
 	niph->protocol = IPPROTO_UDP;
-	niph->id = __constant_htons(jiffies);
+	niph->id = htons(jiffies);
 	niph->frag_off = 0x0;
 
 	l4 = (void *)niph + niph->ihl * 4;
@@ -1535,7 +1535,7 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 255;
 	niph->protocol = protocol;
-	niph->id = __constant_htons(jiffies);
+	niph->id = htons(jiffies);
 	niph->frag_off = 0x0;
 
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
@@ -1778,7 +1778,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 255;
 	niph->protocol = protocol;
-	niph->id = (ops != NULL) ? __constant_htons(jiffies) : oiph->id;
+	niph->id = (ops != NULL) ? htons(jiffies) : oiph->id;
 	niph->frag_off = 0x0;
 
 	ntcph = (void *)niph + niph->ihl * 4;
@@ -1990,7 +1990,7 @@ static inline int peer_sni_send_synack(const struct net_device *dev, struct sk_b
 	niph->tot_len = htons(nskb->len);
 	niph->ttl = 0x80;
 	niph->protocol = IPPROTO_TCP;
-	niph->id = __constant_htons(jiffies);
+	niph->id = htons(jiffies);
 	niph->frag_off = 0x0;
 
 	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
@@ -3523,7 +3523,7 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 			niph->tot_len = htons(nskb->len);
 			niph->ttl = 255;
 			niph->protocol = protocol;
-			niph->id = __constant_htons(jiffies);
+			niph->id = htons(jiffies);
 			niph->frag_off = 0x0;
 
 			ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
