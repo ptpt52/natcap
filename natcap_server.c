@@ -1731,6 +1731,19 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 	}
 	if (!nf_ct_is_confirmed(master)) {
 		if (skb->mark & natcap_ignore_mask) {
+			__be32 ip;
+			__be16 port;
+			unsigned int i, idx;
+			unsigned int off = prandom_u32();
+			for (i = 0; i < PEER_PUB_NUM; i++) {
+				idx = (i + off) % PEER_PUB_NUM;
+				ip = peer_pub_ip[idx];
+				if (ip != 0 && ip != iph->saddr && ip != iph->daddr) {
+					port = prandom_u32() % (65536 - 1024) + 1024;
+					natcap_dnat_setup(ct, ip, port);
+					break;
+				}
+			}
 			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
 			set_bit(IPS_NATCAP_BYPASS_BIT, &master->status);
 			set_bit(IPS_NATCAP_SERVER_BIT, &master->status);
