@@ -45,7 +45,7 @@ C_cniplist.set: cniplist.set local.set
 	@mv C_cniplist.set.tmp C_cniplist.set
 	@rm -f C_cniplist.orig.set.tmp
 
-ipset: cniplist.set C_cniplist.set cniplist6.set
+ipset: cniplist.set C_cniplist.set cniplist6.set getflix.set
 
 apnic.txt:
 	wget https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest -O apnic.txt.tmp
@@ -65,3 +65,6 @@ cniplist6.orig.set: apnic.txt
 cniplist6.set: cniplist6.orig.set local6.set
 	cat local6.set cniplist6.orig.set >cniplist6.set.tmp
 	@mv cniplist6.set.tmp cniplist6.set
+
+getflix.set:
+	wget https://raw.githubusercontent.com/QiuSimons/Netflix_IP/master/getflix.txt -O getflix.set
