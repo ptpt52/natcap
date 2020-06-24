@@ -420,11 +420,18 @@ void *natcap_server_info_get(enum server_group_t x, loff_t idx)
 
 void natcap_server_in_touch(enum server_group_t x, __be32 ip)
 {
-	struct natcap_server_info *nsi = &server_group[x];
-	unsigned int m = nsi->active_index;
-	unsigned int count = nsi->server_count[m];
+	struct natcap_server_info *nsi;
+	unsigned int m;
+	unsigned int count;
 	unsigned int hash;
 	unsigned int i;
+
+	if (x >= SERVER_GROUP_MAX)
+		return;
+
+	nsi = &server_group[x];
+	m = nsi->active_index;
+	count = nsi->server_count[m];
 
 	if (count == 0)
 		return;
@@ -962,7 +969,7 @@ bypass_tcp:
 				return NF_ACCEPT;
 			}
 			natcap_tuple_to_ns(ns, &server, iph->protocol);
-			ns->n.group_x = SERVER_GROUP_0; //no use
+			ns->n.group_x = SERVER_GROUP_MAX; //no use
 
 			if (in && strncmp(in->name, "natcap", 6) == 0) {
 				if (!(NS_NATCAP_NOLIMIT & ns->n.status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->n.status);
