@@ -68,3 +68,7 @@ cniplist6.set: cniplist6.orig.set local6.set
 
 getflix.set:
 	wget https://raw.githubusercontent.com/QiuSimons/Netflix_IP/master/getflix.txt -O getflix.set
+
+dubai.set:
+	wget https://raw.githubusercontent.com/uku/Unblock-Youku/master/shared/urls.js -O urls.js
+	sh dubai.set.sh
