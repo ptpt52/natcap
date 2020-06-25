@@ -454,14 +454,52 @@ void natcap_server_in_touch(enum server_group_t x, __be32 ip)
 	}
 }
 
-void natcap_server_info_select(enum server_group_t x, struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst)
+// [T/U][T/U][o/e][0/1]
+unsigned int natcap_server_use_peer = 0;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+void __natcap_server_info_select(enum server_group_t x, const struct nf_hook_state *state, struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst)
+#define natcap_server_info_select(x, state, in, out, skb, ip, port, dst) __natcap_server_info_select(x, state, skb, ip, port, dst)
+#else
+void __natcap_server_info_select(enum server_group_t x, const struct net_device *in, const struct net_device *out, struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst)
+#define natcap_server_info_select(x, state, in, out, skb, ip, port, dst) __natcap_server_info_select(x, in, out, skb, ip, port, dst)
+#endif
 {
 	static atomic_t server_port = ATOMIC_INIT(0);
-	struct natcap_server_info *nsi = &server_group[x];
-	unsigned int m = nsi->active_index;
-	unsigned int count = nsi->server_count[m];
+	struct natcap_server_info *nsi;
+	unsigned int m;
+	unsigned int count;
 	unsigned int hash;
 	unsigned int i, found = 0;
+
+	if (x == SERVER_GROUP_1) {
+		if ((natcap_server_use_peer & 0x1)) {
+			__be32 dst_ip;
+			__be16 dst_port;
+			unsigned int i, idx;
+			unsigned int off = prandom_u32();
+			struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+			for (i = 0; i < PEER_PUB_NUM; i++) {
+				idx = (i + off) % PEER_PUB_NUM;
+				dst_ip = peer_pub_ip[idx];
+				ip_hdr(uskb)->daddr = dst_ip;
+				if (dst_ip != 0 && dst_ip != ip &&
+				        IP_SET_test_dst_ip(state, in, out, uskb, "ignorelist") <= 0) {
+					dst_port = htons(prandom_u32() % (65536 - 1024) + 1024);
+					dst->ip = dst_ip;
+					dst->port = dst_port;
+					dst->encryption = !!(natcap_server_use_peer & 0x2);
+					dst->tcp_encode = (natcap_server_use_peer & 0x4) ? UDP_ENCODE : TCP_ENCODE;
+					dst->udp_encode = (natcap_server_use_peer & 0x8) ? UDP_ENCODE : TCP_ENCODE;
+					return;
+				}
+			}
+		}
+	}
+
+	nsi = &server_group[x];
+	m = nsi->active_index;
+	count = nsi->server_count[m];
 
 	dst->ip = 0;
 	dst->port = 0;
@@ -851,7 +889,7 @@ bypass_tcp:
 							return NF_ACCEPT;
 						}
 
-						natcap_server_info_select(SERVER_GROUP_0, skb, iph->daddr, TCPH(l4)->dest, &server);
+						natcap_server_info_select(SERVER_GROUP_0, state, in, out, skb, iph->daddr, TCPH(l4)->dest, &server);
 						if (server.ip == 0) {
 							NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
 							set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -902,7 +940,7 @@ bypass_tcp:
 					return NF_ACCEPT;
 				}
 			}
-			natcap_server_info_select(x, skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
+			natcap_server_info_select(x, state, in, out, skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": no server found\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -995,9 +1033,9 @@ natcap_dual_out_udp:
 				}
 
 				if (is_natcap_server(dns_server)) {
-					natcap_server_info_select(SERVER_GROUP_0, skb, dns_server, UDPH(l4)->dest, &server);
+					natcap_server_info_select(SERVER_GROUP_0, state, in, out, skb, dns_server, UDPH(l4)->dest, &server);
 				} else {
-					natcap_server_info_select(SERVER_GROUP_0, skb, iph->daddr, UDPH(l4)->dest, &server);
+					natcap_server_info_select(SERVER_GROUP_0, state, in, out, skb, iph->daddr, UDPH(l4)->dest, &server);
 				}
 				if (server.ip == 0) {
 					NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
@@ -1059,7 +1097,7 @@ bypass_udp:
 				}
 			}
 
-			natcap_server_info_select(x, skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
+			natcap_server_info_select(x, state, in, out, skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
 				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": no server found\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);

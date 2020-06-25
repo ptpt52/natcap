@@ -117,6 +117,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             "#    macfilter=%s(%u)\n"
 		             "#    ipfilter=%s(%u)\n"
 		             "#    dns_proxy_server=" TUPLE_FMT "\n"
+		             "#    server1_use_peer=%u\n"
 		             "#\n"
 		             "# Reload cmd:\n"
 		             "\n"
@@ -155,6 +156,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             macfilter_acl_str[macfilter], macfilter,
 		             ipfilter_acl_str[ipfilter], ipfilter,
 		             TUPLE_ARG(dns_proxy_server),
+		             natcap_server_use_peer,
 		             disabled, debug, server_persist_timeout,
 		             cnipwhitelist_mode, &dns_server, ntohs(dns_port));
 		natcap_ctl_buffer[n] = 0;
@@ -348,6 +350,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				}
 				NATCAP_println("natcap_server_delete() failed ret=%d", err);
 			}
+		}
+	} else if (strncmp(data, "server1_use_peer=", 17) == 0) {
+		unsigned int d;
+		n = sscanf(data, "server1_use_peer=%u", &d);
+		if (n == 1) {
+			natcap_server_use_peer = d;
+			goto done;
 		}
 	} else if (strncmp(data, "debug=", 6) == 0) {
 		int d;
