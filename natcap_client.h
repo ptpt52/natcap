@@ -72,7 +72,8 @@ int natcap_server_info_add(enum server_group_t x, const struct tuple *dst);
 int natcap_server_info_delete(enum server_group_t x, const struct tuple *dst);
 void *natcap_server_info_get(enum server_group_t x, loff_t idx);
 void natcap_server_in_touch(enum server_group_t x, __be32 ip);
-void natcap_server_info_select(enum server_group_t x, struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst);
+
+extern unsigned int natcap_server_use_peer;
 
 const struct tuple *natcap_server_info_current(enum server_group_t x);
 
