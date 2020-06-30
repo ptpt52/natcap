@@ -1327,8 +1327,11 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (TCPH(l4)->syn)
+		if (TCPH(l4)->syn || TCPH(l4)->rst) {
+			NATCAP_INFO("(CPCI)" DEBUG_TCP_FMT ": touch for server%d ip=%pI4\n", DEBUG_TCP_ARG(iph,l4),
+			            ns->n.group_x, &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 			natcap_server_in_touch(ns->n.group_x, ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
+		}
 
 		NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": before decode\n", DEBUG_TCP_ARG(iph,l4));
 
