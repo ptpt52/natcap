@@ -89,6 +89,8 @@ extern unsigned int natcap_ignore_mask;
 extern struct cone_nat_session *cone_nat_array;
 extern struct cone_snat_session *cone_snat_array;
 
+void cone_nat_cleanup(void);
+
 #define NATCAP_MIN_PMTU 68
 #define NATCAP_MAX_PMTU 9000
 
