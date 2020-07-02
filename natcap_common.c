@@ -1503,6 +1503,14 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 struct cone_nat_session *cone_nat_array = NULL;
 struct cone_snat_session *cone_snat_array = NULL;
 
+void cone_nat_cleanup(void)
+{
+	if (cone_nat_array)
+		memset(cone_nat_array, 0, sizeof(struct cone_nat_session) * 65536);
+	if (cone_snat_array)
+		memset(cone_snat_array, 0, sizeof(struct cone_snat_session) * 32768);
+}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_common_cone_in_hook(unsigned int hooknum,
         struct sk_buff *skb,

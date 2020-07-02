@@ -672,6 +672,9 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	} else if (strncmp(data, "dns_server_node_clean", 21) == 0) {
 		dns_server_node_clean();
 		goto done;
+	} else if (strncmp(data, "cone_nat_clean", 14) == 0) {
+		cone_nat_cleanup();
+		goto done;
 	}
 
 	NATCAP_println("ignoring line[%s]", data);
