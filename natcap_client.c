@@ -244,6 +244,9 @@ unsigned int sproxy = 0;
 unsigned int dns_server = __constant_htonl((8<<24)|(8<<16)|(8<<8)|(8<<0));
 unsigned short dns_port = __constant_htons(53);
 
+const __be32 gfw0_dns_magic_server = __constant_htonl((0<<24)|(0<<16)|(0<<8)|(10<<0));
+const __be32 gfw1_dns_magic_server = __constant_htonl((0<<24)|(0<<16)|(0<<8)|(11<<0));
+
 u32 default_protocol = 0;
 u32 default_u_hash = 0;
 unsigned char default_mac_addr[ETH_ALEN];
@@ -1013,6 +1016,56 @@ bypass_tcp:
 				if (!(NS_NATCAP_NOLIMIT & ns->n.status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->n.status);
 			}
 			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": dns proxy out, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+			goto dnat_out;
+		}
+
+		if (UDPH(l4)->dest == __constant_htons(53) && iph->daddr == gfw0_dns_magic_server) {
+			natcap_server_info_select(SERVER_GROUP_0, state, in, out, skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
+			if (server.ip == 0) {
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": gfw0 dns no server found\n", DEBUG_UDP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
+
+			ns = natcap_session_in(ct);
+			if (!ns) {
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
+			natcap_tuple_to_ns(ns, &server, iph->protocol);
+			ns->n.group_x = SERVER_GROUP_0;
+
+			if (in && strncmp(in->name, "natcap", 6) == 0) {
+				if (!(NS_NATCAP_NOLIMIT & ns->n.status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->n.status);
+			}
+			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": gfw0 dns proxy out, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+			goto dnat_out;
+		}
+
+		if (UDPH(l4)->dest == __constant_htons(53) && iph->daddr == gfw1_dns_magic_server) {
+			natcap_server_info_select(SERVER_GROUP_1, state, in, out, skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
+			if (server.ip == 0) {
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": gfw1 dns no server found\n", DEBUG_UDP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
+
+			ns = natcap_session_in(ct);
+			if (!ns) {
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
+			natcap_tuple_to_ns(ns, &server, iph->protocol);
+			ns->n.group_x = SERVER_GROUP_1;
+
+			if (in && strncmp(in->name, "natcap", 6) == 0) {
+				if (!(NS_NATCAP_NOLIMIT & ns->n.status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->n.status);
+			}
+			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": gfw1 dns proxy out, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
 			goto dnat_out;
 		}
 
@@ -2548,10 +2601,16 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
 
-				//check and overwirte DNS
+				//check and overwrite DNS
 				if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53) && iph->daddr == dns_proxy_server->ip) {
 					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_proxy_server->ip);
 					set_byte2(l4 + sizeof(struct udphdr) + 8, __constant_htons(53));
+				} else if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53) &&
+				           (ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip == gfw0_dns_magic_server ||
+				            ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip == gfw1_dns_magic_server)) {
+					set_byte4(l4 + sizeof(struct udphdr) + 4, __constant_htonl(0)); // ignored
+					set_byte2(l4 + sizeof(struct udphdr) + 8, __constant_htons(53));
+					uflag |= NATCAP_UDP_TARGET;
 				}
 
 				if (iph->daddr == get_byte4(l4 + sizeof(struct udphdr) + 4)) {
@@ -2606,10 +2665,16 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				set_byte4(l4 + sizeof(struct udphdr) + 4, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip);
 				set_byte2(l4 + sizeof(struct udphdr) + 8, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all);
 
-				//check and overwirte DNS
+				//check and overwrite DNS
 				if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53) && iph->daddr == dns_proxy_server->ip) {
 					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_proxy_server->ip);
 					set_byte2(l4 + sizeof(struct udphdr) + 8, __constant_htons(53));
+				} else if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53) &&
+				           (ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip == gfw0_dns_magic_server ||
+				            ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip == gfw1_dns_magic_server)) {
+					set_byte4(l4 + sizeof(struct udphdr) + 4, __constant_htonl(0)); // ignored
+					set_byte2(l4 + sizeof(struct udphdr) + 8, __constant_htons(53));
+					uflag |= NATCAP_UDP_TARGET;
 				}
 
 				if (iph->daddr == get_byte4(l4 + sizeof(struct udphdr) + 4)) {
