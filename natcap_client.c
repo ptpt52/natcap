@@ -2606,10 +2606,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_proxy_server->ip);
 					set_byte2(l4 + sizeof(struct udphdr) + 8, __constant_htons(53));
 				} else if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53) &&
-				           (ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip == gfw0_dns_magic_server ||
-				            ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip == gfw1_dns_magic_server)) {
-					set_byte4(l4 + sizeof(struct udphdr) + 4, __constant_htonl(0)); // ignored
-					set_byte2(l4 + sizeof(struct udphdr) + 8, __constant_htons(53));
+				           (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip == gfw0_dns_magic_server ||
+				            ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip == gfw1_dns_magic_server)) {
 					uflag |= NATCAP_UDP_TARGET;
 				}
 
@@ -2670,10 +2668,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 					set_byte4(l4 + sizeof(struct udphdr) + 4, dns_proxy_server->ip);
 					set_byte2(l4 + sizeof(struct udphdr) + 8, __constant_htons(53));
 				} else if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == __constant_htons(53) &&
-				           (ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip == gfw0_dns_magic_server ||
-				            ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip == gfw1_dns_magic_server)) {
-					set_byte4(l4 + sizeof(struct udphdr) + 4, __constant_htonl(0)); // ignored
-					set_byte2(l4 + sizeof(struct udphdr) + 8, __constant_htons(53));
+				           (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip == gfw0_dns_magic_server ||
+				            ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip == gfw1_dns_magic_server)) {
 					uflag |= NATCAP_UDP_TARGET;
 				}
 
