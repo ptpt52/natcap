@@ -1544,7 +1544,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			iph->protocol = IPPROTO_UDP;
 			skb->next = NULL;
 
-			if (nskb == NULL && ns->peer_ver == 1 && ns->peer_mark != 0xffff && ns->peer_req_cnt < 3 && uintdiff(ns->peer_jiffies, jiffies) > 1*HZ ) {
+			if (nskb == NULL && ns->peer_ver == 1 && ns->peer_mark != 0xffff && ns->peer_req_cnt < 3 && uintmindiff(ns->peer_jiffies, jiffies) > 1*HZ ) {
 				ns->peer_jiffies = jiffies;
 				pcskb = natcap_peer_ctrl_alloc(skb);
 				if (pcskb) {

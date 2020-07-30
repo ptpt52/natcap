@@ -315,7 +315,7 @@ static void peer_timer_flush(struct timer_list *ignore)
 				set_byte2(client_mac + 4, get_byte2((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all));
 				NATCAP_INFO(DEBUG_FMT_PREFIX "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] timeout drop\n", DEBUG_ARG_PREFIX,
 				            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-				            &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
+				            &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 				           );
 				peer_port_map[flush_idx] = NULL;
 				nf_ct_put(user);
@@ -336,7 +336,7 @@ static void peer_timer_flush(struct timer_list *ignore)
 				if (after(jiffies, fue->last_active + peer_conn_timeout * HZ)) {
 					NATCAP_INFO(DEBUG_FMT_PREFIX "conn[%u:%u] @N[[%pI4:%u] [AS %ds] timeout drop\n", DEBUG_ARG_PREFIX,
 					            ntohs(peer_fakeuser_sport(user)), ntohs(peer_fakeuser_dport(user)),
-					            &ps->ip, ntohs(ps->map_port), fue->last_active != 0 ?(uintdiff(fue->last_active, jiffies) + HZ / 2) / HZ : (-1)
+					            &ps->ip, ntohs(ps->map_port), fue->last_active != 0 ?(uintmindiff(fue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 					           );
 					peer_server[i].port_map[j] = NULL;
 					nf_ct_put(user);
@@ -366,7 +366,7 @@ static inline void peer_port_map_kill(unsigned short idx)
 		set_byte2(client_mac + 4, get_byte2((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all));
 		NATCAP_INFO(DEBUG_FMT_PREFIX "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] killed\n", DEBUG_ARG_PREFIX,
 		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-		            &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
+		            &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 		           );
 		peer_port_map[idx] = NULL;
 		nf_ct_put(user);
@@ -502,8 +502,8 @@ struct peer_server_node *peer_server_node_in(__be32 ip, unsigned short conn, int
 			}
 			spin_unlock_bh(&peer_server[i].lock);
 		}
-		if (maxdiff < uintdiff(peer_server[i].last_active, last_jiffies)) {
-			maxdiff = uintdiff(peer_server[i].last_active, last_jiffies);
+		if (maxdiff < uintmindiff(peer_server[i].last_active, last_jiffies)) {
+			maxdiff = uintmindiff(peer_server[i].last_active, last_jiffies);
 			ps = &peer_server[i];
 		}
 	}
@@ -806,7 +806,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		            &saddr, ntohs(sport), &daddr, ntohs(dport),
 		            &old_ip, &saddr, ntohs(ue->map_port),
-		            ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1));
+		            ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1));
 		user->mark = ntohl(saddr);
 	}
 	natcap_user_timeout_touch(user, peer_port_map_timeout);
@@ -835,8 +835,8 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 	if (pt == NULL) {
 		unsigned long maxdiff = 0;
 		for (i = 0; i < MAX_PEER_TUPLE; i++) {
-			if (maxdiff < uintdiff(last_jiffies, ue->tuple[i].last_active)) {
-				maxdiff = uintdiff(last_jiffies, ue->tuple[i].last_active);
+			if (maxdiff < uintmindiff(last_jiffies, ue->tuple[i].last_active)) {
+				maxdiff = uintmindiff(last_jiffies, ue->tuple[i].last_active);
 				pt = &ue->tuple[i];
 			}
 			if (ue->tuple[i].sip == 0) {
@@ -1123,14 +1123,14 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 		NATCAP_WARN("auth user [%02x:%02x:%02x:%02x:%02x:%02x] change ip from %pI4 to %pI4 P=%u AS=%d\n",
 		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		            &old_ip, &client_ip, ntohs(ue->map_port),
-		            ue->last_active_auth != 0 ? (uintdiff(ue->last_active_auth, jiffies) + HZ / 2) / HZ : (-1));
+		            ue->last_active_auth != 0 ? (uintmindiff(ue->last_active_auth, jiffies) + HZ / 2) / HZ : (-1));
 		user->mark = ntohl(client_ip);
 	}
 
 	if ((ue->status & PEER_SUBTYPE_AUTH)) {
 		ret = 1;
 		/*check upstream auth every 300s if AUTH */
-		if (uintdiff(jiffies, ue->last_active_auth) >= 300 * HZ) {
+		if (uintmindiff(jiffies, ue->last_active_auth) >= 300 * HZ) {
 			ue->last_active_auth = jiffies;
 			check_auth = 1;
 		}
@@ -1138,7 +1138,7 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 	} else {
 		ret = -1;
 		/*check upstream auth every 60s if not AUTH */
-		if (uintdiff(jiffies, ue->last_active_auth) >= 60 * HZ) {
+		if (uintmindiff(jiffies, ue->last_active_auth) >= 60 * HZ) {
 			ue->last_active_auth = jiffies;
 			check_auth = 1;
 		}
@@ -1580,7 +1580,7 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 		unsigned int i;
 		unsigned int *dst = (void *)((char *)ip_hdr(nskb) + sizeof(struct iphdr) + sizeof(struct tcphdr) + ext_header_len);
 		for (i = 0; i < PEER_PUB_NUM; i++) {
-			if (uintdiff(jiffies, peer_pub_active[i]) < 120 * HZ) {
+			if (uintmindiff(jiffies, peer_pub_active[i]) < 120 * HZ) {
 				dst[i] = peer_pub_ip[i];
 			} else {
 				dst[i] = 0;
@@ -2654,9 +2654,9 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 				ue = peer_user_expect(user);
 				for (i = 0; i < MAX_PEER_TUPLE; i++) {
-					if (ue->tuple[i].connected && ue->tuple[i].sip != 0 && mindiff > uintdiff(jiffies, ue->tuple[i].last_active)) {
+					if (ue->tuple[i].connected && ue->tuple[i].sip != 0 && mindiff > uintmindiff(jiffies, ue->tuple[i].last_active)) {
 						pt = &ue->tuple[i];
-						mindiff = uintdiff(jiffies, ue->tuple[i].last_active);
+						mindiff = uintmindiff(jiffies, ue->tuple[i].last_active);
 					}
 				}
 				if (pt == NULL) {
@@ -3073,7 +3073,7 @@ sni_out:
 				pt->mode = PT_MODE_UDP;
 			}
 			natcap_peer_pong_send(in, skb, ue->map_port, pt, (ue->status & PEER_SUBTYPE_SSYN));
-			if (tcpopt->header.opcode == TCPOPT_PEER_V2 && uintdiff(jiffies, ue->last_active_peer) >= 60 * HZ) {
+			if (tcpopt->header.opcode == TCPOPT_PEER_V2 && uintmindiff(jiffies, ue->last_active_peer) >= 60 * HZ) {
 				ue->last_active_peer = jiffies;
 				natcap_peer_echo_request(in, skb, client_mac);
 			}
@@ -3329,7 +3329,7 @@ sni_skip:
 				goto ack_out;
 			}
 			natcap_peer_pong_send(in, skb, ue->map_port, pt, (ue->status & PEER_SUBTYPE_SSYN));
-			if (tcpopt->header.opcode == TCPOPT_PEER_V2 && uintdiff(jiffies, ue->last_active_peer) >= 120 * HZ) {
+			if (tcpopt->header.opcode == TCPOPT_PEER_V2 && uintmindiff(jiffies, ue->last_active_peer) >= 120 * HZ) {
 				ue->last_active_peer = jiffies;
 				natcap_peer_echo_request(in, skb, client_mac);
 			}
@@ -3434,9 +3434,9 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 		}
 
 		for (i = 0; i < MAX_PEER_TUPLE; i++) {
-			if (ue->tuple[i].connected && ue->tuple[i].sip != 0 && mindiff > uintdiff(jiffies, ue->tuple[i].last_active)) {
+			if (ue->tuple[i].connected && ue->tuple[i].sip != 0 && mindiff > uintmindiff(jiffies, ue->tuple[i].last_active)) {
 				pt = &ue->tuple[i];
-				mindiff = uintdiff(jiffies, ue->tuple[i].last_active);
+				mindiff = uintmindiff(jiffies, ue->tuple[i].last_active);
 			}
 		}
 
@@ -3894,9 +3894,9 @@ knock:
 			}
 
 			for (i = 0; i < MAX_PEER_TUPLE; i++) {
-				if (ue->tuple[i].connected && ue->tuple[i].sip != 0 && mindiff > uintdiff(jiffies, ue->tuple[i].last_active)) {
+				if (ue->tuple[i].connected && ue->tuple[i].sip != 0 && mindiff > uintmindiff(jiffies, ue->tuple[i].last_active)) {
 					pt = &ue->tuple[i];
-					mindiff = uintdiff(jiffies, ue->tuple[i].last_active);
+					mindiff = uintmindiff(jiffies, ue->tuple[i].last_active);
 				}
 			}
 
@@ -4777,7 +4777,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			             PAGE_SIZE - 1,
 			             "N[%pI4:%u] [AS %ds]\n"
 			             "    conn[%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u]\n",
-			             &ps->ip, ntohs(ps->map_port), ps->last_active != 0 ? (uintdiff(ps->last_active, jiffies) + HZ / 2) / HZ : (-1),
+			             &ps->ip, ntohs(ps->map_port), ps->last_active != 0 ? (uintmindiff(ps->last_active, jiffies) + HZ / 2) / HZ : (-1),
 			             ntohs(peer_fakeuser_sport(ps->port_map[0])), ntohs(peer_fakeuser_dport(ps->port_map[0])),
 			             ntohs(peer_fakeuser_sport(ps->port_map[1])), ntohs(peer_fakeuser_dport(ps->port_map[1])),
 			             ntohs(peer_fakeuser_sport(ps->port_map[2])), ntohs(peer_fakeuser_dport(ps->port_map[2])),
@@ -4807,7 +4807,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			             PAGE_SIZE - 1,
 			             "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] pub=%d\n",
 			             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
-			             &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintdiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1),
+			             &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1),
 			             !!(ue->status & PEER_SUBTYPE_PUB)
 			            );
 			spin_unlock_bh(&ue->lock);

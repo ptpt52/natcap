@@ -404,18 +404,24 @@ static inline int short_test_and_set_bit(int nr, unsigned short *addr)
 	return (old & mask) != 0;
 }
 
-static inline unsigned long ulongdiff(unsigned long a, unsigned long b)
+static inline unsigned long ulongmindiff(unsigned long a, unsigned long b)
 {
-	if (a > b)
-		return a - b;
-	return b - a;
+	return (a - b < b - a ? a - b : b - a);
 }
 
-static inline unsigned int uintdiff(unsigned int a, unsigned int b)
+static inline unsigned int uintmindiff(unsigned int a, unsigned int b)
 {
-	if (a > b)
-		return a - b;
-	return b - a;
+	return (a - b < b - a ? a - b : b - a);
+}
+
+static inline unsigned short ushortmindiff(unsigned short a, unsigned short b)
+{
+	return (a - b < b - a ? a - b : b - a);
+}
+
+static inline unsigned char ucharmindiff(unsigned char a, unsigned char b)
+{
+	return (a - b < b - a ? a - b : b - a);
 }
 
 #define MAX_IOCTL_LEN 256
