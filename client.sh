@@ -18,17 +18,14 @@ iptables -A FORWARD -s 192.168.0.0/16 -j ACCEPT
 iptables -t nat -A POSTROUTING -s 192.168.0.0/16 -j MASQUERADE
 
 ipset destroy cniplist
-ipset destroy gfwlist
-ipset destroy udproxylist
+ipset destroy gfwlist0
 
 echo 'create cniplist hash:net family inet hashsize 4096 maxelem 65536' >/tmp/cniplist.set
 cat cniplist.set | sed 's/^/add cniplist /' >>/tmp/cniplist.set
 ipset restore -f /tmp/cniplist.set
 rm -f /tmp/cniplist.set
 
-ipset create gfwlist iphash
-ipset create udproxylist iphash
-ipset add udproxylist 8.8.8.8
+ipset create gfwlist0 iphash
 
 # load && run
 # server is 1.2.3.4 for example
