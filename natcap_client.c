@@ -859,17 +859,17 @@ bypass_tcp:
 		} else {
 			int x = -1;
 
-			if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist0") > 0 ||
-			        (cnipwhitelist_mode == 2 && IP_SET_test_dst_ip(state, in, out, skb, "wechat_iplist") > 0)) {
-				x = SERVER_GROUP_0;
-			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
+			if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
 				x = SERVER_GROUP_1;
-			} else if (IP_SET_test_dst_port(state, in, out, skb, "gfw_tcp_port_list0") > 0 ||
-			           IP_SET_test_dst_netport(state, in, out, skb, "app_list0") > 0) {
-				x = SERVER_GROUP_0;
 			} else if (IP_SET_test_dst_port(state, in, out, skb, "gfw_tcp_port_list1") > 0 ||
 			           IP_SET_test_dst_netport(state, in, out, skb, "app_list1") > 0) {
 				x = SERVER_GROUP_1;
+			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist0") > 0 ||
+			           (cnipwhitelist_mode == 2 && IP_SET_test_dst_ip(state, in, out, skb, "wechat_iplist") > 0)) {
+				x = SERVER_GROUP_0;
+			} else if (IP_SET_test_dst_port(state, in, out, skb, "gfw_tcp_port_list0") > 0 ||
+			           IP_SET_test_dst_netport(state, in, out, skb, "app_list0") > 0) {
+				x = SERVER_GROUP_0;
 			}
 
 			if (x == -1) {
@@ -1127,17 +1127,17 @@ bypass_udp:
 		} else {
 			int x = -1;
 
-			if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist0") > 0 ||
-			        (cnipwhitelist_mode == 2 && IP_SET_test_dst_ip(state, in, out, skb, "wechat_iplist") > 0)) {
-				x = SERVER_GROUP_0;
-			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
+			if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
 				x = SERVER_GROUP_1;
-			} else if (IP_SET_test_dst_port(state, in, out, skb, "gfw_udp_port_list0") > 0 ||
-			           IP_SET_test_dst_netport(state, in, out, skb, "app_list0") > 0) {
-				x = SERVER_GROUP_0;
 			} else if (IP_SET_test_dst_port(state, in, out, skb, "gfw_udp_port_list1") > 0 ||
 			           IP_SET_test_dst_netport(state, in, out, skb, "app_list1") > 0) {
 				x = SERVER_GROUP_1;
+			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist0") > 0 ||
+			           (cnipwhitelist_mode == 2 && IP_SET_test_dst_ip(state, in, out, skb, "wechat_iplist") > 0)) {
+				x = SERVER_GROUP_0;
+			} else if (IP_SET_test_dst_port(state, in, out, skb, "gfw_udp_port_list0") > 0 ||
+			           IP_SET_test_dst_netport(state, in, out, skb, "app_list0") > 0) {
+				x = SERVER_GROUP_0;
 			}
 
 			if (x == -1) {
