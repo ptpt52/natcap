@@ -45,10 +45,10 @@ C_cniplist.set: cniplist.set local.set
 	@mv C_cniplist.set.tmp C_cniplist.set
 	@rm -f C_cniplist.orig.set.tmp
 
-ipset: cniplist.set C_cniplist.set cniplist6.set getflix.set
+ipset: cniplist.set C_cniplist.set cniplist6.set getflix.set hkiplist.orig.set
 
 apnic.txt:
-	wget https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest -O apnic.txt.tmp
+	wget -4 https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest -O apnic.txt.tmp
 	@mv apnic.txt.tmp apnic.txt
 	@touch apnic.txt
 
@@ -57,6 +57,12 @@ cniplist.orig.set: apnic.txt
 	lua apnic.lua cniplist.txt.tmp | while read line; do $$line | grep -v deaggregate; done >cniplist.orig.set.tmp
 	@rm -f cniplist.txt.tmp
 	@mv cniplist.orig.set.tmp cniplist.orig.set
+
+hkiplist.orig.set: apnic.txt
+	cat apnic.txt | grep HK | grep ipv4 | cut -d\| -f4,5 >hkiplist.txt.tmp
+	lua apnic.lua hkiplist.txt.tmp | while read line; do $$line | grep -v deaggregate; done >hkiplist.orig.set.tmp
+	@rm -f hkiplist.txt.tmp
+	@mv hkiplist.orig.set.tmp hkiplist.orig.set
 
 cniplist6.orig.set: apnic.txt
 	cat apnic.txt | grep ipv6 | grep CN | cut -d\| -f4,5 | sed 's,|,/,' >cniplist6.orig.set.tmp
