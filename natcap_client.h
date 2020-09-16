@@ -135,4 +135,13 @@ static inline int get_rdata(const unsigned char *src_ptr, int src_len, int src_p
 	return dst_len;
 }
 
+extern void cn_domain_clean(void);
+extern void domain_copy(char *dst, char *from);
+extern int domain_cmp(char *dst, char *src);
+extern int cn_domain_insert(char *d);
+extern int domain_match(char *dst, char *src);
+extern int cn_domain_lookup(char *d);
+extern int cn_domain_load_from_path(char *path);
+extern int cn_domain_dump_path(char *path);
+
 #endif /* _NATCAP_CLIENT_H_ */

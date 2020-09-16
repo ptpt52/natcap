@@ -3941,6 +3941,288 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 	return NF_ACCEPT;
 }
 
+#define CN_DOMAIN_SIZE 32
+static char *cn_domain = NULL;
+static int cn_domain_size = 0;
+static int cn_domain_count = 0;
+
+void cn_domain_clean(void)
+{
+	if (cn_domain) {
+		vfree(cn_domain);
+		cn_domain = NULL;
+		cn_domain_size = 0;
+		cn_domain_count = 0;
+	}
+}
+
+void domain_copy(char *dst, char *from)
+{
+	int s = 0;
+	int len = strlen(from);
+	while (len > 0 && s < CN_DOMAIN_SIZE) {
+		len--;
+		dst[CN_DOMAIN_SIZE - 1 - s] = from[len];
+		s++;
+	}
+	while (s < CN_DOMAIN_SIZE) {
+		dst[CN_DOMAIN_SIZE - 1 - s] = 0;
+		s++;
+	}
+}
+
+int domain_cmp(char *dst, char *src)
+{
+	int i;
+	int len = strlen(src);
+	for (i = CN_DOMAIN_SIZE - 1; i >= 0 && len > 0;)
+	{
+		len--;
+		if (dst[i] == 0) {
+			return -1;
+		}
+		if (dst[i] == '.' && src[len] == '.') {
+			i--;
+			continue;
+		}
+		if (dst[i] == '.' && src[len] != '.') {
+			return -1;
+		}
+		if (dst[i] != '.' && src[len] == '.') {
+			return 1;
+		}
+		if (dst[i] < src[len]) {
+			return -1;
+		} else if (dst[i] > src[len]) {
+			return 1;
+		}
+		i--;
+	}
+
+	if (len == 0 && (i == -1 || (i > 0 && dst[i] == 0))) {
+		return 0;
+	}
+	if (i == -1 && len > 0) {
+		return -1;
+	}
+
+	return 1;
+}
+
+int cn_domain_insert(char *d)
+{
+	int low;
+	int high;
+	int mid;
+	int res = 0;
+
+	if (cn_domain == NULL) {
+		cn_domain_count = 0;
+		cn_domain_size = 128 * 1024 / CN_DOMAIN_SIZE;
+		cn_domain = vmalloc(CN_DOMAIN_SIZE * cn_domain_size);
+		if (cn_domain == NULL) {
+			return -ENOMEM;
+		}
+		memset(cn_domain, 0, CN_DOMAIN_SIZE * cn_domain_size);
+	}
+	if (cn_domain_count + 1 > cn_domain_size) {
+		char *tmp;
+		cn_domain_size = cn_domain_size + 128 * 1024 / CN_DOMAIN_SIZE;
+		tmp = vmalloc(CN_DOMAIN_SIZE * cn_domain_size);
+		if (tmp == NULL) {
+			return -ENOMEM;
+		}
+		memset(tmp, 0, CN_DOMAIN_SIZE * cn_domain_size);
+		memcpy(tmp, cn_domain, (cn_domain_size - 128 * 1024 / CN_DOMAIN_SIZE) * CN_DOMAIN_SIZE);
+		vfree(cn_domain);
+		cn_domain = tmp;
+		printk("cn_domain_insert cn_domain_size=%d mem=%d\n", cn_domain_size, cn_domain_size * CN_DOMAIN_SIZE);
+	}
+	if (cn_domain_count == 0) {
+		domain_copy(cn_domain + cn_domain_count * CN_DOMAIN_SIZE, d);
+		cn_domain_count++;
+		return 0;
+	}
+
+	low = 0;
+	high = cn_domain_count - 1;
+	while (low <= high) {
+		mid = (low + high) / 2;
+		res = domain_cmp(cn_domain + mid * CN_DOMAIN_SIZE, d);
+		if (res == 0) {
+			return 0;
+		}
+		if (res < 0) {
+			low = mid + 1;
+		} else {
+			high = mid - 1;
+		}
+	}
+
+	if (res < 0) {
+		memmove(cn_domain + mid * CN_DOMAIN_SIZE + CN_DOMAIN_SIZE + CN_DOMAIN_SIZE, cn_domain + mid * CN_DOMAIN_SIZE + CN_DOMAIN_SIZE, (cn_domain_count - mid - 1) * CN_DOMAIN_SIZE);
+		domain_copy(cn_domain + (mid + 1) * CN_DOMAIN_SIZE, d);
+		cn_domain_count++;
+	} else {
+		memmove(cn_domain + mid * CN_DOMAIN_SIZE + CN_DOMAIN_SIZE, cn_domain + mid * CN_DOMAIN_SIZE, (cn_domain_count - mid) * CN_DOMAIN_SIZE);
+		domain_copy(cn_domain + mid * CN_DOMAIN_SIZE, d);
+		cn_domain_count++;
+	}
+
+	return 0;
+}
+
+int domain_match(char *dst, char *src)
+{
+	int i;
+	int len = strlen(src);
+	for (i = CN_DOMAIN_SIZE - 1; i >= 0 && len > 0;)
+	{
+		len--;
+		if (dst[i] == 0) {
+			if (src[len] == '.')
+				return 0;
+			else
+				return -1;
+		}
+		if (dst[i] == '.' && src[len] == '.') {
+			i--;
+			continue;
+		}
+		if (dst[i] == '.' && src[len] != '.') {
+			return -1;
+		}
+		if (dst[i] != '.' && src[len] == '.') {
+			return 1;
+		}
+		if (dst[i] < src[len]) {
+			return -1;
+		} else if (dst[i] > src[len]) {
+			return 1;
+		}
+		i--;
+	}
+
+	if (len == 0 && (i == -1 || (i > 0 && dst[i] == 0))) {
+		return 0;
+	}
+	if (i == -1 && len > 0) {
+		if (src[len] == '.')
+			return 0;
+		else
+			return -1;
+	}
+
+	return 1;
+}
+
+int cn_domain_lookup(char *d)
+{
+	int low;
+	int high;
+	int mid;
+	int res;
+
+	if (cn_domain == NULL || cn_domain_count == 0) {
+		return 0;
+	}
+
+	low = 0;
+	high = cn_domain_count - 1;
+	while (low <= high) {
+		mid = (low + high) / 2;
+		res = domain_match(cn_domain + mid * CN_DOMAIN_SIZE, d);
+		if (res == 0) {
+			/* found match */
+			return 1;
+		}
+		if (res < 0) {
+			low = mid + 1;
+		} else {
+			high = mid - 1;
+		}
+	}
+
+	return 0;
+}
+
+int cn_domain_load_from_path(char *path)
+{
+	loff_t pos = 0;
+	ssize_t bytes = 0;
+	struct file *filp;
+	char *buf;
+	int r_idx = 0;
+	int r_cnt = 0;
+	int i, s;
+	int err;
+	int count = 0;
+
+	buf = kmalloc(4096, GFP_KERNEL);
+
+	filp = filp_open(path, O_RDONLY, 0);
+	if (IS_ERR(filp)) {
+		printk("unable to open cn_domain file: %s\n", path);
+		return -1;
+	}
+
+	while ((bytes = kernel_read(filp, buf + r_idx, 4096 - r_idx, &pos)) > 0) {
+		r_cnt = r_idx + bytes;
+		s = 0;
+		for (i = 0; i < r_cnt;) {
+			s = i;
+			for (; i < r_cnt;) {
+				if (buf[i] == '\n') {
+					buf[i] = 0;
+					err = cn_domain_insert(buf + s);
+					if (err) {
+						return err;
+					}
+					if (strlen(buf + s) > CN_DOMAIN_SIZE) printk("cn_domain_insert %d(%s)\n", count, buf + s);
+					count++;
+					s = i + 1;
+					i++;
+					break;
+				}
+				i++;
+			}
+		}
+		memmove(buf, buf + s, i - s);
+		r_idx = i - s;
+	}
+	kfree(buf);
+	filp_close(filp, NULL);
+	printk("cn_domain_load_from_path %d records loaded\n", count);
+	return 0;
+}
+
+int cn_domain_dump_path(char *path)
+{
+	loff_t pos = 0;
+	ssize_t bytes = 0;
+	struct file *filp;
+
+	if (cn_domain == NULL) {
+		return -1;
+	}
+
+	filp = filp_open(path, O_RDWR | O_CREAT | O_LARGEFILE | O_DSYNC, 0);
+	if (IS_ERR(filp)) {
+		printk("unable to open cn_domain dump: %s\n", path);
+		return -1;
+	}
+
+	bytes = kernel_write(filp, cn_domain + pos, cn_domain_count * CN_DOMAIN_SIZE - pos, &pos);
+	printk("cn_domain dump: write %d\n", (int)bytes);
+
+	filp_close(filp, NULL);
+
+	if (bytes != cn_domain_count * CN_DOMAIN_SIZE) {
+		return -1;
+	}
+	return 0;
+}
+
 static struct nf_hook_ops client_hooks[] = {
 	{
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
@@ -4038,4 +4320,9 @@ int natcap_client_init(void)
 void natcap_client_exit(void)
 {
 	nf_unregister_hooks(client_hooks, ARRAY_SIZE(client_hooks));
+
+	if (cn_domain) {
+		vfree(cn_domain);
+		cn_domain = NULL;
+	}
 }
