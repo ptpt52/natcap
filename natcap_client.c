@@ -821,7 +821,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if (!TCPH(l4)->syn || TCPH(l4)->ack) {
-			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": first packet in but not syn, bypass\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": first packet in but not syn, bypass\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
@@ -834,13 +834,13 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 
 			if (natcap_tcp_decode_header(TCPH(l4)) != NULL || natcap_peer_decode_header(TCPH(l4)) != NULL) {
-				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": first packet is already encoded, bypass\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": first packet is already encoded, bypass\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
 			if (inet_is_local(in, iph->daddr)) {
-				NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": target is local, no encoded header, not client in\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": target is local, no encoded header, not client in\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -988,7 +988,7 @@ bypass_tcp:
 				         skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
 					iph = ip_hdr(skb);
 					l4 = (void *)iph + iph->ihl * 4;
-					NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": first packet is already encoded, bypass\n", DEBUG_UDP_ARG(iph,l4));
+					NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": first packet is already encoded, bypass\n", DEBUG_UDP_ARG(iph,l4));
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
@@ -998,7 +998,7 @@ bypass_tcp:
 			l4 = (void *)iph + iph->ihl * 4;
 
 			if (inet_is_local(in, iph->daddr)) {
-				NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": target is local, no encoded header, not client in\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": target is local, no encoded header, not client in\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1241,7 +1241,7 @@ natcaped_out:
 			}
 			if ((IPS_NATCAP_SYN1 & ct->status) && (IPS_NATCAP_SYN2 & ct->status)) {
 				if (!is_natcap_server(iph->daddr)) {
-					NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": natcaped syn3 del target from gfwlist0\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": natcaped syn3 del target from gfwlist0\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_del_dst_ip(state, in, out, skb, "gfwlist0");
 				}
 			}
@@ -2258,7 +2258,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 					return NF_ACCEPT;
 				}
 				if ((IPS_NATCAP_SYN1 & ct->status) && (IPS_NATCAP_SYN2 & ct->status)) {
-					NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": bypass syn3 del target from bypasslist\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn3 del target from bypasslist\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_del_dst_ip(state, in, out, skb, "bypasslist");
 				}
 			}

@@ -4483,7 +4483,7 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 			qclass = ntohs(get_byte2(p + pos));
 			pos += 2;
 
-			NATCAP_INFO("(PD)" DEBUG_UDP_FMT ": id=0x%04x, qtype=%d, qclass=%d, qname=%s\n", DEBUG_UDP_ARG(iph,l4), id, qtype, qclass, qname);
+			NATCAP_DEBUG("(PD)" DEBUG_UDP_FMT ": id=0x%04x, qtype=%d, qclass=%d, qname=%s\n", DEBUG_UDP_ARG(iph,l4), id, qtype, qclass, qname);
 
 			n = sscanf(qname, "%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
 			if (n != 6) {
