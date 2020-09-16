@@ -45,6 +45,11 @@
 #include "natcap_knock.h"
 #include "natcap_peer.h"
 
+#define CN_DOMAIN_SIZE 32
+static char *cn_domain = NULL;
+static int cn_domain_size = 0;
+static int cn_domain_count = 0;
+
 unsigned int server_index_natcap_mask = 0x00000000;
 #define server_index_natcap_set(index, at) *(unsigned int *)(at) = ((*(unsigned int *)(at)) & (~server_index_natcap_mask)) | ((index) & server_index_natcap_mask)
 /* return 0: no index set */
@@ -3742,6 +3747,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			unsigned short an_count;
 			unsigned short ns_count;
 			unsigned short ar_count;
+			int is_cn_domain;
 
 			unsigned char *p = (unsigned char *)UDPH(l4) + sizeof(struct udphdr);
 			int len = skb->len - iph->ihl * 4 - sizeof(struct udphdr);
@@ -3781,7 +3787,6 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 						kfree(qname);
 					}
 				}
-
 				while (pos < len && ((v = get_byte1(p + pos)) != 0)) {
 					if (v > 0x3f) {
 						pos++;
@@ -3825,6 +3830,19 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 							NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
 						}
 						kfree(name);
+					}
+				}
+
+				is_cn_domain = 0;
+				if (cn_domain) {
+					int name_len;
+					char name[128];
+					if ((name_len = get_rdata(p, len, pos, name, 127)) > 0) {
+						name[name_len - 1] = 0;
+						if (cn_domain_lookup(name)) {
+							is_cn_domain = 1;
+							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s is_cn_domain\n", DEBUG_UDP_ARG(iph,l4), id, name);
+						}
 					}
 				}
 
@@ -3885,6 +3903,11 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 									return NF_DROP;
 								}
 								iph->daddr = old_ip;
+								if (is_cn_domain) {
+									NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS drop cn_domain\n",
+									            DEBUG_UDP_ARG(iph,l4), id);
+									return NF_DROP;
+								}
 							} else {
 								old_ip = iph->daddr;
 								iph->daddr = ip;
@@ -3940,11 +3963,6 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 
 	return NF_ACCEPT;
 }
-
-#define CN_DOMAIN_SIZE 32
-static char *cn_domain = NULL;
-static int cn_domain_size = 0;
-static int cn_domain_count = 0;
 
 void cn_domain_clean(void)
 {
