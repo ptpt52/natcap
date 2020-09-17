@@ -4214,6 +4214,60 @@ int cn_domain_load_from_path(char *path)
 	return 0;
 }
 
+int cn_domain_load_from_raw(char *path)
+{
+	int ret = -1;
+	loff_t pos = 0;
+	ssize_t bytes = 0;
+	struct file *filp;
+	char *buf;
+	char *cn_domain_tmp = NULL;
+	int cn_domain_tmp_size = 0;
+	int nbytes = 0;
+
+	buf = kmalloc(4096, GFP_KERNEL);
+
+	filp = filp_open(path, O_RDONLY, 0);
+	if (IS_ERR(filp)) {
+		printk("unable to open cn_domain raw: %s\n", path);
+		return -1;
+	}
+
+	while ((bytes = kernel_read(filp, buf, 4096, &pos)) > 0) {
+		if (cn_domain_tmp == NULL || nbytes + bytes > cn_domain_tmp_size * CN_DOMAIN_SIZE) {
+			char *tmp;
+			cn_domain_tmp_size += 128 * 1024 / CN_DOMAIN_SIZE;
+			tmp = vmalloc(cn_domain_tmp_size * CN_DOMAIN_SIZE);
+			if (tmp == NULL) {
+				if (cn_domain_tmp)
+					vfree(cn_domain_tmp);
+				ret = -ENOMEM;
+				goto out;
+			}
+			if (cn_domain_tmp) {
+				memcpy(tmp, cn_domain_tmp, (cn_domain_tmp_size - 128 * 1024 / CN_DOMAIN_SIZE) * CN_DOMAIN_SIZE);
+				vfree(cn_domain_tmp);
+			}
+			cn_domain_tmp = tmp;
+		}
+		memcpy(cn_domain_tmp + nbytes, buf, bytes);
+		nbytes += bytes;
+	}
+
+	cn_domain_clean();
+
+	cn_domain = cn_domain_tmp;
+	cn_domain_size = cn_domain_tmp_size;
+	cn_domain_count = nbytes / CN_DOMAIN_SIZE;
+
+	printk("cn_domain_load_from_raw size:%d count:%d bytes:%d\n", cn_domain_size, cn_domain_count, nbytes);
+
+out:
+	kfree(buf);
+	filp_close(filp, NULL);
+	return 0;
+}
+
 int cn_domain_dump_path(char *path)
 {
 	loff_t pos = 0;
