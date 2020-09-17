@@ -663,6 +663,22 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			}
 			kfree(tmp);
 		}
+	} else if (strncmp(data, "cn_domain_raw=", 14) == 0) {
+		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
+			char *tmp = kmalloc(1024, GFP_KERNEL);
+			if (!tmp)
+				return -ENOMEM;
+			n = sscanf(data, "cn_domain_raw=%s\n", tmp);
+			tmp[1023] = 0;
+			if (n == 1) {
+				err = cn_domain_load_from_raw(tmp);
+				if (err == 0) {
+					kfree(tmp);
+					goto done;
+				}
+			}
+			kfree(tmp);
+		}
 	} else if (strncmp(data, "cn_domain=", 10) == 0) {
 		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
 			char tmp[128];
