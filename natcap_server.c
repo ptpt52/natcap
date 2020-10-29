@@ -2501,7 +2501,13 @@ static struct nf_sockopt_ops so_natcap_dst = {
 	.owner = THIS_MODULE,
 };
 
-static int set_natcap_mark(struct sock *sk, int optval, void __user *user, unsigned int len)
+static int set_natcap_mark(struct sock *sk, int optval,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+                           sockptr_t sockptr,
+#else
+                           void __user *user,
+#endif
+                           unsigned int len)
 {
 	sock_set_flag(sk, SOCK_NATCAP_MARK);
 	return 0;
