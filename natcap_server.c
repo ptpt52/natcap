@@ -38,6 +38,7 @@
 #include "natcap_server.h"
 #include "natcap_peer.h"
 
+unsigned int server_flow_stop = 0;
 unsigned int user_mark_natcap_mask = 0x00000000;
 #define user_mark_natcap_set(mark, at) *(unsigned int *)(at) = ((*(unsigned int *)(at)) & (~user_mark_natcap_mask)) | ((mark) & user_mark_natcap_mask)
 static inline int user_mark_natcap_get(unsigned int *at)
@@ -1435,7 +1436,13 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	}
 
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
+		if (server_flow_stop && hooknum == NF_INET_POST_ROUTING) {
+			return NF_DROP;
+		}
 		if (iph->protocol == IPPROTO_TCP) {
+			if (server_flow_stop && TCPH(l4)->dest == natcap_redirect_port) {
+				return NF_DROP;
+			}
 			if ((NS_NATCAP_AUTH & ns->n.status)) {
 				if (TCPH(l4)->dest == natcap_redirect_port) {
 					return natcap_try_http_redirect(iph, skb, ct, in);

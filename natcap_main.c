@@ -91,6 +91,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             "#    si_mask=0x%08x\n"
 		             "#    ni_mask=0x%08x\n"
 		             "#    ni_forward=%u\n"
+		             "#    server_flow_stop=%u\n"
 		             "#    protocol=%u\n"
 		             "#    server_seed=%u\n"
 		             "#    auth_enabled=%u\n"
@@ -139,6 +140,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             server_index_natcap_mask,
 		             natcap_ignore_mask,
 		             natcap_ignore_forward,
+		             server_flow_stop,
 		             default_protocol,
 		             server_seed, auth_enabled,
 		             natcap_tx_speed_get(),
@@ -406,6 +408,15 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			n = sscanf(data, "u_hash=%u", &d);
 			if (n == 1) {
 				default_u_hash = htonl(d);
+				goto done;
+			}
+		}
+	} else if (strncmp(data, "server_flow_stop=", 17) == 0) {
+		if (mode == SERVER_MODE || mode == MIXING_MODE) {
+			unsigned int d;
+			n = sscanf(data, "server_flow_stop=%u", &d);
+			if (n == 1) {
+				server_flow_stop = d;
 				goto done;
 			}
 		}
