@@ -3903,7 +3903,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 									return NF_DROP;
 								}
 								iph->daddr = old_ip;
-								if (is_cn_domain) {
+								if (is_cn_domain && cn_domain) {
 									NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS drop cn_domain\n",
 									            DEBUG_UDP_ARG(iph,l4), id);
 									return NF_DROP;
@@ -3913,9 +3913,11 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 								iph->daddr = ip;
 								if (IP_SET_test_dst_ip(state, in, out, skb, "dnsdroplist") > 0 || IP_SET_test_dst_ip(state, in, out, skb, "cniplist") <= 0) {
 									iph->daddr = old_ip;
-									NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is not cniplist ip = %pI4, drop\n",
-									            DEBUG_UDP_ARG(iph,l4), id, &ip);
-									return NF_DROP;
+									if (!is_cn_domain && cn_domain) {
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is not cniplist ip = %pI4, drop\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+										return NF_DROP;
+									}
 								}
 								iph->daddr = old_ip;
 							}
