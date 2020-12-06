@@ -787,24 +787,26 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (macfilter == NATCAP_ACL_ALLOW && IP_SET_test_src_mac(state, in, out, skb, "natcap_maclist") <= 0) {
-		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-		return NF_ACCEPT;
-	} else if (macfilter == NATCAP_ACL_DENY && IP_SET_test_src_mac(state, in, out, skb, "natcap_maclist") > 0) {
-		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-		return NF_ACCEPT;
-	}
+	if (hooknum != NF_INET_LOCAL_OUT) {
+		if (macfilter == NATCAP_ACL_ALLOW && IP_SET_test_src_mac(state, in, out, skb, "natcap_maclist") <= 0) {
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+			return NF_ACCEPT;
+		} else if (macfilter == NATCAP_ACL_DENY && IP_SET_test_src_mac(state, in, out, skb, "natcap_maclist") > 0) {
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+			return NF_ACCEPT;
+		}
 
-	if (ipfilter == NATCAP_ACL_ALLOW && IP_SET_test_src_ip(state, in, out, skb, "natcap_iplist") <= 0) {
-		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-		return NF_ACCEPT;
-	} else if (ipfilter == NATCAP_ACL_DENY && IP_SET_test_src_ip(state, in, out, skb, "natcap_iplist") > 0) {
-		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
-		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-		return NF_ACCEPT;
+		if (ipfilter == NATCAP_ACL_ALLOW && IP_SET_test_src_ip(state, in, out, skb, "natcap_iplist") <= 0) {
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+			return NF_ACCEPT;
+		} else if (ipfilter == NATCAP_ACL_DENY && IP_SET_test_src_ip(state, in, out, skb, "natcap_iplist") > 0) {
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+			return NF_ACCEPT;
+		}
 	}
 
 	if (IP_SET_test_dst_netport(state, in, out, skb, "app_bypass_list") > 0) {
