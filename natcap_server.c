@@ -251,7 +251,7 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 
 	ns = natcap_session_get(ct);
 	if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
-		natcap_udp_to_tcp_pack(nskb, ns, 1);
+		natcap_udp_to_tcp_pack(nskb, ns, 1, NULL);
 	}
 
 	skb_push(nskb, (char *)niph - (char *)neth);
@@ -1668,7 +1668,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			if (ret != NF_ACCEPT) {
 				return ret;
 			}
-			natcap_udp_to_tcp_pack(skb, ns, 1);
+			natcap_udp_to_tcp_pack(skb, ns, 1, NULL);
 		}
 		return NF_ACCEPT;
 	}
@@ -1777,6 +1777,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xffff) ^ (ntohl(TCPH(l4)->ack_seq) & 0xffff)) ) {
+			int dir = CTINFO2DIR(ctinfo);
 			unsigned int tcphdr_len = TCPH(l4)->doff * 4;
 			unsigned int foreign_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - tcphdr_len + !!TCPH(l4)->syn;
 
@@ -1817,6 +1818,12 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			skb->tail -= tcphdr_len - sizeof(struct udphdr);
 			iph->protocol = IPPROTO_UDP;
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
+			if (master->master) {
+				iph->saddr = master->master->tuplehash[dir].tuple.src.u3.ip;
+				iph->daddr = master->master->tuplehash[dir].tuple.dst.u3.ip;
+				UDPH(l4)->source = master->master->tuplehash[dir].tuple.src.u.all;
+				UDPH(l4)->dest = master->master->tuplehash[dir].tuple.dst.u.all;
+			}
 			skb_rcsum_tcpudp(skb);
 
 			if (in)
@@ -1836,7 +1843,6 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			ns = natcap_session_in(ct);
 			if (ns == NULL) {
 				NATCAP_WARN("(SPI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
-				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_DROP;
 			}
 			if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
@@ -1845,8 +1851,368 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 			ns->n.foreign_seq = foreign_seq;
 
+			if (!master->master) {
+				nf_conntrack_get(&ct->ct_general);
+				master->master = ct;
+			}
+			if (dir == 1) {
+				//on client side, try send ping
+				if ((ns->ping.stage == 0 && uintmindiff(ns->ping.jiffies, jiffies) > 3 * HZ) ||
+				        (ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 1 * HZ)) {
+					if (ns->ping.stage == 0)
+						ns->ping.jiffies = jiffies;
+					ns->ping.stage = 1;
+					skb = skb_copy(skb, GFP_ATOMIC);
+					if (skb == NULL) {
+						NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+						return NF_ACCEPT;
+					}
+					iph = ip_hdr(skb);
+					l4 = (void *)iph + iph->ihl * 4;
+					skb->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
+
+					iph->tot_len = htons(skb->len);
+					iph->protocol = IPPROTO_TCP;
+					iph->saddr = master->tuplehash[dir].tuple.dst.u3.ip;
+					iph->daddr = master->tuplehash[dir].tuple.src.u3.ip;
+					iph->ttl = 0x80;
+					iph->id = htons(jiffies);
+					iph->frag_off = 0x0;
+
+					TCPH(l4)->source = master->tuplehash[dir].tuple.dst.u.all;
+					TCPH(l4)->dest = master->tuplehash[dir].tuple.src.u.all;
+					TCPH(l4)->seq = htonl(ns->n.current_seq);
+					TCPH(l4)->ack_seq = htonl(ns->n.foreign_seq);
+					tcp_flag_word(TCPH(l4)) = TCP_FLAG_ACK;
+					TCPH(l4)->res1 = 0;
+					TCPH(l4)->doff = (sizeof(struct tcphdr)) / 4;
+					TCPH(l4)->window = htons(~(ntohs(iph->id) ^ ((ntohl(TCPH(l4)->seq) & 0xffff) | (ntohl(TCPH(l4)->ack_seq) & 0xffff))));
+					TCPH(l4)->check = 0;
+					TCPH(l4)->urg_ptr = 0;
+
+					iph->protocol = IPPROTO_TCP;
+					skb->ip_summed = CHECKSUM_UNNECESSARY;
+					skb_rcsum_tcpudp(skb);
+
+					NATCAP_INFO("(SPI)" DEBUG_TCP_FMT ": ping: send\n", DEBUG_TCP_ARG(iph,l4));
+
+					skb_nfct_reset(skb);
+					nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
+					master = nf_ct_get(skb, &ctinfo);
+					if (!master) {
+						consume_skb(skb);
+						return NF_ACCEPT;
+					}
+					natcap_clone_timeout(master, ct);
+					ret = nf_conntrack_confirm(skb);
+					if (ret != NF_ACCEPT) {
+						if (ret != NF_STOLEN)
+							consume_skb(skb);
+						return NF_ACCEPT;
+					}
+
+					//response pong ack.
+					skb_push(skb, (char *)iph - (char *)eth_hdr(skb));
+					if ((char *)iph - (char *)eth_hdr(skb) >= ETH_HLEN) {
+						unsigned char mac[ETH_ALEN];
+						memcpy(mac, eth_hdr(skb)->h_source, ETH_ALEN);
+						memcpy(eth_hdr(skb)->h_source, eth_hdr(skb)->h_dest, ETH_ALEN);
+						memcpy(eth_hdr(skb)->h_dest, mac, ETH_ALEN);
+					}
+					skb_nfct_reset(skb);
+					dev_queue_xmit(skb);
+
+					return NF_ACCEPT;
+				}
+				/*
+				if (ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 3 * HZ) {
+					//timeout
+				}
+				*/
+			}
+
 			NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": after decode for UDP-to-TCP packet\n", DEBUG_UDP_ARG(iph,l4));
 			return NF_ACCEPT;
+		} else if ( TCPH(l4)->window == htons(~(ntohs(iph->id) ^ ((ntohl(TCPH(l4)->seq) & 0xffff) | (ntohl(TCPH(l4)->ack_seq) & 0xffff)))) ) {
+			int dir = CTINFO2DIR(ctinfo);
+			unsigned int tcphdr_len = TCPH(l4)->doff * 4;
+			unsigned int foreign_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - tcphdr_len + !!TCPH(l4)->syn;
+
+			if (!inet_is_local(in, iph->daddr)) {
+				set_bit(IPS_NATCAP_PRE_BIT, &master->status);
+				return NF_ACCEPT;
+			}
+
+			if (master->master) {
+				if (dir == 0) {
+					/* on server side, got ping, response pong */
+					/* XXX I just confirm it first  */
+					ret = nf_conntrack_confirm(skb);
+					if (ret != NF_ACCEPT) {
+						return ret;
+					}
+
+					ct = master->master;
+					ns = natcap_session_in(ct);
+					if (ns == NULL) {
+						NATCAP_WARN("(SPI)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+						consume_skb(skb);
+						return NF_STOLEN;
+					}
+
+					if (skb_tailroom(skb) < 16 && pskb_expand_head(skb, 0, 16, GFP_ATOMIC)) {
+						NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
+						consume_skb(skb);
+						return NF_STOLEN;
+					}
+					iph = ip_hdr(skb);
+					l4 = (void *)iph + iph->ihl * 4;
+
+					skb->len = iph->ihl * 4 + sizeof(struct tcphdr) + 16;
+					iph->tot_len = htons(skb->len);
+					iph->protocol = IPPROTO_TCP;
+					iph->saddr = master->tuplehash[dir].tuple.dst.u3.ip;
+					iph->daddr = master->tuplehash[dir].tuple.src.u3.ip;
+					iph->ttl = 0x80;
+					iph->id = htons(jiffies);
+					iph->frag_off = 0x0;
+
+					TCPH(l4)->source = master->tuplehash[dir].tuple.dst.u.all;
+					TCPH(l4)->dest = master->tuplehash[dir].tuple.src.u.all;
+
+					TCPH(l4)->seq = htonl(ns->n.current_seq);
+					TCPH(l4)->ack_seq = htonl(ns->n.foreign_seq);
+					tcp_flag_word(TCPH(l4)) = TCP_FLAG_ACK;
+					TCPH(l4)->res1 = 0;
+					TCPH(l4)->doff = (sizeof(struct tcphdr) + 16) / 4;
+					TCPH(l4)->window = htons(~(ntohs(iph->id) ^ ((ntohl(TCPH(l4)->seq) & 0xffff) | (ntohl(TCPH(l4)->ack_seq) & 0xffff))));
+					TCPH(l4)->check = 0;
+					TCPH(l4)->urg_ptr = 0;
+
+					set_byte1(l4 + sizeof(struct tcphdr), TCPOPT_NATCAP);
+					set_byte1(l4 + sizeof(struct tcphdr) + 1, 16);
+					set_byte2(l4 + sizeof(struct tcphdr) + 2, 0);
+					set_byte4(l4 + sizeof(struct tcphdr) + 4, ct->tuplehash[dir].tuple.src.u3.ip);
+					set_byte4(l4 + sizeof(struct tcphdr) + 4 + 4, ct->tuplehash[dir].tuple.dst.u3.ip);
+					set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4, ct->tuplehash[dir].tuple.src.u.all);
+					set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2, ct->tuplehash[dir].tuple.dst.u.all);
+
+					skb->ip_summed = CHECKSUM_UNNECESSARY;
+					skb_rcsum_tcpudp(skb);
+
+					NATCAP_INFO("(SPI)" DEBUG_TCP_FMT ": get ping: send pong\n", DEBUG_TCP_ARG(iph,l4));
+
+					skb_nfct_reset(skb);
+					nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
+					master = nf_ct_get(skb, &ctinfo);
+					if (!master) {
+						consume_skb(skb);
+						return NF_STOLEN;
+					}
+					natcap_clone_timeout(master, ct);
+					ret = nf_conntrack_confirm(skb);
+					if (ret != NF_ACCEPT) {
+						if (ret != NF_STOLEN)
+							consume_skb(skb);
+						return NF_STOLEN;
+					}
+
+					//response pong ack.
+					skb_push(skb, (char *)iph - (char *)eth_hdr(skb));
+					if ((char *)iph - (char *)eth_hdr(skb) >= ETH_HLEN) {
+						unsigned char mac[ETH_ALEN];
+						memcpy(mac, eth_hdr(skb)->h_source, ETH_ALEN);
+						memcpy(eth_hdr(skb)->h_source, eth_hdr(skb)->h_dest, ETH_ALEN);
+						memcpy(eth_hdr(skb)->h_dest, mac, ETH_ALEN);
+					}
+					skb_nfct_reset(skb);
+					dev_queue_xmit(skb);
+					return NF_STOLEN;
+				} else {
+					/* on client side,, got pong */
+					if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 16)) {
+						return NF_ACCEPT;
+					}
+					iph = ip_hdr(skb);
+					l4 = (void *)iph + iph->ihl * 4;
+
+					/* XXX I just confirm it first  */
+					ret = nf_conntrack_confirm(skb);
+					if (ret != NF_ACCEPT) {
+						return ret;
+					}
+
+					ct = master->master;
+					ns = natcap_session_in(ct);
+					if (ns == NULL) {
+						NATCAP_WARN("(SPI)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+						consume_skb(skb);
+						return NF_STOLEN;
+					}
+
+					if (!ns->ping.remote_saddr) {
+						ns->ping.remote_saddr = get_byte4(l4 + sizeof(struct tcphdr) + 4);
+						ns->ping.remote_daddr = get_byte4(l4 + sizeof(struct tcphdr) + 4 + 4);
+						ns->ping.remote_source = get_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4);
+						ns->ping.remote_dest = get_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2);
+						NATCAP_INFO("(SPI)" DEBUG_TCP_FMT ": get pong for %pI4:%u->%pI4:%u\n", DEBUG_TCP_ARG(iph,l4),
+						            &ns->ping.remote_saddr, ntohs(ns->ping.remote_source),
+						            &ns->ping.remote_daddr, ntohs(ns->ping.remote_dest));
+					}
+					if (ns->ping.remote_saddr != get_byte4(l4 + sizeof(struct tcphdr) + 4) ||
+					        ns->ping.remote_daddr != get_byte4(l4 + sizeof(struct tcphdr) + 4 + 4) ||
+					        ns->ping.remote_source != get_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4) ||
+					        ns->ping.remote_dest != get_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2)) {
+						NATCAP_WARN("(SPI)" DEBUG_TCP_FMT ": invalid pong\n", DEBUG_TCP_ARG(iph,l4));
+						consume_skb(skb);
+						return NF_STOLEN;
+					}
+
+					NATCAP_INFO("(SPI)" DEBUG_TCP_FMT ": get pong\n", DEBUG_TCP_ARG(iph,l4));
+
+					ns->n.foreign_seq = foreign_seq;
+					ns->ping.jiffies = jiffies;
+					ns->ping.stage = 0;
+					ns->ping.lock = 0;
+
+					consume_skb(skb);
+					return NF_STOLEN;
+				}
+			} else {
+				/* on server side, got ping syn */
+				if (dir == 0 && TCPH(l4)->syn) {
+					if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 16 + TCPOLEN_MSS)) {
+						return NF_ACCEPT;
+					}
+
+					NATCAP_INFO("(SPI)" DEBUG_TCP_FMT ": get ping syn\n", DEBUG_TCP_ARG(iph,l4));
+
+					/* XXX I just confirm it first  */
+					ret = nf_conntrack_confirm(skb);
+					if (ret != NF_ACCEPT) {
+						return ret;
+					}
+					skb_nfct_reset(skb);
+
+					iph = ip_hdr(skb);
+					l4 = (void *)iph + iph->ihl * 4;
+					iph->saddr = get_byte4(l4 + sizeof(struct tcphdr) + 4);
+					iph->daddr = get_byte4(l4 + sizeof(struct tcphdr) + 4 + 4);
+					TCPH(l4)->source = get_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4);
+					TCPH(l4)->dest = get_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2);
+
+					skb->len = iph->ihl * 4 + sizeof(struct udphdr);
+					iph->tot_len = htons(skb->len);
+					UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
+					UDPH(l4)->check = CSUM_MANGLED_0;
+					iph->protocol = IPPROTO_UDP;
+					skb->ip_summed = CHECKSUM_UNNECESSARY;
+					skb_rcsum_tcpudp(skb);
+
+					if (in)
+						net = dev_net(in);
+					else if (out)
+						net = dev_net(out);
+					ret = nf_conntrack_in_compat(net, pf, hooknum, skb);
+					if (ret != NF_ACCEPT) {
+						if (ret != NF_STOLEN)
+							consume_skb(skb);
+						return NF_STOLEN;
+					}
+					ct = nf_ct_get(skb, &ctinfo);
+					if (!ct) {
+						consume_skb(skb);
+						return NF_STOLEN;
+					}
+
+					nf_conntrack_get(&ct->ct_general);
+					master->master = ct;
+
+					ns = natcap_session_in(ct);
+					if (ns == NULL) {
+						NATCAP_WARN("(SPI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+						consume_skb(skb);
+						return NF_STOLEN;
+					}
+					if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
+						consume_skb(skb);
+						return NF_STOLEN;
+					}
+
+					NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": get ping syn [UDP]\n", DEBUG_UDP_ARG(iph,l4));
+
+					ns->n.foreign_seq = foreign_seq;
+
+					skb->len = iph->ihl * 4 + sizeof(struct tcphdr) + 16 + TCPOLEN_MSS;
+					iph->tot_len = htons(skb->len);
+					iph->protocol = IPPROTO_TCP;
+					iph->saddr = master->tuplehash[dir].tuple.dst.u3.ip;
+					iph->daddr = master->tuplehash[dir].tuple.src.u3.ip;
+					iph->ttl = 0x80;
+					iph->id = htons(jiffies);
+					iph->frag_off = 0x0;
+
+					TCPH(l4)->source = master->tuplehash[dir].tuple.dst.u.all;
+					TCPH(l4)->dest = master->tuplehash[dir].tuple.src.u.all;
+
+					TCPH(l4)->seq = htonl(ns->n.current_seq - 1);
+					TCPH(l4)->ack_seq = htonl(ns->n.foreign_seq);
+					tcp_flag_word(TCPH(l4)) = TCP_FLAG_SYN | TCP_FLAG_ACK;
+					TCPH(l4)->res1 = 0;
+					TCPH(l4)->doff = (sizeof(struct tcphdr) + 16 + TCPOLEN_MSS) / 4;
+					TCPH(l4)->window = htons(~(ntohs(iph->id) ^ ((ntohl(TCPH(l4)->seq) & 0xffff) | (ntohl(TCPH(l4)->ack_seq) & 0xffff))));
+					TCPH(l4)->check = 0;
+					TCPH(l4)->urg_ptr = 0;
+
+					set_byte1(l4 + sizeof(struct tcphdr), TCPOPT_NATCAP);
+					set_byte1(l4 + sizeof(struct tcphdr) + 1, 16);
+					set_byte2(l4 + sizeof(struct tcphdr) + 2, 0);
+					set_byte4(l4 + sizeof(struct tcphdr) + 4, ct->tuplehash[dir].tuple.src.u3.ip);
+					set_byte4(l4 + sizeof(struct tcphdr) + 4 + 4, ct->tuplehash[dir].tuple.dst.u3.ip);
+					set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4, ct->tuplehash[dir].tuple.src.u.all);
+					set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2, ct->tuplehash[dir].tuple.dst.u.all);
+					set_byte1(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2, TCPOPT_MSS);
+					set_byte1(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2 + 1, TCPOLEN_MSS);
+					set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2 + 1 + 1, ntohs(natcap_max_pmtu - 40));
+
+					ns->ping.saddr = iph->saddr;
+					ns->ping.daddr = iph->daddr;
+					ns->ping.source = TCPH(l4)->source;
+					ns->ping.dest = TCPH(l4)->dest;
+
+					skb->ip_summed = CHECKSUM_UNNECESSARY;
+					skb_rcsum_tcpudp(skb);
+
+					skb_nfct_reset(skb);
+					nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
+					master = nf_ct_get(skb, &ctinfo);
+					if (!master) {
+						consume_skb(skb);
+						return NF_STOLEN;
+					}
+					natcap_clone_timeout(master, ct);
+					ret = nf_conntrack_confirm(skb);
+					if (ret != NF_ACCEPT) {
+						if (ret != NF_STOLEN)
+							consume_skb(skb);
+						return NF_STOLEN;
+					}
+
+					//response syn ack.
+					skb_push(skb, (char *)iph - (char *)eth_hdr(skb));
+					if ((char *)iph - (char *)eth_hdr(skb) >= ETH_HLEN) {
+						unsigned char mac[ETH_ALEN];
+						memcpy(mac, eth_hdr(skb)->h_source, ETH_ALEN);
+						memcpy(eth_hdr(skb)->h_source, eth_hdr(skb)->h_dest, ETH_ALEN);
+						memcpy(eth_hdr(skb)->h_dest, mac, ETH_ALEN);
+					}
+					skb_nfct_reset(skb);
+					dev_queue_xmit(skb);
+					return NF_STOLEN;
+				}
+			}
+			NATCAP_WARN("(SPI)" DEBUG_TCP_FMT ": got UDP-to-TCP packet syn\n", DEBUG_TCP_ARG(iph,l4));
+			return NF_DROP;
 		} else {
 			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
 			return NF_ACCEPT;
@@ -1874,7 +2240,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 	if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_F_MAGIC) || get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_7_MAGIC)) {
 		int offlen;
-		int peer_ver = (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_7_MAGIC));
+		int ver = (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_7_MAGIC));
 
 		if (skb->len < iph->ihl * 4 + sizeof(struct tcphdr) + 8) {
 			return NF_ACCEPT;
@@ -1945,7 +2311,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
 			short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->n.status);
 		}
-		if (ns->peer_ver != peer_ver) ns->peer_ver = peer_ver;
+		if (ns->peer_ver != ver) ns->peer_ver = ver;
 
 		/* safe to set IPS_NATCAP_CFM here, this master only run in this hook */
 		if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {

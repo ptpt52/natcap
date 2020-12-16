@@ -530,7 +530,7 @@ static inline struct natcap_session *natcap_session_in(struct nf_conn *ct)
 }
 
 extern void natcap_clone_timeout(struct nf_conn *dst, struct nf_conn *src);
-extern int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m);
+extern int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m, struct sk_buff **ping_skb);
 
 extern int natcap_common_init(void);
 
