@@ -243,13 +243,38 @@ struct natcap_session {
 	};
 
 #define MAX_PEER_NUM 16
-	unsigned int peer_jiffies;
-	unsigned short peer_mark;
-	unsigned char peer_ver:1,
-	         peer_idx:7;
-	unsigned char peer_cnt:5,
-	         peer_req_cnt:3;
-	struct tuple3 peer_tuple3[MAX_PEER_NUM];
+	union {
+		struct {
+			unsigned int jiffies;
+			unsigned short mark;
+			unsigned char ver:1,
+			         idx:7;
+			unsigned char cnt:5,
+			         req_cnt:3;
+			struct tuple3 tuple3[MAX_PEER_NUM];
+		} peer;
+#define peer_jiffies peer.jiffies
+#define peer_mark peer.mark
+#define peer_ver peer.ver
+#define peer_idx peer.idx
+#define peer_cnt peer.cnt
+#define peer_req_cnt peer.req_cnt
+#define peer_tuple3 peer.tuple3
+		struct {
+			unsigned int jiffies;
+			unsigned short stage;
+			unsigned short pad; /* conflict with peer_ver */
+			__be32 saddr;
+			__be32 daddr;
+			__be16 source;
+			__be16 dest;
+
+			__be16 remote_source;
+			__be16 remote_dest;
+			__be32 remote_saddr;
+			__be32 remote_daddr;
+		} ping;
+	};
 };
 
 #define NATCAP_MAGIC 0x43415099

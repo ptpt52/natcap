@@ -1438,7 +1438,7 @@ void natcap_clone_timeout(struct nf_conn *dst, struct nf_conn *src)
 	}
 }
 
-int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m)
+int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m, struct sk_buff **ping_skb)
 {
 	struct nf_conn *ct, *ct2;
 	enum ip_conntrack_info ctinfo;
@@ -1480,6 +1480,13 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	TCPH(l4)->check = 0;
 	TCPH(l4)->urg_ptr = 0;
 
+	if (ns->ping.saddr) {
+		iph->saddr = ns->ping.saddr;
+		iph->daddr = ns->ping.daddr;
+		TCPH(l4)->source = ns->ping.source;
+		TCPH(l4)->dest = ns->ping.dest;
+	}
+
 	skb_rcsum_tcpudp(skb);
 
 	ns->n.current_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - sizeof(struct tcphdr);
@@ -1492,9 +1499,129 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 		return -EINVAL;
 	}
 	natcap_clone_timeout(ct2, ct);
+	if (!nf_ct_is_confirmed(ct2) && !ct2->master) {
+		nf_conntrack_get(&ct->ct_general);
+		ct2->master = ct;
+	}
 	ret = nf_conntrack_confirm(skb);
 	if (ret != NF_ACCEPT) {
 		return -EINVAL;
+	}
+
+	if (!TCPH(l4)->syn && m == 0 && ping_skb) {
+		if (ns->ping.stage == 0 && uintmindiff(ns->ping.jiffies, jiffies) < 3 * HZ) {
+			return 0;
+		}
+		if (ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) < 1 * HZ) {
+			return 0;
+		}
+		if (ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 3 * HZ) {
+			//timeout, ping syn
+			int offset, add_len;
+			offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + 16 + TCPOLEN_MSS - (skb_headlen(skb) + skb_tailroom(skb));
+			add_len = offset < 0 ? 0 : offset;
+			offset += skb_tailroom(skb);
+			*ping_skb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
+			if (!(*ping_skb)) {
+				NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+				return 0;
+			}
+			(*ping_skb)->tail += offset;
+			(*ping_skb)->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + 16 + TCPOLEN_MSS;
+
+			iph = ip_hdr(*ping_skb);
+			l4 = (void *)iph + iph->ihl * 4;
+
+			iph->tot_len = htons((*ping_skb)->len);
+			iph->protocol = IPPROTO_TCP;
+			iph->saddr = ns->ping.saddr ? ns->ping.saddr : iph->saddr;
+			iph->daddr = ns->ping.saddr ? ns->ping.daddr : iph->daddr;
+			iph->ttl = 0x80;
+			iph->id = htons(jiffies);
+			iph->frag_off = 0x0;
+
+			TCPH(l4)->source = (__be16)prandom_u32();
+			TCPH(l4)->dest = ns->ping.saddr ? ns->ping.dest : TCPH(l4)->dest;
+
+			TCPH(l4)->seq = ns->n.current_seq == 0 ? htonl(jiffies) : htonl(ns->n.current_seq);
+			TCPH(l4)->ack_seq = 0;
+			tcp_flag_word(TCPH(l4)) = TCP_FLAG_SYN;
+			TCPH(l4)->res1 = 0;
+			TCPH(l4)->doff = (sizeof(struct tcphdr) + 16 + TCPOLEN_MSS) / 4;
+			TCPH(l4)->window = htons(~(ntohs(iph->id) ^ ((ntohl(TCPH(l4)->seq) & 0xffff) | (ntohl(TCPH(l4)->ack_seq) & 0xffff))));
+			TCPH(l4)->check = 0;
+			TCPH(l4)->urg_ptr = 0;
+
+			set_byte1(l4 + sizeof(struct tcphdr), TCPOPT_NATCAP);
+			set_byte1(l4 + sizeof(struct tcphdr) + 1, 16);
+			set_byte2(l4 + sizeof(struct tcphdr) + 2, 0);
+			set_byte4(l4 + sizeof(struct tcphdr) + 4, ns->ping.remote_saddr);
+			set_byte4(l4 + sizeof(struct tcphdr) + 4 + 4, ns->ping.remote_daddr);
+			set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4, ns->ping.remote_source);
+			set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2, ns->ping.remote_dest);
+			set_byte1(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2, TCPOPT_MSS);
+			set_byte1(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2 + 1, TCPOLEN_MSS);
+			set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2 + 1 + 1, ntohs(natcap_max_pmtu - 40));
+
+			ns->n.current_seq = ntohl(TCPH(l4)->seq);
+			ns->ping.saddr = iph->saddr;
+			ns->ping.daddr = iph->daddr;
+			ns->ping.source = TCPH(l4)->source;
+			ns->ping.dest = TCPH(l4)->dest;
+
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+			skb_rcsum_tcpudp(*ping_skb);
+
+			ns->ping.stage = 0;
+			ns->ping.jiffies = jiffies;
+
+			NATCAP_WARN(DEBUG_FMT_PREFIX "ping: timeout new syn %pI4:%u->%pI4:%u tuple[%pI4:%u->%pI4:%u]\n", DEBUG_ARG_PREFIX,
+			             &iph->saddr, ntohs(TCPH(l4)->source), &iph->daddr, ntohs(TCPH(l4)->dest),
+				     &ns->ping.remote_saddr, ntohs(ns->ping.remote_source), &ns->ping.remote_daddr, ntohs(ns->ping.remote_dest));
+
+			nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, *ping_skb);
+			ct2 = nf_ct_get(*ping_skb, &ctinfo);
+			if (!ct || !ct2) {
+				consume_skb(*ping_skb);
+				*ping_skb = NULL;
+				return -EINVAL;
+			}
+			natcap_clone_timeout(ct2, ct);
+			if (!nf_ct_is_confirmed(ct2) && !ct2->master) {
+				nf_conntrack_get(&ct->ct_general);
+				ct2->master = ct;
+			}
+			ret = nf_conntrack_confirm(*ping_skb);
+			if (ret != NF_ACCEPT) {
+				consume_skb(*ping_skb);
+				*ping_skb = NULL;
+				return -EINVAL;
+			}
+			return 0;
+		}
+
+		//ping
+		if (ns->ping.stage == 0)
+			ns->ping.jiffies = jiffies;
+		ns->ping.stage = 1;
+		*ping_skb = skb_copy(skb, GFP_ATOMIC);
+		if ((*ping_skb) == NULL) {
+			NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+			return 0;
+		}
+
+		iph = ip_hdr(*ping_skb);
+		l4 = (void *)iph + iph->ihl * 4;
+		(*ping_skb)->len -= ntohs(iph->tot_len) - (iph->ihl * 4 + sizeof(struct tcphdr));
+		iph->tot_len = ntohs(iph->ihl * 4 + sizeof(struct tcphdr));
+		iph->id = jiffies;
+		TCPH(l4)->window = htons(~(ntohs(iph->id) ^ ((ntohl(TCPH(l4)->seq) & 0xffff) | (ntohl(TCPH(l4)->ack_seq) & 0xffff))));
+
+		skb_rcsum_tcpudp(*ping_skb);
+
+		NATCAP_INFO(DEBUG_FMT_PREFIX "ping: send %pI4:%u->%pI4:%u\n", DEBUG_ARG_PREFIX,
+		             &iph->saddr, ntohs(TCPH(l4)->source), &iph->daddr, ntohs(TCPH(l4)->dest));
+
 	}
 
 	return 0;
