@@ -1857,7 +1857,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			}
 			if (dir == 1) {
 				//on client side, try send ping
-				if ((ns->ping.stage == 0 && uintmindiff(ns->ping.jiffies, jiffies) > 3 * HZ) ||
+				if (((ns->n.foreign_seq / 1024) % 8 == 0) ||
+				        (ns->ping.stage == 0 && uintmindiff(ns->ping.jiffies, jiffies) > 3 * HZ) ||
 				        (ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 1 * HZ)) {
 					if (ns->ping.stage == 0)
 						ns->ping.jiffies = jiffies;

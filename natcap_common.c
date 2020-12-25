@@ -1510,10 +1510,9 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	}
 
 	if (!TCPH(l4)->syn && m == 0 && ping_skb) {
-		if (ns->ping.stage == 0 && uintmindiff(ns->ping.jiffies, jiffies) < 3 * HZ) {
-			return 0;
-		}
-		if (ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) < 1 * HZ) {
+		if (!(((ns->n.current_seq / 1024) % 8 == 0) ||
+		        (ns->ping.stage == 0 && uintmindiff(ns->ping.jiffies, jiffies) > 3 * HZ) ||
+		        (ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 1 * HZ))) {
 			return 0;
 		}
 		if (ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 3 * HZ) {
