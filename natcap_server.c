@@ -350,7 +350,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		nskb->len += 8;
-		set_byte4((void *)UDPH(ntcph) + 8, ns->peer_ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
+		set_byte4((void *)UDPH(ntcph) + 8, ns->peer.ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
 		niph->protocol = IPPROTO_UDP;
 		skb_rcsum_tcpudp(nskb);
 	}
@@ -451,7 +451,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		nskb->len += 8;
-		set_byte4((void *)UDPH(ntcph) + 8, ns->peer_ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
+		set_byte4((void *)UDPH(ntcph) + 8, ns->peer.ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
 		niph->protocol = IPPROTO_UDP;
 		skb_rcsum_tcpudp(nskb);
 	}
@@ -559,7 +559,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
 		nskb->len += 8;
-		set_byte4((void *)UDPH(ntcph) + 8, ns->peer_ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
+		set_byte4((void *)UDPH(ntcph) + 8, ns->peer.ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
 		niph->protocol = IPPROTO_UDP;
 		skb_rcsum_tcpudp(nskb);
 	}
@@ -1550,12 +1550,12 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			UDPH(l4)->check = CSUM_MANGLED_0;
 			skb->len += 8;
 			skb->tail += 8;
-			set_byte4((void *)UDPH(l4) + 8, ns->peer_ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
+			set_byte4((void *)UDPH(l4) + 8, ns->peer.ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
 			iph->protocol = IPPROTO_UDP;
 			skb->next = NULL;
 
-			if (nskb == NULL && ns->peer_ver == 1 && ns->peer_mark != 0xffff && ns->peer_req_cnt < 3 && uintmindiff(ns->peer_jiffies, jiffies) > 1*HZ ) {
-				ns->peer_jiffies = jiffies;
+			if (nskb == NULL && ns->peer.ver == 1 && ns->peer.mark != 0xffff && ns->peer.req_cnt < 3 && uintmindiff(ns->peer.jiffies, jiffies) > 1*HZ ) {
+				ns->peer.jiffies = jiffies;
 				pcskb = natcap_peer_ctrl_alloc(skb);
 				if (pcskb) {
 					iph = ip_hdr(pcskb);
@@ -1571,7 +1571,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 					pcskb->ip_summed = CHECKSUM_UNNECESSARY;
 					skb_rcsum_tcpudp(pcskb);
-					ns->peer_req_cnt++;
+					ns->peer.req_cnt++;
 
 					/* restore iph/l4 */
 					iph = ip_hdr(skb);
@@ -1579,21 +1579,21 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 				}
 			}
 
-			if (ns->peer_ver == 1 && ns->peer_mark) {
+			if (ns->peer.ver == 1 && ns->peer.mark) {
 				unsigned int i, idx;
 				for (i = 0; i < MAX_PEER_NUM; i++) {
-					idx = (i + ns->peer_idx) % MAX_PEER_NUM;
-					if (ns->peer_tuple3[idx].dip != 0 && short_test_bit(idx, &ns->peer_mark)) {
+					idx = (i + ns->peer.idx) % MAX_PEER_NUM;
+					if (ns->peer.tuple3[idx].dip != 0 && short_test_bit(idx, &ns->peer.mark)) {
 						struct nf_conntrack_tuple tuple;
 						struct nf_conntrack_tuple_hash *h;
 
-						ns->peer_idx = (idx + 1) % MAX_PEER_NUM;
+						ns->peer.idx = (idx + 1) % MAX_PEER_NUM;
 
 						memset(&tuple, 0, sizeof(tuple));
 						tuple.src.u3.ip = iph->saddr;
-						tuple.src.u.udp.port = ns->peer_tuple3[idx].sport;
-						tuple.dst.u3.ip = ns->peer_tuple3[idx].dip;
-						tuple.dst.u.udp.port = ns->peer_tuple3[idx].dport;
+						tuple.src.u.udp.port = ns->peer.tuple3[idx].sport;
+						tuple.dst.u3.ip = ns->peer.tuple3[idx].dip;
+						tuple.dst.u.udp.port = ns->peer.tuple3[idx].dport;
 						tuple.src.l3num = PF_INET;
 						tuple.dst.protonum = IPPROTO_UDP;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
@@ -1605,10 +1605,10 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 							ct = nf_ct_tuplehash_to_ctrack(h);
 							nf_ct_put(ct);
 						} else {
-							ns->peer_tuple3[idx].dip = 0;
-							ns->peer_tuple3[idx].dport = 0;
-							ns->peer_tuple3[idx].sport = 0;
-							short_clear_bit(idx, &ns->peer_mark);
+							ns->peer.tuple3[idx].dip = 0;
+							ns->peer.tuple3[idx].dport = 0;
+							ns->peer.tuple3[idx].sport = 0;
+							short_clear_bit(idx, &ns->peer.mark);
 							break;
 						}
 
@@ -1617,9 +1617,9 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 							iph = ip_hdr(dup_skb);
 							l4 = (void *)iph + iph->ihl * 4;
 
-							iph->daddr = ns->peer_tuple3[idx].dip;
-							UDPH(l4)->dest = ns->peer_tuple3[idx].dport;
-							UDPH(l4)->source = ns->peer_tuple3[idx].sport;
+							iph->daddr = ns->peer.tuple3[idx].dip;
+							UDPH(l4)->dest = ns->peer.tuple3[idx].dport;
+							UDPH(l4)->source = ns->peer.tuple3[idx].sport;
 							set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_8_MAGIC));
 
 							dup_skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -2311,13 +2311,13 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
 			short_set_bit(NS_NATCAP_TCPUDPENC_BIT, &ns->n.status);
 		}
-		if (ns->peer_ver != ver) ns->peer_ver = ver;
+		if (ns->peer.ver != ver) ns->peer.ver = ver;
 
 		/* safe to set IPS_NATCAP_CFM here, this master only run in this hook */
 		if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
 			nf_conntrack_get(&ct->ct_general);
 			master->master = ct;
-			ns->peer_jiffies = jiffies; //set peer_jiffies once init
+			ns->peer.jiffies = jiffies; //set peer.jiffies once init
 		}
 		return NF_ACCEPT;
 
@@ -2365,7 +2365,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			iph->saddr = iph->daddr;
 			UDPH(l4)->check = CSUM_MANGLED_0;
 
-			if (ns->peer_cnt == 0 && peer_multipath) {
+			if (ns->peer.cnt == 0 && peer_multipath) {
 				//lock once
 				if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 					__be32 ip;
@@ -2376,18 +2376,18 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						ip = peer_pub_ip[idx];
 						if (ip != 0 && ip != sip && ip != dip) {
 							for (j = 0; j < MAX_PEER_NUM && j < peer_multipath; j++)
-								if (ns->peer_tuple3[j].dip == ip)
+								if (ns->peer.tuple3[j].dip == ip)
 									break;
 
 							if (j == MAX_PEER_NUM || j == peer_multipath)
 								for (j = 0; j < MAX_PEER_NUM && j < peer_multipath; j++)
-									if (ns->peer_tuple3[j].dip == 0) {
-										ns->peer_cnt++;
-										ns->peer_tuple3[j].dip = ip;
-										ns->peer_tuple3[j].dport = htons(prandom_u32() % (65536 - 1024) + 1024);
-										ns->peer_tuple3[j].sport = htons(prandom_u32() % (65536 - 1024) + 1024);
+									if (ns->peer.tuple3[j].dip == 0) {
+										ns->peer.cnt++;
+										ns->peer.tuple3[j].dip = ip;
+										ns->peer.tuple3[j].dport = htons(prandom_u32() % (65536 - 1024) + 1024);
+										ns->peer.tuple3[j].sport = htons(prandom_u32() % (65536 - 1024) + 1024);
 										NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer%px select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
-										             ntohs(ns->peer_tuple3[j].sport), &ns->peer_tuple3[j].dip, ntohs(ns->peer_tuple3[j].dport), j);
+										             ntohs(ns->peer.tuple3[j].sport), &ns->peer.tuple3[j].dip, ntohs(ns->peer.tuple3[j].dport), j);
 										break;
 									}
 						}
@@ -2395,15 +2395,15 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 				}
 			}
 
-			if (ns->peer_cnt > 0) {
+			if (ns->peer.cnt > 0) {
 				int ret;
 				unsigned int i;
 				struct ethhdr *neth;
 				struct sk_buff *nskb;
 				for (i = 0; i < MAX_PEER_NUM; i++) {
-					if (ns->peer_tuple3[i].dip == 0)
+					if (ns->peer.tuple3[i].dip == 0)
 						break;
-					if (short_test_bit(i, &ns->peer_mark))
+					if (short_test_bit(i, &ns->peer.mark))
 						continue;
 
 					nskb = skb_copy(skb, GFP_ATOMIC);
@@ -2421,9 +2421,9 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					l4 = (void *)iph + iph->ihl * 4;
 
 					iph->id = htons(jiffies);
-					iph->daddr = ns->peer_tuple3[i].dip;
-					UDPH(l4)->dest = ns->peer_tuple3[i].dport;
-					UDPH(l4)->source = ns->peer_tuple3[i].sport;
+					iph->daddr = ns->peer.tuple3[i].dip;
+					UDPH(l4)->dest = ns->peer.tuple3[i].dport;
+					UDPH(l4)->source = ns->peer.tuple3[i].sport;
 					set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2, htons(i));
 
 					nskb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -2533,18 +2533,18 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					i = get_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2);
 					i = ntohs(i) % MAX_PEER_NUM;
 
-					if (!short_test_bit(i, &ns->peer_mark)) {
-						short_set_bit(i, &ns->peer_mark);
-						ns->peer_tuple3[i].dip = iph->saddr;
-						ns->peer_tuple3[i].dport = UDPH(l4)->source;
-						ns->peer_tuple3[i].sport = UDPH(l4)->dest;
-						ns->peer_cnt++;
-						NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4), i,
+					if (!short_test_bit(i, &ns->peer.mark)) {
+						short_set_bit(i, &ns->peer.mark);
+						ns->peer.tuple3[i].dip = iph->saddr;
+						ns->peer.tuple3[i].dport = UDPH(l4)->source;
+						ns->peer.tuple3[i].sport = UDPH(l4)->dest;
+						ns->peer.cnt++;
+						NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer.mark=0x%x\n", DEBUG_UDP_ARG(iph,l4), i,
 						            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 						            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
 						            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
 						            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
-						            ns->peer_mark);
+						            ns->peer.mark);
 					}
 
 					if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
@@ -2619,15 +2619,15 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 			i = get_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2);
 			i = ntohs(i) % MAX_PEER_NUM;
-			if (!short_test_bit(i, &ns->peer_mark) &&
-			        ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
-				short_set_bit(i, &ns->peer_mark);
-				NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer_mark=0x%x\n", DEBUG_UDP_ARG(iph,l4), i,
+			if (!short_test_bit(i, &ns->peer.mark) &&
+			        ns->peer.tuple3[i].dip == iph->saddr && ns->peer.tuple3[i].dport == UDPH(l4)->source && ns->peer.tuple3[i].sport == UDPH(l4)->dest) {
+				short_set_bit(i, &ns->peer.mark);
+				NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer.mark=0x%x\n", DEBUG_UDP_ARG(iph,l4), i,
 				            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 				            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
 				            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
 				            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
-				            ns->peer_mark);
+				            ns->peer.mark);
 			}
 
 			/* XXX I just confirm it first  */
@@ -2687,11 +2687,11 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (ns->peer_mark != 0xff)
+		if (ns->peer.mark != 0xff)
 			for (i = 0; i < MAX_PEER_NUM; i++)
-				if (!short_test_bit(i, &ns->peer_mark) &&
-				        ns->peer_tuple3[i].dip == iph->saddr && ns->peer_tuple3[i].dport == UDPH(l4)->source && ns->peer_tuple3[i].sport == UDPH(l4)->dest) {
-					short_set_bit(i, &ns->peer_mark);
+				if (!short_test_bit(i, &ns->peer.mark) &&
+				        ns->peer.tuple3[i].dip == iph->saddr && ns->peer.tuple3[i].dport == UDPH(l4)->source && ns->peer.tuple3[i].sport == UDPH(l4)->dest) {
+					short_set_bit(i, &ns->peer.mark);
 					break;
 				}
 
