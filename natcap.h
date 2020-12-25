@@ -253,18 +253,11 @@ struct natcap_session {
 			         req_cnt:3;
 			struct tuple3 tuple3[MAX_PEER_NUM];
 		} peer;
-#define peer_jiffies peer.jiffies
-#define peer_mark peer.mark
-#define peer_ver peer.ver
-#define peer_idx peer.idx
-#define peer_cnt peer.cnt
-#define peer_req_cnt peer.req_cnt
-#define peer_tuple3 peer.tuple3
 		struct {
 			unsigned int jiffies;
 			unsigned char stage;
 			unsigned char lock;
-			unsigned short pad; /* conflict with peer_ver */
+			unsigned short pad; /* conflict with peer.ver */
 			__be32 saddr;
 			__be32 daddr;
 			__be16 source;

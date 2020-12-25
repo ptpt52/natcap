@@ -1579,8 +1579,8 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 			ns->ping.jiffies = jiffies;
 
 			NATCAP_WARN(DEBUG_FMT_PREFIX "ping: timeout new syn %pI4:%u->%pI4:%u tuple[%pI4:%u->%pI4:%u]\n", DEBUG_ARG_PREFIX,
-			             &iph->saddr, ntohs(TCPH(l4)->source), &iph->daddr, ntohs(TCPH(l4)->dest),
-				     &ns->ping.remote_saddr, ntohs(ns->ping.remote_source), &ns->ping.remote_daddr, ntohs(ns->ping.remote_dest));
+			            &iph->saddr, ntohs(TCPH(l4)->source), &iph->daddr, ntohs(TCPH(l4)->dest),
+			            &ns->ping.remote_saddr, ntohs(ns->ping.remote_source), &ns->ping.remote_daddr, ntohs(ns->ping.remote_dest));
 
 			skb_nfct_reset(*ping_skb);
 			nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, *ping_skb);
@@ -1624,7 +1624,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 		skb_rcsum_tcpudp(*ping_skb);
 
 		NATCAP_INFO(DEBUG_FMT_PREFIX "ping: send %pI4:%u->%pI4:%u\n", DEBUG_ARG_PREFIX,
-		             &iph->saddr, ntohs(TCPH(l4)->source), &iph->daddr, ntohs(TCPH(l4)->dest));
+		            &iph->saddr, ntohs(TCPH(l4)->source), &iph->daddr, ntohs(TCPH(l4)->dest));
 
 	}
 
