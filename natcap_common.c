@@ -1515,7 +1515,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 		        (ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 1 * HZ))) {
 			return 0;
 		}
-		if (ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 3 * HZ) {
+		if ((ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 3 * HZ) || ns->ping.lock) {
 			//timeout, ping syn
 			int offset, add_len;
 			offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + 16 + TCPOLEN_MSS - (skb_headlen(skb) + skb_tailroom(skb));
@@ -1540,10 +1540,13 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 			iph->id = htons(jiffies);
 			iph->frag_off = 0x0;
 
-			TCPH(l4)->source = (__be16)prandom_u32();
+			if (ns->ping.lock == 0) {
+				ns->ping.jiffies = jiffies;
+				ns->ping.stage = 0;
+				ns->ping.lock = 1;
+				TCPH(l4)->source = htons(prandom_u32() % (65536 - 1024) + 1024);
+			}
 			TCPH(l4)->dest = ns->ping.saddr ? ns->ping.dest : TCPH(l4)->dest;
-
-			ns->ping.lock = 1;
 
 			TCPH(l4)->seq = htonl(ns->n.current_seq - 1);
 			TCPH(l4)->ack_seq = 0;
@@ -1573,9 +1576,6 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(*ping_skb);
-
-			ns->ping.stage = 0;
-			ns->ping.jiffies = jiffies;
 
 			NATCAP_WARN(DEBUG_FMT_PREFIX "ping: timeout new syn %pI4:%u->%pI4:%u tuple[%pI4:%u->%pI4:%u]\n", DEBUG_ARG_PREFIX,
 			            &iph->saddr, ntohs(TCPH(l4)->source), &iph->daddr, ntohs(TCPH(l4)->dest),
