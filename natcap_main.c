@@ -91,6 +91,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             "#    si_mask=0x%08x\n"
 		             "#    ni_mask=0x%08x\n"
 		             "#    ni_forward=%u\n"
+		             "#    udp_seq_lock=%u\n"
 		             "#    server_flow_stop=%u\n"
 		             "#    protocol=%u\n"
 		             "#    server_seed=%u\n"
@@ -140,6 +141,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             server_index_natcap_mask,
 		             natcap_ignore_mask,
 		             natcap_ignore_forward,
+			     natcap_udp_seq_lock,
 		             server_flow_stop,
 		             default_protocol,
 		             server_seed, auth_enabled,
@@ -400,6 +402,13 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		n = sscanf(data, "ni_forward=%u", &d);
 		if (n == 1) {
 			natcap_ignore_forward = d;
+			goto done;
+		}
+	} else if (strncmp(data, "udp_seq_lock=", 13) == 0) {
+		unsigned int d;
+		n = sscanf(data, "udp_seq_lock=%u", &d);
+		if (n == 1) {
+			natcap_udp_seq_lock = d;
 			goto done;
 		}
 	} else if (strncmp(data, "u_hash=", 7) == 0) {
