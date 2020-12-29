@@ -40,7 +40,8 @@
 #include "natcap_knock.h"
 #include "natcap_peer.h"
 
-unsigned int natcap_ignore_forward = 0;
+unsigned short natcap_udp_seq_lock = 0;
+unsigned short natcap_ignore_forward = 0;
 unsigned int natcap_ignore_mask = 0x00000000;
 unsigned int natcap_max_pmtu = 1440;
 
@@ -1479,6 +1480,10 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	TCPH(l4)->window = htons(ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xffff) ^ (ntohl(TCPH(l4)->ack_seq) & 0xffff));
 	TCPH(l4)->check = 0;
 	TCPH(l4)->urg_ptr = 0;
+	if (natcap_udp_seq_lock == 1 && (ns->ping.lock != 2 || TCPH(l4)->syn)) {
+		ns->ping.lock = 2;
+		TCPH(l4)->urg_ptr = __constant_htons(1);
+	}
 
 	if (ns->ping.saddr) {
 		iph->saddr = ns->ping.saddr;
@@ -1489,7 +1494,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 
 	skb_rcsum_tcpudp(skb);
 
-	if (!ns->ping.lock)
+	if (ns->ping.lock == 0 || TCPH(l4)->syn)
 		ns->n.current_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - sizeof(struct tcphdr);
 
 	ct = nf_ct_get(skb, &ctinfo);
@@ -1515,7 +1520,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 		        (ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 1 * HZ))) {
 			return 0;
 		}
-		if ((ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 3 * HZ) || ns->ping.lock) {
+		if ((ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 3 * HZ) || ns->ping.lock == 1) {
 			//timeout, ping syn
 			int offset, add_len;
 			offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + 16 + TCPOLEN_MSS - (skb_headlen(skb) + skb_tailroom(skb));

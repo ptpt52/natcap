@@ -1536,6 +1536,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xffff) ^ (ntohl(TCPH(l4)->ack_seq) & 0xffff)) ) {
 			int dir = CTINFO2DIR(ctinfo);
+			int lock_seq = (TCPH(l4)->syn && TCPH(l4)->urg_ptr == __constant_htons(1)) ? 1 : 0;
 			unsigned int tcphdr_len = TCPH(l4)->doff * 4;
 			unsigned int foreign_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - tcphdr_len + !!TCPH(l4)->syn;
 
@@ -1608,6 +1609,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			}
 
 			ns->n.foreign_seq = foreign_seq;
+			if (lock_seq)
+				ns->ping.lock = 2;
 
 			if (!master->master) {
 				nf_conntrack_get(&ct->ct_general);
@@ -1832,7 +1835,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					ns->n.foreign_seq = foreign_seq;
 					ns->ping.jiffies = jiffies;
 					ns->ping.stage = 0;
-					ns->ping.lock = 0;
+					if (ns->ping.lock == 1) ns->ping.lock = 0;
 
 					consume_skb(skb);
 					return NF_STOLEN;

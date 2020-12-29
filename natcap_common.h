@@ -83,7 +83,8 @@ static inline void natcap_tuple_to_ns(struct natcap_session *ns, const struct tu
 
 extern unsigned int peer_multipath;
 
-extern unsigned int natcap_ignore_forward;
+extern unsigned short natcap_udp_seq_lock;
+extern unsigned short natcap_ignore_forward;
 extern unsigned int natcap_ignore_mask;
 
 extern struct cone_nat_session *cone_nat_array;
