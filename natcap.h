@@ -445,4 +445,6 @@ static inline unsigned char ucharmindiff(unsigned char a, unsigned char b)
 
 #define MAX_IOCTL_LEN 256
 
+#define SEQ_PGSZ 4096
+
 #endif /* _NATCAP_H_ */
