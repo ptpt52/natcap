@@ -4733,7 +4733,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 
 	if ((*pos) == 0) {
 		n = snprintf(natcap_peer_ctl_buffer,
-		             PAGE_SIZE - 1,
+		             SEQ_PGSZ - 1,
 		             "# Info:\n"
 		             "#    local_target=%pI4:%u\n"
 		             "#    peer_conn_timeout=%us\n"
@@ -4774,7 +4774,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			spin_lock_bh(&ps->lock);
 			natcap_peer_ctl_buffer[0] = 0;
 			n = snprintf(natcap_peer_ctl_buffer,
-			             PAGE_SIZE - 1,
+			             SEQ_PGSZ - 1,
 			             "N[%pI4:%u] [AS %ds]\n"
 			             "    conn[%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u]\n",
 			             &ps->ip, ntohs(ps->map_port), ps->last_active != 0 ? (uintmindiff(ps->last_active, jiffies) + HZ / 2) / HZ : (-1),
@@ -4804,7 +4804,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			ue = peer_user_expect(user);
 			spin_lock_bh(&ue->lock);
 			n = snprintf(natcap_peer_ctl_buffer,
-			             PAGE_SIZE - 1,
+			             SEQ_PGSZ - 1,
 			             "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] pub=%d\n",
 			             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 			             &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1),
@@ -4823,7 +4823,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			}
 			natcap_peer_ctl_buffer[0] = 0;
 			n = snprintf(natcap_peer_ctl_buffer,
-			             PAGE_SIZE - 1,
+			             SEQ_PGSZ - 1,
 			             "peer=%pI4\n",
 			             &peer_pub_ip[(*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP]
 			            );
@@ -5055,7 +5055,7 @@ static int natcap_peer_open(struct inode *inode, struct file *file)
 
 	if (natcap_peer_ctl_buffer_use++ == 0)
 	{
-		natcap_peer_ctl_buffer = kmalloc(PAGE_SIZE, GFP_KERNEL);
+		natcap_peer_ctl_buffer = kmalloc(SEQ_PGSZ, GFP_KERNEL);
 		if (natcap_peer_ctl_buffer == NULL) {
 			natcap_peer_ctl_buffer_use--;
 			return -ENOMEM;

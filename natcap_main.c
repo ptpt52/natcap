@@ -71,7 +71,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 
 	if ((*pos) == 0) {
 		n = snprintf(natcap_ctl_buffer,
-		             PAGE_SIZE - 1,
+		             SEQ_PGSZ - 1,
 		             "# Version: %s\n"
 		             "# Usage:\n"
 		             "#    disabled=Number -- set disable/enable\n"
@@ -176,7 +176,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 
 		if (dst) {
 			n = snprintf(natcap_ctl_buffer,
-			             PAGE_SIZE - 1,
+			             SEQ_PGSZ - 1,
 			             "server %d " TUPLE_FMT "\n",
 			             x, TUPLE_ARG(dst));
 			natcap_ctl_buffer[n] = 0;
@@ -791,7 +791,7 @@ static int natcap_open(struct inode *inode, struct file *file)
 
 	if (natcap_ctl_buffer_use++ == 0)
 	{
-		natcap_ctl_buffer = kmalloc(PAGE_SIZE, GFP_KERNEL);
+		natcap_ctl_buffer = kmalloc(SEQ_PGSZ, GFP_KERNEL);
 		if (natcap_ctl_buffer == NULL) {
 			natcap_ctl_buffer_use--;
 			return -ENOMEM;
