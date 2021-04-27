@@ -47,16 +47,19 @@ C_cniplist.set: cniplist.set local.set
 
 ipset: cniplist.set C_cniplist.set cniplist6.set getflix.set hkiplist.orig.set
 
+ip.merge.txt:
+	wget -4 https://github.com/lionsoul2014/ip2region/raw/master/data/ip.merge.txt -O ip.merge.txt
+
+ipops.lua:
+	wget -4 https://raw.githubusercontent.com/x-wrt/com.x-wrt/master/lua-ipops/src/ipops.lua -O ipops.lua
+
 apnic.txt:
 	wget -4 https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest -O apnic.txt.tmp
 	@mv apnic.txt.tmp apnic.txt
 	@touch apnic.txt
 
-cniplist.orig.set: apnic.txt
-	cat apnic.txt | grep CN | grep ipv4 | cut -d\| -f4,5 >cniplist.txt.tmp
-	lua apnic.lua cniplist.txt.tmp | while read line; do $$line | grep -v deaggregate; done >cniplist.orig.set.tmp
-	@rm -f cniplist.txt.tmp
-	@mv cniplist.orig.set.tmp cniplist.orig.set
+cniplist.orig.set: cnip2cidr.lua ipops.lua ip.merge.txt
+	lua cnip2cidr.lua >cniplist.orig.set
 
 hkiplist.orig.set: apnic.txt
 	cat apnic.txt | grep HK | grep ipv4 | cut -d\| -f4,5 >hkiplist.txt.tmp
