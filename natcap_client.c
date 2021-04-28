@@ -4297,13 +4297,16 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 								iph->daddr = ip;
 								if (IP_SET_test_dst_ip(state, in, out, skb, "dnsdroplist") > 0 || IP_SET_test_dst_ip(state, in, out, skb, "cniplist") <= 0) {
 									iph->daddr = old_ip;
-									if ((!is_cn_domain && cn_domain) || (!cn_domain)) {
-										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is not cniplist ip = %pI4, drop\n",
-										            DEBUG_UDP_ARG(iph,l4), id, &ip);
-										return NF_DROP;
-									}
+									NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is not cniplist ip = %pI4, drop\n",
+									            DEBUG_UDP_ARG(iph,l4), id, &ip);
+									return NF_DROP;
 								}
 								iph->daddr = old_ip;
+								if (!is_cn_domain && cn_domain) {
+									NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is not cn_domain ip = %pI4, drop\n",
+									            DEBUG_UDP_ARG(iph,l4), id, &ip);
+									return NF_DROP;
+								}
 							}
 						} while (0);
 					}
