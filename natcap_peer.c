@@ -2702,7 +2702,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					goto sni_out;
 				}
 
-				cache_skb = peer_sni_to_syn(skb, pt->mode != PT_MODE_UDP ? pt->mss : peer_max_pmtu - 40);
+				cache_skb = peer_sni_to_syn(skb, pt->mode != PT_MODE_UDP ? (pt->mss < peer_max_pmtu - 40 ? pt->mss : peer_max_pmtu - 40) : peer_max_pmtu - 40);
 				if (cache_skb == NULL) {
 					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: peer_sni_to_syn failed\n", DEBUG_TCP_ARG(iph,l4));
 					spin_unlock_bh(&ue->lock);
@@ -4117,6 +4117,8 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 
 			if ((NS_PEER_TCPUDPENC & ns->p.status)) {
 				natcap_tcpmss_adjust(skb, TCPH(l4), -8, peer_max_pmtu - 40);
+			} else {
+				natcap_tcpmss_adjust(skb, TCPH(l4), 0, peer_max_pmtu - 40);
 			}
 		}
 		return NF_ACCEPT;
@@ -4187,6 +4189,8 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 
 			if ((NS_PEER_TCPUDPENC & ns->p.status)) {
 				natcap_tcpmss_adjust(skb, TCPH(l4), -8, peer_max_pmtu - 40);
+			} else {
+				natcap_tcpmss_adjust(skb, TCPH(l4), 0, peer_max_pmtu - 40);
 			}
 		}
 	} // end dir IP_CT_DIR_ORIGINAL
