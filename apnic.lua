@@ -1,23 +1,29 @@
 local args = {...}
-local js =  require("cjson")
 local ipops = require("ipops")
 
 local group = {}
-local ipranges = {}
+local rangeSet = {}
+
+local function get_parts_as_number(str)
+	local t = {}
+	for part in string.gmatch(str, "%d+") do
+		table.insert(t, tonumber(part, 10))
+	end
+	return t
+end
 
 for _, arg in ipairs(args) do
 	for line in io.lines(arg) do
-		local ip = ipops.get_parts_as_number(line)
+		local ip = get_parts_as_number(line)
 		if #ip == 5 then
 			local ips = (((ip[1] * 256 + ip[2]) * 256 + ip[3]) * 256 + ip[4])
 			local ipe = ips + ip[5] - 1
-			table.insert(ipranges, string.format("%s-%s", ipops.int2ipstr(ips), ipops.int2ipstr(ipe)))
+			rangeSet = ipops.rangeSet_add_range(rangeSet, {ips, ipe})
 		end
 	end
 end
 
-group = ipops.ipranges2ipgroup(ipranges)
-
-for i, range in pairs(group) do
-	print(string.format("ipcalc -r %s-%s", ipops.int2ipstr(range[1]), ipops.int2ipstr(range[2])))
+local ipcidrSet = ipops.rangeSet2ipcidrSet(rangeSet)
+for _, ipcidr in ipairs(ipcidrSet) do
+	print(ipcidr)
 end
