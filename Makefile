@@ -35,23 +35,25 @@ modules_clean:
 
 clean: modules_clean
 
-cniplist.set: cniplist.orig.set local.set
-	lua ipgroup_merge.lua cniplist.orig.set local.set | while read line; do $$line | grep -v deaggregate; done >cniplist.set.tmp
+cniplist.set: cniplist.orig.set local.set ipops.lua
+	lua ipgroup_merge.lua cniplist.orig.set local.set >cniplist.set.tmp
 	@mv cniplist.set.tmp cniplist.set
 
-C_cniplist.set: cniplist.set local.set
-	lua ipgroup_invert.lua cniplist.set | while read line; do $$line | grep -v deaggregate; done >C_cniplist.orig.set.tmp
-	lua ipgroup_merge.lua C_cniplist.orig.set.tmp local.set | while read line; do $$line | grep -v deaggregate; done >C_cniplist.set.tmp
+C_cniplist.set: cniplist.set local.set ipops.lua
+	lua ipgroup_invert.lua cniplist.set >C_cniplist.orig.set.tmp
+	lua ipgroup_merge.lua C_cniplist.orig.set.tmp local.set >C_cniplist.set.tmp
 	@mv C_cniplist.set.tmp C_cniplist.set
 	@rm -f C_cniplist.orig.set.tmp
 
 ipset: cniplist.set C_cniplist.set cniplist6.set getflix.set hkiplist.orig.set
 
 ip.merge.txt:
-	wget -4 https://github.com/lionsoul2014/ip2region/raw/master/data/ip.merge.txt -O ip.merge.txt
+	wget -4 https://github.com/lionsoul2014/ip2region/raw/master/data/ip.merge.txt -O ip.merge.txt.tmp
+	@mv ip.merge.txt.tmp ip.merge.txt
 
 ipops.lua:
-	wget -4 https://raw.githubusercontent.com/x-wrt/com.x-wrt/master/lua-ipops/src/ipops.lua -O ipops.lua
+	wget -4 https://raw.githubusercontent.com/x-wrt/com.x-wrt/master/lua-ipops/src/ipops.lua -O ipops.lua.tmp
+	@mv ipops.lua.tmp ipops.lua
 
 apnic.txt:
 	wget -4 https://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest -O apnic.txt.tmp
@@ -61,9 +63,9 @@ apnic.txt:
 cniplist.orig.set: cnip2cidr.lua ipops.lua ip.merge.txt
 	lua cnip2cidr.lua >cniplist.orig.set
 
-hkiplist.orig.set: apnic.txt
+hkiplist.orig.set: apnic.txt ipops.lua
 	cat apnic.txt | grep HK | grep ipv4 | cut -d\| -f4,5 >hkiplist.txt.tmp
-	lua apnic.lua hkiplist.txt.tmp | while read line; do $$line | grep -v deaggregate; done >hkiplist.orig.set.tmp
+	lua apnic.lua hkiplist.txt.tmp >hkiplist.orig.set.tmp
 	@rm -f hkiplist.txt.tmp
 	@mv hkiplist.orig.set.tmp hkiplist.orig.set
 

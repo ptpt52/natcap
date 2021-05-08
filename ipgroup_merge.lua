@@ -1,15 +1,16 @@
 local args = {...}
-local js =  require("cjson")
 local ipops = require("ipops")
 
-local group = {}
+local netStringSet = {}
 
 for _, arg in ipairs(args) do
 	for line in io.lines(arg) do
-		group = ipops.ipgroup_add(group, line)
+		table.insert(netStringSet, line)
 	end
 end
 
-for i, range in pairs(group) do
-	print(string.format("ipcalc -r %s-%s", ipops.int2ipstr(range[1]), ipops.int2ipstr(range[2])))
+local rangeSet = ipops.netStringSet2rangeSet(netStringSet)
+local ipcidrSet = ipops.rangeSet2ipcidrSet(rangeSet)
+for _, ipcidr in ipairs(ipcidrSet) do
+	print(ipcidr)
 end
