@@ -4,6 +4,11 @@ modprobe  nf_conntrack
 insmod ./natcap.ko
 wget https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf -O accelerated-domains.china.conf && \
 cat accelerated-domains.china.conf | cut -d\/ -f2 >accelerated-domains.china.raw.txt && {
+	cp accelerated-domains.china.raw.txt accelerated-domains.china.raw.txt.tmp && \
+	cat accelerated-domains.china.raw.txt.tmp | \
+		grep -v alibaba \
+	> accelerated-domains.china.raw.txt
+	rm -f accelerated-domains.china.raw.txt.tmp
 	echo cn_domain_clean >/dev/natcap_ctl
 	echo cn_domain_path=$(pwd)/accelerated-domains.china.raw.txt >/dev/natcap_ctl
 	echo cn_domain_dump=$(pwd)/accelerated-domains.china.raw.build >/dev/natcap_ctl
