@@ -4123,6 +4123,12 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			}
 		}
 
+		if (!pskb_may_pull(skb, skb->len)) {
+			return NF_ACCEPT;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+
 		do {
 			int i, pos;
 			unsigned int v;
