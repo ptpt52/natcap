@@ -4022,6 +4022,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		/* for UDP */
 		unsigned int ip = 0;
 		unsigned short id = 0;
+		struct natcap_session *ns = NULL;
 
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
 			return NF_DROP;
@@ -4105,6 +4106,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				//not DNS
 				return NF_ACCEPT;
 			}
+			ns = natcap_session_get(master);
 		} else {
 			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": got cfm\n", DEBUG_UDP_ARG(iph,l4));
@@ -4121,6 +4123,10 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				}
 				return NF_ACCEPT;
 			}
+			ns = natcap_session_get(ct);
+		}
+		if (NULL == ns) {
+			return NF_ACCEPT;
 		}
 
 		if (!pskb_may_pull(skb, skb->len)) {
@@ -4287,25 +4293,44 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 							if ((IPS_NATCAP & ct->status)) {
 								old_ip = iph->daddr;
 								iph->daddr = ip;
-								if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 && dns_proxy_drop) {
-									NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS is in cniplist ip = %pI4, ignore\n",
-									            DEBUG_UDP_ARG(iph,l4), id, &ip);
-									return NF_DROP;
+								if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) {
+									iph->daddr = old_ip;
+									if (dns_proxy_drop && !(NS_NATCAP_DNSDROP0 & ns->n.status)) {
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS is in cniplist ip = %pI4, drop\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+										short_set_bit(NS_NATCAP_DNSDROP1_BIT, &ns->n.status);
+										return NF_DROP;
+									} else {
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS is in cniplist ip = %pI4, ignore\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+									}
 								}
 								iph->daddr = old_ip;
 								if (is_cn_domain && cn_domain) {
-									NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS is cn_domain ip = %pI4, drop\n\n",
-									            DEBUG_UDP_ARG(iph,l4), id, &ip);
-									return NF_DROP;
+									if (!(NS_NATCAP_DNSDROP0 & ns->n.status)) {
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS is cn_domain ip = %pI4, drop\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+										short_set_bit(NS_NATCAP_DNSDROP1_BIT, &ns->n.status);
+										return NF_DROP;
+									} else {
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS is cn_domain ip = %pI4, ignore\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+									}
 								}
 							} else {
 								old_ip = iph->daddr;
 								iph->daddr = ip;
 								if (IP_SET_test_dst_ip(state, in, out, skb, "dnsdroplist") > 0 || IP_SET_test_dst_ip(state, in, out, skb, "cniplist") <= 0) {
 									iph->daddr = old_ip;
-									NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is not cniplist ip = %pI4, drop\n",
-									            DEBUG_UDP_ARG(iph,l4), id, &ip);
-									return NF_DROP;
+									if (!(NS_NATCAP_DNSDROP1 & ns->n.status)) {
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is not cniplist ip = %pI4, drop\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+										short_set_bit(NS_NATCAP_DNSDROP0_BIT, &ns->n.status);
+										return NF_DROP;
+									} else {
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is not cniplist ip = %pI4, ignore\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+									}
 								}
 								iph->daddr = old_ip;
 							}
