@@ -5,8 +5,9 @@ insmod ./natcap.ko
 wget https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf -O accelerated-domains.china.conf && \
 cat accelerated-domains.china.conf | cut -d\/ -f2 >accelerated-domains.china.raw.txt && {
 	cp accelerated-domains.china.raw.txt accelerated-domains.china.raw.txt.tmp && \
-	cat accelerated-domains.china.raw.txt.tmp | \
-		grep -v alibaba \
+	cat accelerated-domains.china.raw.txt.tmp \
+		| grep -v alibaba \
+		| grep -v rustdesk.com \
 	> accelerated-domains.china.raw.txt
 	rm -f accelerated-domains.china.raw.txt.tmp
 	echo cn_domain_clean >/dev/natcap_ctl
