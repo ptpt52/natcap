@@ -1891,25 +1891,25 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 			cns.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 			cns.port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port;
 			memcpy(&cone_nat_array[idx], &cns, sizeof(cns));
-		}
 
-		idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, iph->saddr) % 32768;
-		memcpy(&css, &cone_snat_array[idx], sizeof(css));
-		if ((css.wan_ip != iph->saddr || css.wan_port != UDPH(l4)->source) ||
-		        css.lan_ip != ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip ||
-		        css.lan_port != ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) {
+			idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, iph->saddr) % 32768;
+			memcpy(&css, &cone_snat_array[idx], sizeof(css));
+			if ((css.wan_ip != iph->saddr || css.wan_port != UDPH(l4)->source) ||
+			        css.lan_ip != ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip ||
+			        css.lan_port != ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) {
 
-			NATCAP_INFO("(CCO)" DEBUG_UDP_FMT ": update SNAT mapping from %pI4:%u=>%pI4:%u to %pI4:%u=>%pI4:%u\n", DEBUG_UDP_ARG(iph,l4),
-			            &css.lan_ip, ntohs(css.lan_port),
-			            &css.wan_ip, ntohs(css.wan_port),
-			            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port),
-			            &iph->saddr, ntohs(UDPH(l4)->source));
+				NATCAP_INFO("(CCO)" DEBUG_UDP_FMT ": update SNAT mapping from %pI4:%u=>%pI4:%u to %pI4:%u=>%pI4:%u\n", DEBUG_UDP_ARG(iph,l4),
+				            &css.lan_ip, ntohs(css.lan_port),
+				            &css.wan_ip, ntohs(css.wan_port),
+				            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port),
+				            &iph->saddr, ntohs(UDPH(l4)->source));
 
-			css.wan_ip = iph->saddr;
-			css.wan_port = UDPH(l4)->source;
-			css.lan_ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
-			css.lan_port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port;
-			memcpy(&cone_snat_array[idx], &css, sizeof(css));
+				css.wan_ip = iph->saddr;
+				css.wan_port = UDPH(l4)->source;
+				css.lan_ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
+				css.lan_port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port;
+				memcpy(&cone_snat_array[idx], &css, sizeof(css));
+			}
 		}
 	}
 

@@ -141,7 +141,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             server_index_natcap_mask,
 		             natcap_ignore_mask,
 		             natcap_ignore_forward,
-			     natcap_udp_seq_lock,
+		             natcap_udp_seq_lock,
 		             server_flow_stop,
 		             default_protocol,
 		             server_seed, auth_enabled,
