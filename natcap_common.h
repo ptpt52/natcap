@@ -91,6 +91,7 @@ extern struct cone_nat_session *cone_nat_array;
 extern struct cone_snat_session *cone_snat_array;
 
 void cone_nat_cleanup(void);
+void cone_nat_drop(__be32 iip, __be16 iport, __be32 eip, __be16 eport);
 
 #define NATCAP_MIN_PMTU 68
 #define NATCAP_MAX_PMTU 9000

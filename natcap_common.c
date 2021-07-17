@@ -1646,6 +1646,18 @@ void cone_nat_cleanup(void)
 		memset(cone_snat_array, 0, sizeof(struct cone_snat_session) * 32768);
 }
 
+void cone_nat_drop(__be32 iip, __be16 iport, __be32 eip, __be16 eport)
+{
+	if (cone_nat_array) {
+		int idx = ntohs(eport) % 65536;
+		memset(&cone_nat_array[idx], 0, sizeof(struct cone_nat_session));
+	}
+	if (cone_snat_array) {
+		int idx = cone_snat_hash(iip, iport, eip) % 32768;
+		memset(&cone_snat_array[idx], 0, sizeof(struct cone_snat_session));
+	}
+}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_common_cone_in_hook(unsigned int hooknum,
         struct sk_buff *skb,

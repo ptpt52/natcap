@@ -771,6 +771,28 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	} else if (strncmp(data, "cone_nat_clean", 14) == 0) {
 		cone_nat_cleanup();
 		goto done;
+	} else if (strncmp(data, "cone_nat_drop=", 14) == 0) {
+		unsigned int a[10];
+		n = sscanf(data, "cone_nat_drop=%u.%u.%u.%u:%u-%u.%u.%u.%u:%u",
+		           &a[0], &a[1], &a[2], &a[3], &a[4], &a[5], &a[6], &a[7], &a[8], &a[9]);
+		if ( (n == 10) &&
+		        (((a[0] & 0xff) == a[0]) &&
+		         ((a[1] & 0xff) == a[1]) &&
+		         ((a[2] & 0xff) == a[2]) &&
+		         ((a[3] & 0xff) == a[3]) &&
+		         ((a[4] & 0xffff) == a[4]) &&
+		         ((a[5] & 0xff) == a[5]) &&
+		         ((a[6] & 0xff) == a[6]) &&
+		         ((a[7] & 0xff) == a[7]) &&
+		         ((a[8] & 0xff) == a[8]) &&
+		         ((a[9] & 0xffff) == a[9])) ) {
+			__be32 iip = htonl((a[0]<<24)|(a[1]<<16)|(a[2]<<8)|(a[3]<<0));
+			__be16 iport = htons(a[4]);
+			__be32 eip = htonl((a[5]<<24)|(a[6]<<16)|(a[7]<<8)|(a[8]<<0));
+			__be16 eport = htons(a[9]);
+			cone_nat_drop(iip, iport, eip, eport);
+			goto done;
+		}
 	}
 
 	NATCAP_println("ignoring line[%s]", data);
