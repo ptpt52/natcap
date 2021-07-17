@@ -1931,7 +1931,11 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 		if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip != cns.ip ||
 		        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port != cns.port) {
 
-			if (cns.ip || cns.port) {
+			if ((cns.ip || cns.port)
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+			        && ushortmindiff(CONE_NAT_NOW, cns.u16_timestamp) < 300
+#endif
+			   ) {
 				NATCAP_WARN("(CCO)" DEBUG_UDP_FMT ": update mapping from %pI4:%u to %pI4:%u @port=%u\n", DEBUG_UDP_ARG(iph,l4),
 				            &cns.ip, ntohs(cns.port),
 				            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip,
@@ -1965,7 +1969,11 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 		        css.lan_ip != ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip ||
 		        css.lan_port != ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) {
 
-			if (css.lan_ip || css.wan_port) {
+			if ((css.lan_ip || css.wan_port)
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+			        && uintmindiff(CONE_NAT_NOW, css.u32_timestamp) < 300
+#endif
+			   ) {
 				NATCAP_WARN("(CCO)" DEBUG_UDP_FMT ": update SNAT mapping from %pI4:%u=>%pI4:%u to %pI4:%u=>%pI4:%u\n", DEBUG_UDP_ARG(iph,l4),
 				            &css.lan_ip, ntohs(css.lan_port),
 				            &css.wan_ip, ntohs(css.wan_port),
