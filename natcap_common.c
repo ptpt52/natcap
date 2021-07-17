@@ -1658,6 +1658,31 @@ void cone_nat_drop(__be32 iip, __be16 iport, __be32 eip, __be16 eport)
 	}
 }
 
+#define CONE_NAT_NOW (jiffies / HZ)
+
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+static int cone_nat_check_used_fn(__be32 iip, __be16 iport, __be32 eip, __be16 eport)
+{
+	struct cone_nat_session cns;
+	struct cone_snat_session css;
+	int idx;
+
+	idx = ntohs(eport) % 65536;
+	memcpy(&cns, &cone_nat_array[idx], sizeof(cns));
+	if (cns.port && ushortmindiff(CONE_NAT_NOW, cns.u16_timestamp) < 300) {
+		return 1;
+	}
+
+	idx = cone_snat_hash(iip, iport, eip) % 32768;
+	memcpy(&css, &cone_snat_array[idx], sizeof(css));
+	if (css.lan_ip && (css.lan_ip != iip || css.lan_port != iport) && uintmindiff(CONE_NAT_NOW, css.u32_timestamp) < 300) {
+		return 1;
+	}
+
+	return 0;
+}
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_common_cone_in_hook(unsigned int hooknum,
         struct sk_buff *skb,
@@ -1702,6 +1727,8 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	struct iphdr *iph;
 	void *l4;
 	struct cone_nat_session cns;
+	struct cone_snat_session css;
+	unsigned cns_idx, css_idx;
 
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_UDP) {
@@ -1752,13 +1779,23 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
-		memcpy(&cns, &cone_nat_array[ntohs(UDPH(l4)->dest)], sizeof(cns));
-		if (cns.ip != 0 && cns.port != 0) {
+		cns_idx = ntohs(UDPH(l4)->dest);
+		memcpy(&cns, &cone_nat_array[cns_idx], sizeof(cns));
+		css_idx = cone_snat_hash(cns.ip, cns.port, iph->daddr) % 32768;
+		memcpy(&css, &cone_snat_array[css_idx], sizeof(css));
+		if (cns.ip != 0 && cns.port != 0 && cns.ip == css.lan_ip && cns.port == css.lan_port && css.wan_ip == iph->daddr && css.wan_port == UDPH(l4)->dest) {
 			if (natcap_dnat_setup(ct, cns.ip, cns.port) != NF_ACCEPT) {
 				NATCAP_ERROR("(CCI)" DEBUG_UDP_FMT ": do mapping failed, target=%pI4:%u @port=%u\n",
 				             DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
 				return NF_ACCEPT;
 			}
+
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+			cns.u16_timestamp = CONE_NAT_NOW;
+			memcpy(&cone_nat_array[cns_idx], &cns, sizeof(cns));
+			css.u32_timestamp = CONE_NAT_NOW;
+			memcpy(&cone_snat_array[css_idx], &css, sizeof(css));
+#endif
 
 			NATCAP_INFO("(CCI)" DEBUG_UDP_FMT ": do mapping, target=%pI4:%u @port=%u\n",
 			            DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
@@ -1910,8 +1947,17 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 
 			cns.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 			cns.port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port;
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+			cns.u16_timestamp = CONE_NAT_NOW;
+#endif
 			memcpy(&cone_nat_array[idx], &cns, sizeof(cns));
 		}
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+		if (ushortmindiff(CONE_NAT_NOW, cns.u16_timestamp) > 10) {
+			cns.u16_timestamp = CONE_NAT_NOW;
+			memcpy(&cone_nat_array[idx], &cns, sizeof(cns));
+		}
+#endif
 
 		idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, iph->saddr) % 32768;
 		memcpy(&css, &cone_snat_array[idx], sizeof(css));
@@ -1938,8 +1984,17 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 			css.wan_port = UDPH(l4)->source;
 			css.lan_ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 			css.lan_port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port;
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+			css.u32_timestamp = CONE_NAT_NOW;
+#endif
 			memcpy(&cone_snat_array[idx], &css, sizeof(css));
 		}
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+		if (uintmindiff(CONE_NAT_NOW, css.u32_timestamp) > 10) {
+			css.u32_timestamp = CONE_NAT_NOW;
+			memcpy(&cone_nat_array[idx], &css, sizeof(css));
+		}
+#endif
 	}
 
 	return NF_ACCEPT;
@@ -2097,7 +2152,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 
 	if (cone_nat_array && cone_snat_array && IP_SET_test_src_ipport(state, in, out, skb, "cone_nat_unused_dst") <= 0) {
 		int ret;
-		unsigned int idx;
+		unsigned int css_idx, cns_idx;
 		const struct rtable *rt;
 		__be32 newsrc, nh;
 		struct cone_nat_session cns;
@@ -2111,13 +2166,13 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
-		idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, newsrc) % 32768;
-		memcpy(&css, &cone_snat_array[idx], sizeof(css));
+		css_idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, newsrc) % 32768;
+		memcpy(&css, &cone_snat_array[css_idx], sizeof(css));
 		if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip == css.lan_ip &&
 		        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port == css.lan_port &&
 		        css.wan_ip == newsrc && css.wan_port != 0) {
-			idx = ntohs(css.wan_port) % 65536;
-			memcpy(&cns, &cone_nat_array[idx], sizeof(cns));
+			cns_idx = ntohs(css.wan_port) % 65536;
+			memcpy(&cns, &cone_nat_array[cns_idx], sizeof(cns));
 			if (__IP_SET_test_src_port(state, in, out, skb, "cone_nat_unused_port", &UDPH(l4)->source, css.wan_port) <= 0 &&
 			        cns.ip == css.lan_ip && cns.port == css.lan_port) {
 				__be32 oldip;
@@ -2131,6 +2186,14 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 					if (ret != NF_ACCEPT) {
 						NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": natcap_snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
 					}
+
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+					cns.u16_timestamp = CONE_NAT_NOW;
+					memcpy(&cone_nat_array[cns_idx], &cns, sizeof(cns));
+					css.u32_timestamp = CONE_NAT_NOW;
+					memcpy(&cone_nat_array[css_idx], &css, sizeof(css));
+#endif
+
 				} else {
 					iph->saddr = oldip;
 				}
@@ -2218,6 +2281,10 @@ int natcap_common_init(void)
 		goto err_nf_register_hooks;
 	}
 
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+	cone_nat_check_used = cone_nat_check_used_fn;
+#endif
+
 	return 0;
 
 	nf_unregister_hooks(common_hooks, ARRAY_SIZE(common_hooks));
@@ -2232,6 +2299,12 @@ err_alloc_cone_nat_array:
 void natcap_common_exit(void)
 {
 	int i;
+
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+	cone_nat_check_used = NULL;
+	synchronize_rcu();
+#endif
+
 	nf_unregister_hooks(common_hooks, ARRAY_SIZE(common_hooks));
 
 	if (cone_nat_array) {

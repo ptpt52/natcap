@@ -155,6 +155,9 @@ struct natcap_TCPOPT {
 struct cone_nat_session {
 	__be32 ip;
 	__be16 port;
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+	unsigned short u16_timestamp;
+#endif
 };
 
 struct cone_snat_session {
@@ -162,6 +165,9 @@ struct cone_snat_session {
 	__be32 wan_ip;
 	__be16 lan_port;
 	__be16 wan_port;
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+	unsigned int u32_timestamp;
+#endif
 };
 
 #pragma pack(pop)
