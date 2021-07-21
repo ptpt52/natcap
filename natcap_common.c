@@ -1653,8 +1653,18 @@ void cone_nat_drop(__be32 iip, __be16 iport, __be32 eip, __be16 eport)
 		memset(&cone_nat_array[idx], 0, sizeof(struct cone_nat_session));
 	}
 	if (cone_snat_array) {
+		int idx_cnt = 8;
 		int idx = cone_snat_hash(iip, iport, eip) % 32768;
-		memset(&cone_snat_array[idx], 0, sizeof(struct cone_snat_session));
+		struct cone_snat_session css;
+
+		while (idx_cnt-- != 0) {
+			memcpy(&css, &cone_snat_array[idx], sizeof(css));
+			if (css.lan_ip == iip && css.lan_port == iport && css.wan_ip == eip) {
+				memset(&cone_snat_array[idx], 0, sizeof(struct cone_snat_session));
+				break;
+			}
+			idx = (idx + 1) % 32768;
+		}
 	}
 }
 
@@ -1665,7 +1675,8 @@ static int cone_nat_check_used_fn(__be32 iip, __be16 iport, __be32 eip, __be16 e
 {
 	struct cone_nat_session cns;
 	struct cone_snat_session css;
-	int idx;
+	unsigned int idx;
+	int idx_cnt = 8;
 
 	idx = ntohs(eport) % 65536;
 	memcpy(&cns, &cone_nat_array[idx], sizeof(cns));
@@ -1674,12 +1685,15 @@ static int cone_nat_check_used_fn(__be32 iip, __be16 iport, __be32 eip, __be16 e
 	}
 
 	idx = cone_snat_hash(iip, iport, eip) % 32768;
-	memcpy(&css, &cone_snat_array[idx], sizeof(css));
-	if (css.lan_ip && (css.lan_ip != iip || css.lan_port != iport) && uintmindiff(CONE_NAT_NOW, css.u32_timestamp) < 300) {
-		return 1;
+	while (idx_cnt-- != 0) {
+		memcpy(&css, &cone_snat_array[idx], sizeof(css));
+		if (!css.lan_ip || (css.lan_ip == iip && css.lan_port == iport) || uintmindiff(CONE_NAT_NOW, css.u32_timestamp) > 300) {
+			return 0;
+		}
+		idx = (idx + 1) % 32768;
 	}
 
-	return 0;
+	return 1;
 }
 #endif
 
@@ -1774,6 +1788,8 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 
 	if (cone_nat_array && cone_snat_array &&
 	        IP_SET_test_dst_ip(state, in, out, skb, "cone_wan_ip") > 0) {
+		int idx_cnt;
+
 		if (IP_SET_test_dst_port(state, in, out, skb, "cone_nat_unused_port") > 0 &&
 		        !is_natcap_server(iph->saddr)) {
 			return NF_ACCEPT;
@@ -1782,26 +1798,32 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 		cns_idx = ntohs(UDPH(l4)->dest);
 		memcpy(&cns, &cone_nat_array[cns_idx], sizeof(cns));
 		css_idx = cone_snat_hash(cns.ip, cns.port, iph->daddr) % 32768;
-		memcpy(&css, &cone_snat_array[css_idx], sizeof(css));
-		if (cns.ip != 0 && cns.port != 0 && cns.ip == css.lan_ip && cns.port == css.lan_port && css.wan_ip == iph->daddr && css.wan_port == UDPH(l4)->dest) {
-			if (natcap_dnat_setup(ct, cns.ip, cns.port) != NF_ACCEPT) {
-				NATCAP_ERROR("(CCI)" DEBUG_UDP_FMT ": do mapping failed, target=%pI4:%u @port=%u\n",
-				             DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
-				return NF_ACCEPT;
-			}
+		idx_cnt = 8;
+		while (idx_cnt-- != 0) {
+			memcpy(&css, &cone_snat_array[css_idx], sizeof(css));
+			if (cns.ip != 0 && cns.port != 0 && cns.ip == css.lan_ip && cns.port == css.lan_port && css.wan_ip == iph->daddr && css.wan_port == UDPH(l4)->dest) {
+				if (natcap_dnat_setup(ct, cns.ip, cns.port) != NF_ACCEPT) {
+					NATCAP_ERROR("(CCI)" DEBUG_UDP_FMT ": do mapping failed, target=%pI4:%u @port=%u\n",
+					             DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
+					return NF_ACCEPT;
+				}
 
 #if defined(CONE_NAT_CHECK_USED_HOOK)
-			cns.u16_timestamp = CONE_NAT_NOW;
-			memcpy(&cone_nat_array[cns_idx], &cns, sizeof(cns));
-			css.u32_timestamp = CONE_NAT_NOW;
-			memcpy(&cone_snat_array[css_idx], &css, sizeof(css));
+				cns.u16_timestamp = CONE_NAT_NOW;
+				memcpy(&cone_nat_array[cns_idx], &cns, sizeof(cns));
+				css.u32_timestamp = CONE_NAT_NOW;
+				memcpy(&cone_snat_array[css_idx], &css, sizeof(css));
 #endif
 
-			NATCAP_INFO("(CCI)" DEBUG_UDP_FMT ": do mapping, target=%pI4:%u @port=%u\n",
-			            DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
+				NATCAP_INFO("(CCI)" DEBUG_UDP_FMT ": do mapping, target=%pI4:%u @port=%u\n",
+				            DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
 
-			set_bit(IPS_NATCAP_CONE_BIT, &ct->status);
-			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+				set_bit(IPS_NATCAP_CONE_BIT, &ct->status);
+				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+
+				return NF_ACCEPT;
+			}
+			css_idx = (css_idx + 1) % 32768;
 		}
 	}
 
@@ -1924,7 +1946,9 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 	        ((IPS_NATCAP & ct->status) ||
 	         (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip != iph->saddr &&
 	          IP_SET_test_src_ip(state, in, out, skb, "cone_wan_ip") > 0))) {
-		unsigned int idx;
+		unsigned int idx, css_idx;
+		unsigned int max_uint_diff;
+		int idx_cnt;
 
 		idx = ntohs(UDPH(l4)->source) % 65536;
 		memcpy(&cns, &cone_nat_array[idx], sizeof(cns));
@@ -1964,11 +1988,27 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 #endif
 
 		idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, iph->saddr) % 32768;
+		css_idx = idx;
+		max_uint_diff = 0;
+		idx_cnt = 8;
+		while (idx_cnt-- != 0) {
+			memcpy(&css, &cone_snat_array[idx], sizeof(css));
+			if (css.wan_ip == iph->saddr && css.wan_port == UDPH(l4)->source &&
+			        css.lan_ip == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip &&
+			        css.lan_port == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) {
+				max_uint_diff = 0;
+				css_idx = idx;
+				break;
+			}
+			if (max_uint_diff < uintmindiff(CONE_NAT_NOW, css.u32_timestamp)) {
+				max_uint_diff = uintmindiff(CONE_NAT_NOW, css.u32_timestamp);
+				css_idx = idx;
+			}
+			idx = (idx + 1) % 32768;
+		}
+		idx = css_idx;
 		memcpy(&css, &cone_snat_array[idx], sizeof(css));
-		if ((css.wan_ip != iph->saddr || css.wan_port != UDPH(l4)->source) ||
-		        css.lan_ip != ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip ||
-		        css.lan_port != ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) {
-
+		if (max_uint_diff != 0) {
 			if ((css.lan_ip || css.wan_port)
 #if defined(CONE_NAT_CHECK_USED_HOOK)
 			        && uintmindiff(CONE_NAT_NOW, css.u32_timestamp) < 300
@@ -2160,6 +2200,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 
 	if (cone_nat_array && cone_snat_array && IP_SET_test_src_ipport(state, in, out, skb, "cone_nat_unused_dst") <= 0) {
 		int ret;
+		int idx_cnt;
 		unsigned int css_idx, cns_idx;
 		const struct rtable *rt;
 		__be32 newsrc, nh;
@@ -2175,37 +2216,42 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 		}
 
 		css_idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, newsrc) % 32768;
-		memcpy(&css, &cone_snat_array[css_idx], sizeof(css));
-		if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip == css.lan_ip &&
-		        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port == css.lan_port &&
-		        css.wan_ip == newsrc && css.wan_port != 0) {
-			cns_idx = ntohs(css.wan_port) % 65536;
-			memcpy(&cns, &cone_nat_array[cns_idx], sizeof(cns));
-			if (__IP_SET_test_src_port(state, in, out, skb, "cone_nat_unused_port", &UDPH(l4)->source, css.wan_port) <= 0 &&
-			        cns.ip == css.lan_ip && cns.port == css.lan_port) {
-				__be32 oldip;
+		idx_cnt = 8;
+		while (idx_cnt-- != 0) {
+			memcpy(&css, &cone_snat_array[css_idx], sizeof(css));
+			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip == css.lan_ip &&
+			        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port == css.lan_port &&
+			        css.wan_ip == newsrc && css.wan_port != 0) {
+				cns_idx = ntohs(css.wan_port) % 65536;
+				memcpy(&cns, &cone_nat_array[cns_idx], sizeof(cns));
+				if (__IP_SET_test_src_port(state, in, out, skb, "cone_nat_unused_port", &UDPH(l4)->source, css.wan_port) <= 0 &&
+				        cns.ip == css.lan_ip && cns.port == css.lan_port) {
+					__be32 oldip;
 
-				oldip = iph->saddr;
-				iph->saddr = css.wan_ip;
-				if (IP_SET_test_src_ip(state, in, out, skb, "cone_wan_ip") > 0) {
-					iph->saddr = oldip;
-					NATCAP_INFO("(CCS)" DEBUG_UDP_FMT ": SNAT to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &css.wan_ip, ntohs(css.wan_port));
-					ret = natcap_snat_setup(ct, css.wan_ip, css.wan_port);
-					if (ret != NF_ACCEPT) {
-						NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": natcap_snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
-					}
+					oldip = iph->saddr;
+					iph->saddr = css.wan_ip;
+					if (IP_SET_test_src_ip(state, in, out, skb, "cone_wan_ip") > 0) {
+						iph->saddr = oldip;
+						NATCAP_INFO("(CCS)" DEBUG_UDP_FMT ": SNAT to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &css.wan_ip, ntohs(css.wan_port));
+						ret = natcap_snat_setup(ct, css.wan_ip, css.wan_port);
+						if (ret != NF_ACCEPT) {
+							NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": natcap_snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
+						}
 
 #if defined(CONE_NAT_CHECK_USED_HOOK)
-					cns.u16_timestamp = CONE_NAT_NOW;
-					memcpy(&cone_nat_array[cns_idx], &cns, sizeof(cns));
-					css.u32_timestamp = CONE_NAT_NOW;
-					memcpy(&cone_nat_array[css_idx], &css, sizeof(css));
+						cns.u16_timestamp = CONE_NAT_NOW;
+						memcpy(&cone_nat_array[cns_idx], &cns, sizeof(cns));
+						css.u32_timestamp = CONE_NAT_NOW;
+						memcpy(&cone_nat_array[css_idx], &css, sizeof(css));
 #endif
 
-				} else {
-					iph->saddr = oldip;
+					} else {
+						iph->saddr = oldip;
+					}
+					return NF_ACCEPT;
 				}
 			}
+			css_idx = (css_idx + 1) % 32768;
 		}
 	}
 
