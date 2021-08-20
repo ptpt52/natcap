@@ -1682,6 +1682,11 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 	if (ops == NULL) {
 		header_len += 16; //for timestamp
 	}
+	/* change connection if route/path changed */
+	if (user != NULL && user->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip != oiph->saddr) {
+		nf_ct_put(ps->port_map[pmi]);
+		user = ps->port_map[pmi] = NULL;
+	}
 	/* change connection in every 512s */
 	if ((jiffies / HZ) % 512 == 0 && user != NULL) {
 		nf_ct_put(ps->port_map[pmi]);
