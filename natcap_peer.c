@@ -71,6 +71,9 @@ __be32 peer_pub_ip[PEER_PUB_NUM];
 unsigned int peer_pub_active[PEER_PUB_NUM];
 unsigned int peer_pub_idx = 0;
 
+static struct natcap_fastpath_route peer_fastpath_route[MAX_PEER_NUM];
+struct natcap_fastpath_route *natcap_pfr = peer_fastpath_route;
+
 static inline void peer_cache_init(void)
 {
 	spin_lock_bh(&peer_cache_lock);
@@ -3643,6 +3646,24 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	}
 	skb_nfct_reset(skb);
 
+	if ((skb->mark & 0x3f00)) {
+		struct natcap_fastpath_route *pfr;
+		int line = (skb->mark & 0x3f00) >> 8;
+		if (line >= 1 && line <= MAX_PEER_NUM) {
+			line--;
+			pfr = &natcap_pfr[line];
+
+			if (pfr->saddr != iph->saddr || pfr->rt_out_magic != rt_out_magic || pfr->rt_out.outdev != skb->dev) {
+				pfr->saddr = iph->saddr;
+				pfr->rt_out.l2_head_len = (char *)iph - (char *)eth_hdr(skb);
+				memcpy(pfr->rt_out.l2_head, (char *)eth_hdr(skb), (char *)iph - (char *)eth_hdr(skb));
+				pfr->rt_out.outdev = skb->dev;
+				pfr->rt_out_magic = rt_out_magic;
+			}
+			//printk("line %d outdev=%s saddr=%pI4\n", line, skb->dev->name, &iph->saddr);
+		}
+	}
+
 	NATCAP_DEBUG("(PPO)" DEBUG_ICMP_FMT ": ping out\n", DEBUG_ICMP_ARG(iph,l4));
 	nskb = natcap_peer_ping_send(skb, NULL, NULL, 0, 0);
 	if (nskb != NULL) {
@@ -4839,6 +4860,25 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			natcap_peer_ctl_buffer[n] = 0;
 			return natcap_peer_ctl_buffer;
 		}
+
+		while ((*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP - PEER_PUB_NUM < MAX_PEER_NUM) {
+			struct natcap_fastpath_route *pfr = &natcap_pfr[(*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP - PEER_PUB_NUM];
+
+			if (pfr->rt_out_magic != rt_out_magic || pfr->rt_out.outdev == NULL) {
+				(*pos)++;
+				continue;
+			}
+			natcap_peer_ctl_buffer[0] = 0;
+			n = snprintf(natcap_peer_ctl_buffer,
+			             SEQ_PGSZ - 1,
+			             "PFR=%u outdev=%s saddr=%pI4\n",
+				     (unsigned int)((*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP - PEER_PUB_NUM),
+				     pfr->rt_out.outdev->name,
+				     &pfr->saddr
+			            );
+			natcap_peer_ctl_buffer[n] = 0;
+			return natcap_peer_ctl_buffer;
+		}
 	}
 
 	return NULL;
@@ -5144,6 +5184,8 @@ int natcap_peer_init(void)
 	int ret = 0;
 
 	need_conntrack();
+
+	memset(natcap_pfr, 0, sizeof(natcap_pfr[0]) * MAX_PEER_NUM);
 
 	if (mode != CLIENT_MODE) {
 		default_mac_addr_init();
