@@ -71,8 +71,17 @@ __be32 peer_pub_ip[PEER_PUB_NUM];
 unsigned int peer_pub_active[PEER_PUB_NUM];
 unsigned int peer_pub_idx = 0;
 
+static unsigned int rt_out_magic = 0;
+
 static struct natcap_fastpath_route peer_fastpath_route[MAX_PEER_NUM];
 struct natcap_fastpath_route *natcap_pfr = peer_fastpath_route;
+
+int is_fastpath_route_ready(struct natcap_fastpath_route *pfr)
+{
+	return (!pfr->is_dead &&
+	        pfr->rt_out_magic == rt_out_magic &&
+	        pfr->rt_out.outdev != NULL);
+}
 
 static inline void peer_cache_init(void)
 {
@@ -179,8 +188,6 @@ static inline void peer_cache_cleanup(void)
 	}
 	spin_unlock_bh(&peer_cache_lock);
 }
-
-static unsigned int rt_out_magic = 0;
 
 static int peer_stop = 1;
 
@@ -3661,6 +3668,12 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 				pfr->rt_out_magic = rt_out_magic;
 			}
 			//printk("line %d outdev=%s saddr=%pI4\n", line, skb->dev->name, &iph->saddr);
+			if (iph->daddr == PEER_DEAD_ADDR) { /* PEER_DEAD_ADDR = 13.14.10.13 dead */
+				pfr->is_dead = 1;
+				goto out;
+			} else {
+				pfr->is_dead = 0;
+			}
 		}
 	}
 
@@ -3677,6 +3690,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 		NF_OKFN(nskb);
 	}
 
+out:
 	consume_skb(skb);
 	return NF_STOLEN;
 }
@@ -4872,9 +4886,9 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			n = snprintf(natcap_peer_ctl_buffer,
 			             SEQ_PGSZ - 1,
 			             "PFR=%u outdev=%s saddr=%pI4\n",
-				     (unsigned int)((*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP - PEER_PUB_NUM),
-				     pfr->rt_out.outdev->name,
-				     &pfr->saddr
+			             (unsigned int)((*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP - PEER_PUB_NUM),
+			             pfr->rt_out.outdev->name,
+			             &pfr->saddr
 			            );
 			natcap_peer_ctl_buffer[n] = 0;
 			return natcap_peer_ctl_buffer;

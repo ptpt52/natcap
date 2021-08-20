@@ -70,12 +70,17 @@ struct fakeuser_expect {
 };
 
 struct natcap_fastpath_route {
+	unsigned int is_dead;
 	__be32 saddr;
 	unsigned int rt_out_magic;
 	struct natcap_route rt_out;
 };
 
+#define PEER_DEAD_ADDR __constant_htonl((13<<24)|(14<<16)|(10<<8)|(13<<0))
+
 extern struct natcap_fastpath_route *natcap_pfr;
+
+extern int is_fastpath_route_ready(struct natcap_fastpath_route *pfr);
 
 static inline struct fakeuser_expect *peer_fakeuser_expect(struct nf_conn *ct)
 {
