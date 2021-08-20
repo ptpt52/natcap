@@ -69,6 +69,14 @@ struct fakeuser_expect {
 	struct natcap_route rt_out;
 };
 
+struct natcap_fastpath_route {
+	__be32 saddr;
+	unsigned int rt_out_magic;
+	struct natcap_route rt_out;
+};
+
+extern struct natcap_fastpath_route *natcap_pfr;
+
 static inline struct fakeuser_expect *peer_fakeuser_expect(struct nf_conn *ct)
 {
 	return (void *)ct->ext + ct->ext->len;
