@@ -21,6 +21,10 @@
 #ifndef _NATCAP_PEER_H_
 #define _NATCAP_PEER_H_
 
+#if !defined(CONFIG_NF_CONNTRACK_MARK)
+#error Please change kernel config: must define CONFIG_NF_CONNTRACK_MARK
+#endif
+
 #define __ALIGN_64BITS 8
 
 struct peer_server_node {

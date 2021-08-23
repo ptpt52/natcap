@@ -1693,7 +1693,9 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		header_len += 16; //for timestamp
 	}
 	/* change connection if route/path changed */
-	if (user != NULL && user->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip != oiph->saddr) {
+	if (user != NULL && ops == NULL && (
+	            user->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip != oiph->saddr ||
+	            user->mark != oskb->mark)) {
 		nf_ct_put(ps->port_map[pmi]);
 		user = ps->port_map[pmi] = NULL;
 	}
@@ -1715,6 +1717,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 			spin_unlock_bh(&ps->lock);
 			return NULL;
 		}
+		user->mark = oskb->mark;
 	}
 	if (ps->port_map[pmi] == NULL) {
 		nf_conntrack_get(&user->ct_general);
@@ -1751,6 +1754,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		spin_unlock_bh(&ps->lock);
 		return NULL;
 	}
+	nskb->mark = user->mark;
 	nskb->tail += offset;
 	nskb->len = oiph->ihl * 4 + sizeof(struct tcphdr) + header_len + tcpolen_mss;
 
@@ -1873,6 +1877,23 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 			fue->rt_out.outdev = nskb->dev;
 			fue->rt_out_magic = rt_out_magic;
 		}
+		if ((nskb->mark & 0x3f00)) {
+			struct natcap_fastpath_route *pfr;
+			int line = (nskb->mark & 0x3f00) >> 8;
+			if (line >= 1 && line <= MAX_PEER_NUM) {
+				line--;
+				pfr = &natcap_pfr[line];
+
+				if (pfr->saddr != niph->saddr || pfr->rt_out_magic != rt_out_magic || pfr->rt_out.outdev != nskb->dev) {
+					pfr->saddr = niph->saddr;
+					pfr->rt_out.l2_head_len = (char *)niph - (char *)neth;
+					memcpy(pfr->rt_out.l2_head, (char *)neth, (char *)niph - (char *)neth);
+					pfr->rt_out.outdev = nskb->dev;
+					pfr->rt_out_magic = rt_out_magic;
+				}
+			}
+		}
+
 		nf_ct_put(user);
 		spin_unlock_bh(&ps->lock);
 		NATCAP_INFO(DEBUG_FMT_PREFIX DEBUG_FMT_TCP ": %s\n", DEBUG_ARG_PREFIX, DEBUG_ARG_TCP(niph,ntcph),
@@ -3660,13 +3681,6 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 			line--;
 			pfr = &natcap_pfr[line];
 
-			if (pfr->saddr != iph->saddr || pfr->rt_out_magic != rt_out_magic || pfr->rt_out.outdev != skb->dev) {
-				pfr->saddr = iph->saddr;
-				pfr->rt_out.l2_head_len = (char *)iph - (char *)eth_hdr(skb);
-				memcpy(pfr->rt_out.l2_head, (char *)eth_hdr(skb), (char *)iph - (char *)eth_hdr(skb));
-				pfr->rt_out.outdev = skb->dev;
-				pfr->rt_out_magic = rt_out_magic;
-			}
 			//printk("line %d outdev=%s saddr=%pI4\n", line, skb->dev->name, &iph->saddr);
 			if (iph->daddr == PEER_DEAD_ADDR) { /* PEER_DEAD_ADDR = 13.14.10.13 dead */
 				pfr->is_dead = 1;
