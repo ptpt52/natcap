@@ -2153,6 +2153,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 										break;
 									}
 						}
+						if (ns->peer.cnt == peer_multipath)
+							break;
 					}
 				}
 			}
