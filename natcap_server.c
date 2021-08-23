@@ -1624,24 +1624,38 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 							dup_skb->ip_summed = CHECKSUM_UNNECESSARY;
 							skb_rcsum_tcpudp(dup_skb);
-							flow_total_tx_bytes += dup_skb->len;
+							if (peer_multipath <= MAX_PEER_NUM)
+								flow_total_tx_bytes += dup_skb->len;
 						}
 						break;
 					}
 				}
 			}
 
-			skb->ip_summed = CHECKSUM_UNNECESSARY;
-			skb_rcsum_tcpudp(skb);
-
 			NATCAP_DEBUG("(SPO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 
-			NF_OKFN(skb);
-			if (pcskb) {
-				NF_OKFN(pcskb);
-			}
-			if (dup_skb) {
-				NF_OKFN(dup_skb);
+			if (peer_multipath <= MAX_PEER_NUM) {
+				skb->ip_summed = CHECKSUM_UNNECESSARY;
+				skb_rcsum_tcpudp(skb);
+				NF_OKFN(skb);
+				if (pcskb) {
+					NF_OKFN(pcskb);
+				}
+				if (dup_skb) {
+					NF_OKFN(dup_skb);
+				}
+			} else {
+				if (pcskb) {
+					NF_OKFN(pcskb);
+				}
+				if (dup_skb) {
+					consume_skb(skb);
+					NF_OKFN(dup_skb);
+				} else {
+					skb->ip_summed = CHECKSUM_UNNECESSARY;
+					skb_rcsum_tcpudp(skb);
+					NF_OKFN(skb);
+				}
 			}
 
 			skb = nskb;
@@ -2364,12 +2378,12 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			}
 			skb_nfct_reset(skb);
 
-			set_byte4((void *)UDPH(l4) + 8 + 4, __constant_htonl(NATCAP_9_MAGIC_TYPE2));
-			set_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2 + 2, iph->saddr);
-			iph->saddr = iph->daddr;
 			UDPH(l4)->check = CSUM_MANGLED_0;
 
-			if (ns->peer.cnt == 0 && peer_multipath) {
+			if (ns->peer.cnt == 0 && peer_multipath && peer_multipath <= MAX_PEER_NUM) {
+				set_byte4((void *)UDPH(l4) + 8 + 4, __constant_htonl(NATCAP_9_MAGIC_TYPE2));
+				set_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2 + 2, iph->saddr);
+				iph->saddr = iph->daddr;
 				//lock once
 				if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 					__be32 ip;
@@ -2399,9 +2413,24 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 							break;
 					}
 				}
+			} else if (ns->peer.cnt == 0 && peer_multipath > MAX_PEER_NUM) { /* peer_multipath = MAX_PEER_NUM + num_of_multipath */
+				set_byte4((void *)UDPH(l4) + 8 + 4, __constant_htonl(NATCAP_9_MAGIC_TYPE3));
+				set_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2 + 2, iph->saddr);
+				//lock once
+				if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
+					unsigned int j;
+					for (j = 0; j < MAX_PEER_NUM; j++)
+						if (ns->peer.tuple3[j].dip == 0 && is_fastpath_route_ready(&natcap_pfr[j]) && natcap_pfr[j].rt_out.outdev != skb->dev) {
+							ns->peer.cnt++;
+							ns->peer.tuple3[j].dip = iph->saddr;
+							ns->peer.tuple3[j].dport = htons(prandom_u32() % (65536 - 1024) + 1024);
+							ns->peer.tuple3[j].sport = htons(prandom_u32() % (65536 - 1024) + 1024);
+							break;
+						}
+				}
 			}
 
-			if (ns->peer.cnt > 0) {
+			if (ns->peer.cnt > 0 && peer_multipath <= MAX_PEER_NUM) {
 				int ret;
 				unsigned int i;
 				struct ethhdr *neth;
@@ -2475,6 +2504,68 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 					/* may fail output */
 					skb_push(nskb, (char *)iph - (char *)neth);
+					dev_queue_xmit(nskb);
+				}
+			} else if (ns->peer.cnt > 0 && peer_multipath > MAX_PEER_NUM) {
+				int ret;
+				unsigned int i;
+				struct sk_buff *nskb;
+				for (i = 0; i < MAX_PEER_NUM; i++) {
+					if (ns->peer.tuple3[i].dip == 0 || !is_fastpath_route_ready(&natcap_pfr[i]))
+						continue;
+					if (short_test_bit(i, &ns->peer.mark))
+						continue;
+
+					nskb = skb_copy(skb, GFP_ATOMIC);
+					if (nskb == NULL)
+						break;
+
+					iph = ip_hdr(nskb);
+					l4 = (void *)iph + iph->ihl * 4;
+
+					iph->id = htons(jiffies);
+					iph->daddr = ns->peer.tuple3[i].dip;
+					iph->saddr = natcap_pfr[i].saddr;
+					UDPH(l4)->dest = ns->peer.tuple3[i].dport;
+					UDPH(l4)->source = ns->peer.tuple3[i].sport;
+					set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2, htons(i));
+
+					nskb->ip_summed = CHECKSUM_UNNECESSARY;
+					skb_rcsum_tcpudp(nskb);
+					nskb->dev = natcap_pfr[i].rt_out.outdev;
+
+					net = dev_net(natcap_pfr[i].rt_out.outdev);
+					ret = nf_conntrack_in_compat(net, pf, NF_INET_PRE_ROUTING, nskb);
+					if (ret != NF_ACCEPT) {
+						consume_skb(nskb);
+						break;
+					}
+					ret = nf_conntrack_confirm(nskb);
+					if (ret != NF_ACCEPT) {
+						consume_skb(nskb);
+						break;
+					}
+					ct = nf_ct_get(nskb, &ctinfo);
+					if (!ct) {
+						consume_skb(nskb);
+						break;
+					}
+					if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
+						nf_conntrack_get(&master->master->ct_general);
+						ct->master = master->master;
+						ct = ct->master;
+						NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": BIND=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] outdev=%s\n", DEBUG_UDP_ARG(iph,l4), i,
+						             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+						             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+						             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+						             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+						             natcap_pfr[i].rt_out.outdev->name
+						            );
+					}
+
+					skb_push(nskb, natcap_pfr[i].rt_out.l2_head_len);
+					skb_reset_mac_header(nskb);
+					memcpy(skb_mac_header(nskb), natcap_pfr[i].rt_out.l2_head, natcap_pfr[i].rt_out.l2_head_len);
 					dev_queue_xmit(nskb);
 				}
 			}

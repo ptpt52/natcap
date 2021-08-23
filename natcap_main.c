@@ -468,7 +468,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	} else if (strncmp(data, "peer_multipath=", 15) == 0) {
 		int d;
 		n = sscanf(data, "peer_multipath=%u", &d);
-		if (n == 1 && d <= MAX_PEER_NUM) {
+		if (n == 1) {
 			peer_multipath = d;
 			goto done;
 		}
