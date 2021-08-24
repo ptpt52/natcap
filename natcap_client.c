@@ -2164,12 +2164,11 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 					unsigned int j;
 					for (j = 0; j < MAX_PEER_NUM; j++)
-						if (ns->peer.tuple3[j].dip == 0 && is_fastpath_route_ready(&natcap_pfr[j]) && natcap_pfr[j].rt_out.outdev != skb->dev) {
+						if (ns->peer.tuple3[j].dip == 0 && is_fastpath_route_ready(&natcap_pfr[j])) {
 							ns->peer.cnt++;
 							ns->peer.tuple3[j].dip = iph->saddr;
 							ns->peer.tuple3[j].dport = htons(prandom_u32() % (65536 - 1024) + 1024);
 							ns->peer.tuple3[j].sport = htons(prandom_u32() % (65536 - 1024) + 1024);
-							break;
 						}
 				}
 			}
@@ -2231,13 +2230,14 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 						nf_conntrack_get(&master->master->ct_general);
 						ct->master = master->master;
 						ct = ct->master;
-						NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": BIND=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n", DEBUG_UDP_ARG(iph,l4), i,
-						             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-						             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-						             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-						             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
-						            );
 					}
+
+					NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": BIND=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n", DEBUG_UDP_ARG(iph,l4), i,
+					             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+					             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+					             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+					             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all)
+					            );
 
 					skb_push(nskb, (char *)iph - (char *)neth);
 					dev_queue_xmit(nskb);
@@ -2290,14 +2290,16 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 						nf_conntrack_get(&master->master->ct_general);
 						ct->master = master->master;
 						ct = ct->master;
-						NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": BIND=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] outdev=%s\n", DEBUG_UDP_ARG(iph,l4), i,
-						             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
-						             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
-						             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
-						             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
-						             natcap_pfr[i].rt_out.outdev->name
-						            );
 					}
+
+					NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": BIND=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] outdev=%s\n", DEBUG_UDP_ARG(iph,l4), i,
+					             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
+					             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
+					             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
+					             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
+					             natcap_pfr[i].rt_out.outdev->name
+					            );
+
 
 					skb_push(nskb, natcap_pfr[i].rt_out.l2_head_len);
 					skb_reset_mac_header(nskb);
@@ -2539,7 +2541,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		skb_nfct_reset(skb);
 
 		iph->saddr = ct->tuplehash[dir].tuple.src.u3.ip;
-		//iph->daddr = ct->tuplehash[dir].tuple.dst.u3.ip;
+		iph->daddr = ct->tuplehash[dir].tuple.dst.u3.ip;
 		UDPH(l4)->source = ct->tuplehash[dir].tuple.src.u.tcp.port;
 		UDPH(l4)->dest = ct->tuplehash[dir].tuple.dst.u.tcp.port;
 		//UDPH(l4)->check = CSUM_MANGLED_0;
