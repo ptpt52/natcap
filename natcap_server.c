@@ -2429,6 +2429,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			if (ns->peer.cnt > 0 && peer_multipath <= MAX_PEER_NUM) {
 				int ret;
 				unsigned int i;
+				__be32 saddr;
 				struct ethhdr *neth;
 				struct sk_buff *nskb;
 				for (i = 0; i < MAX_PEER_NUM; i++) {
@@ -2495,9 +2496,14 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 					skb_nfct_reset(nskb);
 
-					NF_GW_REROUTE(nskb);
-					if (skb_dst(nskb) && dst_output(net, NULL, nskb) == 0) {
-						continue;
+					if (nf_unicast_output_route(net, NULL, nskb, &saddr) == 0) {
+						if (saddr != iph->saddr) {
+							iph->saddr = saddr;
+							skb_rcsum_tcpudp(nskb);
+						}
+						if (skb_dst(nskb) && dst_output(net, NULL, nskb) == 0) {
+							continue;
+						}
 					}
 
 					/* may fail output */

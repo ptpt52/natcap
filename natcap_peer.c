@@ -4904,7 +4904,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			             pfr->rt_out.outdev->name,
 			             &pfr->saddr,
 			             is_fastpath_route_ready(pfr),
-				     uintmindiff(jiffies, pfr->last_rx_jiffies)
+			             uintmindiff(jiffies, pfr->last_rx_jiffies)
 			            );
 			natcap_peer_ctl_buffer[n] = 0;
 			return natcap_peer_ctl_buffer;
