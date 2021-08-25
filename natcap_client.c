@@ -2463,6 +2463,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			i = ntohs(i) % MAX_PEER_NUM;
 			if (!short_test_bit(i, &ns->peer.mark) &&
 			        ns->peer.tuple3[i].dip == iph->saddr && ns->peer.tuple3[i].dport == UDPH(l4)->source && ns->peer.tuple3[i].sport == UDPH(l4)->dest) {
+				master->mark |= i;
 				short_set_bit(i, &ns->peer.mark);
 				NATCAP_INFO("(CPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer.mark=0x%x\n", DEBUG_UDP_ARG(iph,l4), i,
 				            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
@@ -2470,6 +2471,13 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
 				            &ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all),
 				            ns->peer.mark);
+			}
+
+			if (i < MAX_PEER_NUM) {
+				natcap_pfr[i].last_rx_jiffies = jiffies;
+				if (natcap_pfr[i].last_rxtx == 1) {
+					natcap_pfr[i].last_rxtx = 0;
+				}
 			}
 
 			/* XXX I just confirm it first  */

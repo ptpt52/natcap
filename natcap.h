@@ -45,7 +45,7 @@
 #define NATCAP_9_MAGIC_TYPE1 0x00000001 /* server --> client carry tuple back */
 #define NATCAP_9_MAGIC_TYPE2 0x00000002 /* client --> forward carry tuple request */
 #define NATCAP_9_MAGIC_TYPE3 0x00000003 /* forward --> server carry tuple request */
-#define NATCAP_9_MAGIC_TYPE4 0x00000004 /* server --> forward reply */
+#define NATCAP_9_MAGIC_TYPE4 0x00000004 /* reply for CFM: to client/server */
 
 #define NATCAP_8_MAGIC 0xfff80099 /* client --> forward --> server pass data */
 #define NATCAP_7_MAGIC 0xfff70099 /* upgrade NATCAP_F_MAGIC */
