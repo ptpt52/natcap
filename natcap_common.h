@@ -543,24 +543,34 @@ extern void natcap_common_exit(void);
 #else
 #define __RT_GATEWAY rt_gw4
 #endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+
+#define compat_ip_route_me_harder(net, sk, skb, addr_type) ip_route_me_harder(skb, addr_type)
+
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 78)
+
+#define compat_ip_route_me_harder(net, sk, skb, addr_type) ip_route_me_harder(net, skb, addr_type)
+
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 78) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0)
+
+#define compat_ip_route_me_harder(net, sk, skb, addr_type) ip_route_me_harder(net, sk, skb, addr_type)
+
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 5, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 9)
+
+#define compat_ip_route_me_harder(net, sk, skb, addr_type) ip_route_me_harder(net, skb, addr_type)
+
+#else
+
+#define compat_ip_route_me_harder(net, sk, skb, addr_type) ip_route_me_harder(net, sk, skb, addr_type)
+
+#endif
+
 #define NF_GW_REROUTE(skb) do { \
 	struct dst_entry *dst = skb_dst(skb); \
 	struct rtable *rt = (struct rtable *)dst; \
 	if (!rt || !rt->__RT_GATEWAY) { \
-		struct net *net = dst ? dev_net(dst->dev) : skb->dev ? dev_net(skb->dev) : &init_net; \
-		rt = ip_route_output(net, iph->daddr, iph->saddr, RT_TOS(iph->tos), 0); \
-		if (!IS_ERR(rt)) { \
-			skb_dst_drop(skb); \
-			skb_dst_set(skb, &rt->dst); \
-			skb->dev = rt->dst.dev; \
-		} else { \
-			rt = ip_route_output(net, iph->daddr, 0, RT_TOS(iph->tos), 0); \
-			if (!IS_ERR(rt)) { \
-				skb_dst_drop(skb); \
-				skb_dst_set(skb, &rt->dst); \
-				skb->dev = rt->dst.dev; \
-			} \
-		} \
+		compat_ip_route_me_harder(state->net, state->sk, skb, RTN_UNSPEC); \
 	} \
 } while (0)
 
