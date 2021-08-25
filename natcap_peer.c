@@ -4899,11 +4899,12 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			natcap_peer_ctl_buffer[0] = 0;
 			n = snprintf(natcap_peer_ctl_buffer,
 			             SEQ_PGSZ - 1,
-			             "PFR=%u outdev=%s saddr=%pI4 ready=%d\n",
+			             "PFR=%u outdev=%s saddr=%pI4 ready=%d last_rx=%u\n",
 			             (unsigned int)((*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP - PEER_PUB_NUM),
 			             pfr->rt_out.outdev->name,
 			             &pfr->saddr,
-			             is_fastpath_route_ready(pfr)
+			             is_fastpath_route_ready(pfr),
+				     uintmindiff(jiffies, pfr->last_rx_jiffies)
 			            );
 			natcap_peer_ctl_buffer[n] = 0;
 			return natcap_peer_ctl_buffer;
