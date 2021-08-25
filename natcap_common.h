@@ -569,7 +569,8 @@ extern void natcap_common_exit(void);
 #define NF_GW_REROUTE(skb) do { \
 	struct dst_entry *dst = skb_dst(skb); \
 	struct rtable *rt = (struct rtable *)dst; \
-	if (!rt || !rt->__RT_GATEWAY) { \
+	BUG_ON(!rt); \
+	if (!rt->__RT_GATEWAY) { \
 		compat_ip_route_me_harder(state->net, state->sk, skb, RTN_UNSPEC); \
 	} \
 } while (0)
