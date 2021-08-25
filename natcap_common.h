@@ -566,6 +566,50 @@ extern void natcap_common_exit(void);
 
 #endif
 
+static inline int nf_unicast_output_route(struct net *net, struct sock *sk, struct sk_buff *skb, __be32 *saddr)
+{
+	const struct iphdr *iph = ip_hdr(skb);
+	struct rtable *rt;
+	struct flowi4 fl4 = {};
+	__u8 flags;
+	struct flow_keys flkeys;
+	unsigned int hh_len;
+
+	if (!net)
+		net = dev_net(skb->dev);
+
+	sk = sk_to_full_sk(sk);
+	flags = sk ? inet_sk_flowi_flags(sk) : 0;
+	flags |= FLOWI_FLAG_ANYSRC;
+
+	fl4.daddr = iph->daddr;
+	fl4.saddr = 0;
+	fl4.flowi4_tos = RT_TOS(iph->tos);
+	fl4.flowi4_oif = sk ? sk->sk_bound_dev_if : 0;
+	fl4.flowi4_mark = skb->mark;
+	fl4.flowi4_flags = flags;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+	fib4_rules_early_flow_dissect(net, skb, &fl4, &flkeys);
+#endif
+	rt = ip_route_output_key(net, &fl4);
+	if (IS_ERR(rt))
+		return PTR_ERR(rt);
+
+	skb_dst_drop(skb);
+	skb_dst_set(skb, &rt->dst);
+
+	if (skb_dst(skb)->error)
+		return skb_dst(skb)->error;
+
+	hh_len = skb_dst(skb)->dev->hard_header_len;
+	if (skb_headroom(skb) < hh_len && pskb_expand_head(skb, HH_DATA_ALIGN(hh_len - skb_headroom(skb)), 0, GFP_ATOMIC))
+		return -ENOMEM;
+
+	*saddr = fl4.saddr;
+
+	return 0;
+}
+
 #define NF_GW_REROUTE(skb) do { \
 	struct dst_entry *dst = skb_dst(skb); \
 	struct rtable *rt = (struct rtable *)dst; \
