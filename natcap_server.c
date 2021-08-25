@@ -2480,6 +2480,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						break;
 					}
 					if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
+						ct->mark |= i;
 						nf_conntrack_get(&master->master->ct_general);
 						ct->master = master->master;
 						ct = ct->master;
@@ -2548,6 +2549,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						break;
 					}
 					if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
+						ct->mark |= i;
 						nf_conntrack_get(&master->master->ct_general);
 						ct->master = master->master;
 						ct = ct->master;
@@ -2564,6 +2566,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					skb_push(nskb, natcap_pfr[i].rt_out.l2_head_len);
 					skb_reset_mac_header(nskb);
 					memcpy(skb_mac_header(nskb), natcap_pfr[i].rt_out.l2_head, natcap_pfr[i].rt_out.l2_head_len);
+					if (natcap_pfr[i].last_rxtx == 0) {
+						natcap_pfr[i].last_tx_jiffies = jiffies;
+						natcap_pfr[i].last_rxtx = 1;
+					}
 					dev_queue_xmit(nskb);
 				}
 			}
@@ -2645,6 +2651,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
 						nf_conntrack_get(&ct->ct_general);
 						master->master = ct;
+						master->mark |= i;
 					}
 					nf_ct_put(ct);
 				}
@@ -2738,17 +2745,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 	} else if (get_byte4((void *)UDPH(l4) + 8) == __constant_htonl(NATCAP_8_MAGIC)) {
 		int offlen;
-		unsigned int i;
 		int dir = CTINFO2DIR(ctinfo);
-
-		if (skb->len < iph->ihl * 4 + sizeof(struct tcphdr) + 8) {
-			return NF_ACCEPT;
-		}
-		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 8)) {
-			return NF_ACCEPT;
-		}
-		iph = ip_hdr(skb);
-		l4 = (void *)iph + iph->ihl * 4;
+		unsigned int idx = 0;
 
 		if (!inet_is_local(in, iph->daddr)) {
 			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
@@ -2760,6 +2758,17 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer pass forward: data\n", DEBUG_UDP_ARG(iph,l4));
 			return NF_ACCEPT;
 		}
+
+		if (skb->len < iph->ihl * 4 + sizeof(struct tcphdr) + 8) {
+			return NF_ACCEPT;
+		}
+		if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr) + 8)) {
+			return NF_ACCEPT;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph->ihl * 4;
+
+		idx = (master->mark & 0xff);
 		ct = master->master;
 		ns = natcap_session_get(ct);
 		if (ns == NULL) {
@@ -2782,13 +2791,9 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (ns->peer.mark != 0xff)
-			for (i = 0; i < MAX_PEER_NUM; i++)
-				if (!short_test_bit(i, &ns->peer.mark) &&
-				        ns->peer.tuple3[i].dip == iph->saddr && ns->peer.tuple3[i].dport == UDPH(l4)->source && ns->peer.tuple3[i].sport == UDPH(l4)->dest) {
-					short_set_bit(i, &ns->peer.mark);
-					break;
-				}
+		if (idx < MAX_PEER_NUM && !short_test_bit(idx, &ns->peer.mark)) {
+			short_set_bit(idx, &ns->peer.mark);
+		}
 
 		NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer pass up: before\n", DEBUG_UDP_ARG(iph,l4));
 
@@ -2826,6 +2831,13 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		ct = nf_ct_get(skb, &ctinfo);
 		if (!ct) {
 			return NF_DROP;
+		}
+
+		if (idx < MAX_PEER_NUM) {
+			natcap_pfr[idx].last_rx_jiffies = jiffies;
+			if (natcap_pfr[idx].last_rxtx == 1) {
+				natcap_pfr[idx].last_rxtx = 0;
+			}
 		}
 
 		NATCAP_DEBUG("(SPI)" DEBUG_TCP_FMT ": peer pass up: after ct=[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n", DEBUG_TCP_ARG(iph,l4),

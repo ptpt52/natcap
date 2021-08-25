@@ -74,6 +74,9 @@ struct fakeuser_expect {
 };
 
 struct natcap_fastpath_route {
+	unsigned int last_rxtx; /* 0: last_rx 1: last_tx */
+	unsigned int last_rx_jiffies;
+	unsigned int last_tx_jiffies;
 	unsigned int is_dead;
 	__be32 saddr;
 	unsigned int rt_out_magic;
