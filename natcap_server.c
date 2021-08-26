@@ -1557,7 +1557,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 			if (nskb == NULL && ns->peer.ver == 1 && ns->peer.mark != 0xffff && ns->peer.req_cnt < 3 && uintmindiff(ns->peer.jiffies, jiffies) > 1*HZ ) {
 				ns->peer.jiffies = jiffies;
-				pcskb = natcap_peer_ctrl_alloc(skb);
+				pcskb = natcap_peer_ctrl_alloc(skb, 8 + 16 + 4);
 				if (pcskb) {
 					iph = ip_hdr(pcskb);
 					l4 = (void *)iph + iph->ihl * 4;
@@ -2433,6 +2433,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 							ns->peer.tuple3[j].sport = htons(prandom_u32() % (65536 - 1024) + 1024);
 							ns->peer.total_weight += natcap_pfr[j].weight;
 							ns->peer.weight[j] = natcap_pfr[j].weight;
+							ns->peer.req_cnt = 3; /* init notify weight */
 						}
 				}
 			}
@@ -2756,6 +2757,42 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 				natcap_pfr[i].last_rx_jiffies = jiffies;
 				if (natcap_pfr[i].last_rxtx == 1) {
 					natcap_pfr[i].last_rxtx = 0;
+				}
+			}
+
+			/* XXX I just confirm it first  */
+			ret = nf_conntrack_confirm(skb);
+			if (ret != NF_ACCEPT) {
+				return ret;
+			}
+
+			consume_skb(skb);
+			return NF_STOLEN;
+		} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(NATCAP_9_MAGIC_TYPE5)) {
+			int i;
+
+			if (!master->master) {
+				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+				NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer pass forward: type5\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_ACCEPT;
+			}
+
+			if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct udphdr) + 8 + MAX_PEER_NUM * 2)) {
+				return NF_ACCEPT;
+			}
+
+			ct = master->master;
+			ns = natcap_session_get(ct);
+			if (ns == NULL) {
+				NATCAP_WARN("(SPI)" DEBUG_UDP_FMT ": natcap_session_get failed\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_DROP;
+			}
+			for (i = 0; i < MAX_PEER_NUM; i++) {
+				unsigned short val = get_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 2 * i);
+				val = ntohs(val);
+				if (ns->peer.weight[i] != val) {
+					ns->peer.total_weight = ns->peer.total_weight - ns->peer.weight[i] + val;
+					ns->peer.weight[i] = val;
 				}
 			}
 
