@@ -77,13 +77,15 @@ struct natcap_fastpath_route {
 	unsigned int last_rxtx; /* 0: last_rx 1: last_tx */
 	unsigned int last_rx_jiffies;
 	unsigned int last_tx_jiffies;
-	unsigned int is_dead;
+	unsigned short is_dead;
+	unsigned short weight;
 	__be32 saddr;
 	unsigned int rt_out_magic;
 	struct natcap_route rt_out;
 };
 
 #define PEER_DEAD_ADDR __constant_htonl((13<<24)|(14<<16)|(10<<8)|(13<<0))
+#define PEER_SET_WEIGHT_ADDR __constant_htonl((13<<24)|(14<<16)|(10<<8)|(14<<0))
 
 extern struct natcap_fastpath_route *natcap_pfr;
 

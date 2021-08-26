@@ -2148,6 +2148,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 										ns->peer.tuple3[j].dip = ip;
 										ns->peer.tuple3[j].dport = htons(prandom_u32() % (65536 - 1024) + 1024);
 										ns->peer.tuple3[j].sport = htons(prandom_u32() % (65536 - 1024) + 1024);
+										ns->peer.total_weight += 1;
+										ns->peer.weight[j] = 1;
 										NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": peer%px select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
 										             ntohs(ns->peer.tuple3[j].sport), &ns->peer.tuple3[j].dip, ntohs(ns->peer.tuple3[j].dport), j);
 										break;
@@ -2169,6 +2171,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 							ns->peer.tuple3[j].dip = iph->saddr;
 							ns->peer.tuple3[j].dport = htons(prandom_u32() % (65536 - 1024) + 1024);
 							ns->peer.tuple3[j].sport = htons(prandom_u32() % (65536 - 1024) + 1024);
+							ns->peer.total_weight += natcap_pfr[j].weight;
+							ns->peer.weight[j] = natcap_pfr[j].weight;
 						}
 				}
 			}
@@ -2380,6 +2384,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 						ns->peer.tuple3[i].dport = UDPH(l4)->source;
 						ns->peer.tuple3[i].sport = UDPH(l4)->dest;
 						ns->peer.cnt++;
+						ns->peer.total_weight += 1;
+						ns->peer.weight[i] = 1;
 						NATCAP_INFO("(CPI)" DEBUG_UDP_FMT ": CFM=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] peer.mark=0x%x\n", DEBUG_UDP_ARG(iph,l4), i,
 						            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 						            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
@@ -2950,6 +2956,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			int offlen;
 			struct sk_buff *nskb = skb->next;
 			struct sk_buff *dup_skb = NULL;
+			unsigned int total_weight = ns->peer.total_weight;
 
 			if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 				consume_skb(skb);
@@ -2972,40 +2979,54 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			iph->protocol = IPPROTO_UDP;
 			skb->next = NULL;
 
-			if (ns->peer.ver == 1 && ns->peer.mark) {
-				unsigned int i, idx;
+			if (ns->peer.ver == 1 && ns->peer.mark && total_weight > 0) {
+				unsigned int ball = prandom_u32() % total_weight;
+				unsigned int weight = 0;
+				int i, idx = -1;
 				for (i = 0; i < MAX_PEER_NUM; i++) {
-					idx = (i + ns->peer.idx) % MAX_PEER_NUM;
-					if (peer_multipath > MAX_PEER_NUM && !is_fastpath_route_ready(&natcap_pfr[idx]))
+					weight += ns->peer.weight[i];
+					if (ns->peer.tuple3[i].dip == 0 || !short_test_bit(i, &ns->peer.mark))
 						continue;
-					if (ns->peer.tuple3[idx].dip != 0 && short_test_bit(idx, &ns->peer.mark)) {
-						struct nf_conntrack_tuple tuple;
-						struct nf_conntrack_tuple_hash *h;
-
-						ns->peer.idx = (idx + 1) % MAX_PEER_NUM;
-
-						memset(&tuple, 0, sizeof(tuple));
-						tuple.src.u3.ip = peer_multipath <= MAX_PEER_NUM ? iph->saddr : natcap_pfr[idx].saddr;
-						tuple.src.u.udp.port = ns->peer.tuple3[idx].sport;
-						tuple.dst.u3.ip = ns->peer.tuple3[idx].dip;
-						tuple.dst.u.udp.port = ns->peer.tuple3[idx].dport;
-						tuple.src.l3num = PF_INET;
-						tuple.dst.protonum = IPPROTO_UDP;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
-						h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
-#else
-						h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
-#endif
-						if (h) {
-							ct = nf_ct_tuplehash_to_ctrack(h);
-							nf_ct_put(ct);
-						} else {
-							ns->peer.tuple3[idx].dip = 0;
-							ns->peer.tuple3[idx].dport = 0;
-							ns->peer.tuple3[idx].sport = 0;
-							short_clear_bit(idx, &ns->peer.mark);
-							break;
+					if (peer_multipath > MAX_PEER_NUM) {
+						if (natcap_pfr[i].weight != ns->peer.weight[i]) {
+							ns->peer.total_weight = ns->peer.total_weight - ns->peer.weight[i] + natcap_pfr[i].weight;
+							ns->peer.weight[i] = natcap_pfr[i].weight;
 						}
+						if (!is_fastpath_route_ready(&natcap_pfr[i]))
+							continue;
+					}
+					if (ball < weight) {
+						idx = i;
+						break;
+					}
+				}
+				if (peer_multipath > MAX_PEER_NUM) {
+					for (; i < MAX_PEER_NUM; i++) {
+						if (natcap_pfr[i].weight != ns->peer.weight[i]) {
+							ns->peer.total_weight = ns->peer.total_weight - ns->peer.weight[i] + natcap_pfr[i].weight;
+							ns->peer.weight[i] = natcap_pfr[i].weight;
+						}
+					}
+				}
+				if (idx >= 0) {
+					struct nf_conntrack_tuple tuple;
+					struct nf_conntrack_tuple_hash *h;
+
+					memset(&tuple, 0, sizeof(tuple));
+					tuple.src.u3.ip = peer_multipath <= MAX_PEER_NUM ? iph->saddr : natcap_pfr[idx].saddr;
+					tuple.src.u.udp.port = ns->peer.tuple3[idx].sport;
+					tuple.dst.u3.ip = ns->peer.tuple3[idx].dip;
+					tuple.dst.u.udp.port = ns->peer.tuple3[idx].dport;
+					tuple.src.l3num = PF_INET;
+					tuple.dst.protonum = IPPROTO_UDP;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+					h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
+					h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
+					if (h) {
+						ct = nf_ct_tuplehash_to_ctrack(h);
+						nf_ct_put(ct);
 
 						dup_skb = skb_copy(skb, GFP_ATOMIC);
 						if (dup_skb) {
@@ -3034,7 +3055,13 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 								flow_total_tx_bytes += dup_skb->len;
 							}
 						}
-						break;
+					} else {
+						ns->peer.total_weight -= ns->peer.weight[idx];
+						ns->peer.weight[idx] = 0;
+						ns->peer.tuple3[idx].dip = 0;
+						ns->peer.tuple3[idx].dport = 0;
+						ns->peer.tuple3[idx].sport = 0;
+						short_clear_bit(idx, &ns->peer.mark);
 					}
 				}
 			}
