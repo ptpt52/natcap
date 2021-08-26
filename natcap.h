@@ -263,6 +263,8 @@ struct natcap_session {
 			unsigned char cnt:5,
 			         req_cnt:3;
 			struct tuple3 tuple3[MAX_PEER_NUM];
+			unsigned short weight[MAX_PEER_NUM];
+			unsigned int total_weight;
 		} peer;
 		struct {
 			unsigned int jiffies;

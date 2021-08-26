@@ -1891,6 +1891,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 					pfr->rt_out.outdev = nskb->dev;
 					pfr->rt_out_magic = rt_out_magic;
 					pfr->is_dead = 1;
+					pfr->weight = 100;
 				}
 			}
 		}
@@ -3698,6 +3699,9 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 			if (iph->daddr == PEER_DEAD_ADDR) { /* PEER_DEAD_ADDR = 13.14.10.13 dead */
 				pfr->is_dead = 1;
 				goto out;
+			} else if (iph->daddr == PEER_SET_WEIGHT_ADDR) { /* PEER_SET_WEIGHT_ADDR = 13.14.10.14 set weight */
+				pfr->weight = skb->len - iph->ihl * 4 - sizeof(struct icmphdr);
+				goto out;
 			}
 		}
 	}
@@ -4910,11 +4914,12 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			natcap_peer_ctl_buffer[0] = 0;
 			n = snprintf(natcap_peer_ctl_buffer,
 			             SEQ_PGSZ - 1,
-			             "PFR=%u outdev=%s saddr=%pI4 ready=%d last_rx=%u\n",
+			             "PFR=%u outdev=%s saddr=%pI4 ready=%d weight=%u last_rx=%u\n",
 			             (unsigned int)((*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP - PEER_PUB_NUM + 1),
 			             pfr->rt_out.outdev->name,
 			             &pfr->saddr,
 			             is_fastpath_route_ready(pfr),
+			             pfr->weight,
 			             uintmindiff(jiffies, pfr->last_rx_jiffies)
 			            );
 			natcap_peer_ctl_buffer[n] = 0;
