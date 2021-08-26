@@ -1693,7 +1693,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		header_len += 16; //for timestamp
 	}
 	/* change connection if route/path changed */
-	if (user != NULL && ops == NULL && (
+	if (user != NULL && ops == NULL && (oskb->mark & 0x3f00) && (
 	            user->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip != oiph->saddr ||
 	            user->mark != oskb->mark)) {
 		nf_ct_put(ps->port_map[pmi]);
@@ -1890,6 +1890,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 					memcpy(pfr->rt_out.l2_head, (char *)neth, (char *)niph - (char *)neth);
 					pfr->rt_out.outdev = nskb->dev;
 					pfr->rt_out_magic = rt_out_magic;
+					pfr->is_dead = 1;
 				}
 			}
 		}
@@ -2968,6 +2969,18 @@ sni_out:
 					}
 				}
 
+				if ((user->mark & 0x3f00)) {
+					struct natcap_fastpath_route *pfr;
+					int line = (user->mark & 0x3f00) >> 8;
+					if (line >= 1 && line <= MAX_PEER_NUM) {
+						line--;
+						pfr = &natcap_pfr[line];
+						if (pfr->is_dead) {
+							pfr->is_dead = 0;
+						}
+					}
+				}
+
 				//pass up to icmp
 				do {
 					int offset, add_len;
@@ -3685,8 +3698,6 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 			if (iph->daddr == PEER_DEAD_ADDR) { /* PEER_DEAD_ADDR = 13.14.10.13 dead */
 				pfr->is_dead = 1;
 				goto out;
-			} else {
-				pfr->is_dead = 0;
 			}
 		}
 	}
@@ -4900,7 +4911,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			n = snprintf(natcap_peer_ctl_buffer,
 			             SEQ_PGSZ - 1,
 			             "PFR=%u outdev=%s saddr=%pI4 ready=%d last_rx=%u\n",
-			             (unsigned int)((*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP - PEER_PUB_NUM),
+			             (unsigned int)((*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP - PEER_PUB_NUM + 1),
 			             pfr->rt_out.outdev->name,
 			             &pfr->saddr,
 			             is_fastpath_route_ready(pfr),
