@@ -46,6 +46,7 @@
 #define NATCAP_9_MAGIC_TYPE2 0x00000002 /* client --> forward carry tuple request */
 #define NATCAP_9_MAGIC_TYPE3 0x00000003 /* forward --> server carry tuple request */
 #define NATCAP_9_MAGIC_TYPE4 0x00000004 /* reply for CFM: to client/server */
+#define NATCAP_9_MAGIC_TYPE5 0x00000005 /* notify weight changes: to server */
 
 #define NATCAP_8_MAGIC 0xfff80099 /* client --> forward --> server pass data */
 #define NATCAP_7_MAGIC 0xfff70099 /* upgrade NATCAP_F_MAGIC */

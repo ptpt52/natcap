@@ -2173,6 +2173,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 							ns->peer.tuple3[j].sport = htons(prandom_u32() % (65536 - 1024) + 1024);
 							ns->peer.total_weight += natcap_pfr[j].weight;
 							ns->peer.weight[j] = natcap_pfr[j].weight;
+							ns->peer.req_cnt = 3; /* init notify weight */
 						}
 				}
 			}
@@ -2483,6 +2484,42 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				natcap_pfr[i].last_rx_jiffies = jiffies;
 				if (natcap_pfr[i].last_rxtx == 1) {
 					natcap_pfr[i].last_rxtx = 0;
+				}
+			}
+
+			/* XXX I just confirm it first  */
+			ret = nf_conntrack_confirm(skb);
+			if (ret != NF_ACCEPT) {
+				return ret;
+			}
+
+			consume_skb(skb);
+			return NF_STOLEN;
+		} else if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(NATCAP_9_MAGIC_TYPE5)) {
+			int i;
+
+			if (!master->master) {
+				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+				NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": peer pass forward: type5\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_ACCEPT;
+			}
+
+			if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct udphdr) + 8 + MAX_PEER_NUM * 2)) {
+				return NF_ACCEPT;
+			}
+
+			ct = master->master;
+			ns = natcap_session_get(ct);
+			if (ns == NULL) {
+				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": natcap_session_get failed\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_DROP;
+			}
+			for (i = 0; i < MAX_PEER_NUM; i++) {
+				unsigned short val = get_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 2 * i);
+				val = ntohs(val);
+				if (ns->peer.weight[i] != val) {
+					ns->peer.total_weight = ns->peer.total_weight - ns->peer.weight[i] + val;
+					ns->peer.weight[i] = val;
 				}
 			}
 
@@ -2954,6 +2991,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 		do {
 			int offlen;
+			struct sk_buff *pcskb = NULL;
 			struct sk_buff *nskb = skb->next;
 			struct sk_buff *dup_skb = NULL;
 			unsigned int total_weight = ns->peer.total_weight;
@@ -2991,6 +3029,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 						if (natcap_pfr[i].weight != ns->peer.weight[i]) {
 							ns->peer.total_weight = ns->peer.total_weight - ns->peer.weight[i] + natcap_pfr[i].weight;
 							ns->peer.weight[i] = natcap_pfr[i].weight;
+							ns->peer.req_cnt = 3;
 						}
 						if (!is_fastpath_route_ready(&natcap_pfr[i]))
 							continue;
@@ -3005,6 +3044,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 						if (natcap_pfr[i].weight != ns->peer.weight[i]) {
 							ns->peer.total_weight = ns->peer.total_weight - ns->peer.weight[i] + natcap_pfr[i].weight;
 							ns->peer.weight[i] = natcap_pfr[i].weight;
+							ns->peer.req_cnt = 3;
 						}
 					}
 				}
@@ -3055,6 +3095,44 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 								flow_total_tx_bytes += dup_skb->len;
 							}
 						}
+						if (ns->peer.req_cnt > 0 || uintmindiff(ns->peer.jiffies, jiffies) > 5 * HZ) {
+							ns->peer.jiffies = jiffies;
+							if (ns->peer.req_cnt != 0) ns->peer.req_cnt--;
+
+							pcskb = natcap_peer_ctrl_alloc(skb, 8 + MAX_PEER_NUM * 2);
+							if (pcskb) {
+								iph = ip_hdr(pcskb);
+								l4 = (void *)iph + iph->ihl * 4;
+
+								set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_9_MAGIC));
+								set_byte4((void *)UDPH(l4) + 8 + 4, __constant_htonl(NATCAP_9_MAGIC_TYPE5));
+								for (i = 0; i < MAX_PEER_NUM; i++) {
+									set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 2 * i, htons(ns->peer.weight[i]));
+								}
+
+								if (peer_multipath > MAX_PEER_NUM && ns->peer.idx != idx) { /* There is chance to select peer or master */
+									iph->saddr = natcap_pfr[idx].saddr;
+									iph->daddr = ns->peer.tuple3[idx].dip;
+									UDPH(l4)->dest = ns->peer.tuple3[idx].dport;
+									UDPH(l4)->source = ns->peer.tuple3[idx].sport;
+
+									pcskb->ip_summed = CHECKSUM_UNNECESSARY;
+									skb_rcsum_tcpudp(pcskb);
+
+									pcskb->dev = natcap_pfr[idx].rt_out.outdev;
+									skb_push(pcskb, natcap_pfr[idx].rt_out.l2_head_len);
+									skb_reset_mac_header(pcskb);
+									memcpy(skb_mac_header(pcskb), natcap_pfr[idx].rt_out.l2_head, natcap_pfr[idx].rt_out.l2_head_len);
+									dev_queue_xmit(pcskb);
+									pcskb = NULL;
+								} else {
+									pcskb->ip_summed = CHECKSUM_UNNECESSARY;
+									skb_rcsum_tcpudp(pcskb);
+								}
+
+								ns->peer.idx = (ns->peer.idx + 1) % MAX_PEER_NUM;
+							}
+						}
 					} else {
 						ns->peer.total_weight -= ns->peer.weight[idx];
 						ns->peer.weight[idx] = 0;
@@ -3068,6 +3146,10 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 			NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": after natcap post out\n", DEBUG_UDP_ARG(iph,l4));
 			flow_total_tx_bytes += skb->len;
+
+			if (pcskb) {
+				NF_OKFN(pcskb);
+			}
 
 			if (peer_multipath <= MAX_PEER_NUM) {
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
