@@ -2902,6 +2902,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			if (natcap_pfr[idx].last_rxtx == 1) {
 				natcap_pfr[idx].last_rxtx = 0;
 			}
+			atomic_add(skb->len, &natcap_pfr[idx].rx_speed[(jiffies / HZ) % SPEED_SAMPLE_COUNT]);
+			atomic_set(&natcap_pfr[idx].rx_speed[(jiffies / HZ + 1) % SPEED_SAMPLE_COUNT], 0);
 		}
 
 		NATCAP_DEBUG("(SPI)" DEBUG_TCP_FMT ": peer pass up: after ct=[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n", DEBUG_TCP_ARG(iph,l4),

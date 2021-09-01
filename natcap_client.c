@@ -2307,7 +2307,6 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					             natcap_pfr[i].rt_out.outdev->name
 					            );
 
-
 					skb_push(nskb, natcap_pfr[i].rt_out.l2_head_len);
 					skb_reset_mac_header(nskb);
 					memcpy(skb_mac_header(nskb), natcap_pfr[i].rt_out.l2_head, natcap_pfr[i].rt_out.l2_head_len);
@@ -2629,6 +2628,9 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			if (natcap_pfr[idx].last_rxtx == 1) {
 				natcap_pfr[idx].last_rxtx = 0;
 			}
+
+			atomic_add(skb->len, &natcap_pfr[idx].rx_speed[(jiffies / HZ) % SPEED_SAMPLE_COUNT]);
+			atomic_set(&natcap_pfr[idx].rx_speed[(jiffies / HZ + 1) % SPEED_SAMPLE_COUNT], 0);
 		}
 
 		NATCAP_DEBUG("(CPI)" DEBUG_TCP_FMT ": peer pass up: after ct=[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n", DEBUG_TCP_ARG(iph,l4),
@@ -3083,6 +3085,9 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 							skb_rcsum_tcpudp(dup_skb);
 
 							if (peer_multipath > MAX_PEER_NUM) {
+								atomic_add(dup_skb->len, &natcap_pfr[idx].tx_speed[(jiffies / HZ) % SPEED_SAMPLE_COUNT]);
+								atomic_set(&natcap_pfr[idx].tx_speed[(jiffies / HZ + 1) % SPEED_SAMPLE_COUNT], 0);
+
 								dup_skb->dev = natcap_pfr[idx].rt_out.outdev;
 								skb_push(dup_skb, natcap_pfr[idx].rt_out.l2_head_len);
 								skb_reset_mac_header(dup_skb);
