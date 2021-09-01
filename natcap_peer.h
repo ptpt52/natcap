@@ -82,6 +82,9 @@ struct natcap_fastpath_route {
 	__be32 saddr;
 	unsigned int rt_out_magic;
 	struct natcap_route rt_out;
+#define SPEED_SAMPLE_COUNT 8
+	atomic_t tx_speed[SPEED_SAMPLE_COUNT];
+	atomic_t rx_speed[SPEED_SAMPLE_COUNT];
 };
 
 #define PEER_DEAD_ADDR __constant_htonl((13<<24)|(14<<16)|(10<<8)|(13<<0))

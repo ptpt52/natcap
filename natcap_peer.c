@@ -4905,6 +4905,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 		}
 
 		while ((*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP - PEER_PUB_NUM < MAX_PEER_NUM) {
+			unsigned int idx = (jiffies / HZ);
 			struct natcap_fastpath_route *pfr = &natcap_pfr[(*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP - PEER_PUB_NUM];
 
 			if (pfr->rt_out_magic != rt_out_magic || pfr->rt_out.outdev == NULL) {
@@ -4914,13 +4915,29 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			natcap_peer_ctl_buffer[0] = 0;
 			n = snprintf(natcap_peer_ctl_buffer,
 			             SEQ_PGSZ - 1,
-			             "PFR=%u outdev=%s saddr=%pI4 ready=%d weight=%u last_rx=%u\n",
+			             "PFR=%u outdev=%s saddr=%pI4 ready=%d weight=%u last_rx=%u, tx=%u,%u,%u,%u,%u,%u,%u,%u, rx=%u,%u,%u,%u,%u,%u,%u,%u\n",
 			             (unsigned int)((*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP - PEER_PUB_NUM + 1),
 			             pfr->rt_out.outdev->name,
 			             &pfr->saddr,
 			             is_fastpath_route_ready(pfr),
 			             pfr->weight,
-			             uintmindiff(jiffies, pfr->last_rx_jiffies)
+			             uintmindiff(jiffies, pfr->last_rx_jiffies),
+			             atomic_read(&pfr->tx_speed[(idx + 1) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->tx_speed[(idx + 2) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->tx_speed[(idx + 3) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->tx_speed[(idx + 4) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->tx_speed[(idx + 5) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->tx_speed[(idx + 6) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->tx_speed[(idx + 7) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->tx_speed[(idx + 8) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->rx_speed[(idx + 1) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->rx_speed[(idx + 2) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->rx_speed[(idx + 3) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->rx_speed[(idx + 4) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->rx_speed[(idx + 5) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->rx_speed[(idx + 6) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->rx_speed[(idx + 7) % SPEED_SAMPLE_COUNT]),
+			             atomic_read(&pfr->rx_speed[(idx + 8) % SPEED_SAMPLE_COUNT])
 			            );
 			natcap_peer_ctl_buffer[n] = 0;
 			return natcap_peer_ctl_buffer;
