@@ -3024,17 +3024,23 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				unsigned int weight = 0;
 				int i, idx = -1;
 				for (i = 0; i < MAX_PEER_NUM; i++) {
-					if (ns->peer.tuple3[i].dip == 0 || !short_test_bit(i, &ns->peer.mark))
-						continue;
 					if (peer_multipath > MAX_PEER_NUM) {
-						if (!is_fastpath_route_ready(&natcap_pfr[i]))
+						if (ns->peer.tuple3[i].dip == 0 || !short_test_bit(i, &ns->peer.mark) ||
+						        !is_fastpath_route_ready(&natcap_pfr[i])) {
+							ns->peer.total_weight = ns->peer.total_weight - ns->peer.weight[i] + 0;
+							if (ns->peer.weight[i] != 0) {
+								ns->peer.weight[i] = 0;
+								ns->peer.req_cnt = 3;
+							}
 							continue;
+						}
 						if (natcap_pfr[i].weight != ns->peer.weight[i]) {
 							ns->peer.total_weight = ns->peer.total_weight - ns->peer.weight[i] + natcap_pfr[i].weight;
 							ns->peer.weight[i] = natcap_pfr[i].weight;
 							ns->peer.req_cnt = 3;
 						}
-					}
+					} else if (ns->peer.tuple3[i].dip == 0 || !short_test_bit(i, &ns->peer.mark))
+						continue;
 					weight += ns->peer.weight[i];
 					if (ball < weight) {
 						idx = i;
@@ -3043,10 +3049,15 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				}
 				if (peer_multipath > MAX_PEER_NUM) {
 					for (; i < MAX_PEER_NUM; i++) {
-						if (ns->peer.tuple3[i].dip == 0 || !short_test_bit(i, &ns->peer.mark))
+						if (ns->peer.tuple3[i].dip == 0 || !short_test_bit(i, &ns->peer.mark) ||
+						        !is_fastpath_route_ready(&natcap_pfr[i])) {
+							ns->peer.total_weight = ns->peer.total_weight - ns->peer.weight[i] + 0;
+							if (ns->peer.weight[i] != 0) {
+								ns->peer.weight[i] = 0;
+								ns->peer.req_cnt = 3;
+							}
 							continue;
-						if (!is_fastpath_route_ready(&natcap_pfr[i]))
-							continue;
+						}
 						if (natcap_pfr[i].weight != ns->peer.weight[i]) {
 							ns->peer.total_weight = ns->peer.total_weight - ns->peer.weight[i] + natcap_pfr[i].weight;
 							ns->peer.weight[i] = natcap_pfr[i].weight;
