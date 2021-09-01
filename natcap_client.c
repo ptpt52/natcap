@@ -3024,18 +3024,18 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				unsigned int weight = 0;
 				int i, idx = -1;
 				for (i = 0; i < MAX_PEER_NUM; i++) {
-					weight += ns->peer.weight[i];
 					if (ns->peer.tuple3[i].dip == 0 || !short_test_bit(i, &ns->peer.mark))
 						continue;
 					if (peer_multipath > MAX_PEER_NUM) {
+						if (!is_fastpath_route_ready(&natcap_pfr[i]))
+							continue;
 						if (natcap_pfr[i].weight != ns->peer.weight[i]) {
 							ns->peer.total_weight = ns->peer.total_weight - ns->peer.weight[i] + natcap_pfr[i].weight;
 							ns->peer.weight[i] = natcap_pfr[i].weight;
 							ns->peer.req_cnt = 3;
 						}
-						if (!is_fastpath_route_ready(&natcap_pfr[i]))
-							continue;
 					}
+					weight += ns->peer.weight[i];
 					if (ball < weight) {
 						idx = i;
 						break;
@@ -3043,6 +3043,10 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				}
 				if (peer_multipath > MAX_PEER_NUM) {
 					for (; i < MAX_PEER_NUM; i++) {
+						if (ns->peer.tuple3[i].dip == 0 || !short_test_bit(i, &ns->peer.mark))
+							continue;
+						if (!is_fastpath_route_ready(&natcap_pfr[i]))
+							continue;
 						if (natcap_pfr[i].weight != ns->peer.weight[i]) {
 							ns->peer.total_weight = ns->peer.total_weight - ns->peer.weight[i] + natcap_pfr[i].weight;
 							ns->peer.weight[i] = natcap_pfr[i].weight;
@@ -3112,7 +3116,15 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 								set_byte4((void *)UDPH(l4) + 8, __constant_htonl(NATCAP_9_MAGIC));
 								set_byte4((void *)UDPH(l4) + 8 + 4, __constant_htonl(NATCAP_9_MAGIC_TYPE5));
 								for (i = 0; i < MAX_PEER_NUM; i++) {
-									set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 2 * i, htons(ns->peer.weight[i]));
+									__be16 weight = htons(ns->peer.weight[i]);
+									if (ns->peer.tuple3[i].dip == 0 || !short_test_bit(i, &ns->peer.mark))
+										weight = htons(0);
+									else if (peer_multipath > MAX_PEER_NUM) {
+										if (!is_fastpath_route_ready(&natcap_pfr[i])) {
+											weight = htons(0);
+										}
+									}
+									set_byte2((void *)UDPH(l4) + 8 + 4 + 4 + 2 * i, weight);
 								}
 
 								if (peer_multipath > MAX_PEER_NUM && ns->peer.idx != idx) { /* There is chance to select peer or master */
