@@ -2361,11 +2361,13 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		if (get_byte4((void *)UDPH(l4) + 8 + 4) == __constant_htonl(NATCAP_9_MAGIC_TYPE1)) {
 			__be32 sip, dip;
 
-			ct = master->master;
-			if (!ct) {
-				NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": master->master == NULL\n", DEBUG_UDP_ARG(iph,l4));
-				return NF_DROP;
+			if (!master->master) {
+				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+				NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": peer pass forward: type1\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_ACCEPT;
 			}
+
+			ct = master->master;
 			ns = natcap_session_get(ct);
 			if (ns == NULL) {
 				NATCAP_WARN("(SPI)" DEBUG_UDP_FMT ": natcap_session_get failed\n", DEBUG_UDP_ARG(iph,l4));
