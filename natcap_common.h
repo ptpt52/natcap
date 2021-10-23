@@ -572,7 +572,9 @@ static inline int nf_unicast_output_route(struct net *net, struct sock *sk, stru
 	struct rtable *rt;
 	struct flowi4 fl4 = {};
 	__u8 flags;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
 	struct flow_keys flkeys;
+#endif
 	unsigned int hh_len;
 
 	if (!net)

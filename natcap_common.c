@@ -2000,10 +2000,12 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 				css_idx = idx;
 				break;
 			}
+#if defined(CONE_NAT_CHECK_USED_HOOK)
 			if (max_uint_diff < uintmindiff(CONE_NAT_NOW, css.u32_timestamp)) {
 				max_uint_diff = uintmindiff(CONE_NAT_NOW, css.u32_timestamp);
 				css_idx = idx;
 			}
+#endif
 			idx = (idx + 1) % 32768;
 		}
 		idx = css_idx;
