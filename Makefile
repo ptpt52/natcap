@@ -60,8 +60,13 @@ apnic.txt:
 	@mv apnic.txt.tmp apnic.txt
 	@touch apnic.txt
 
-cniplist.orig.set: cnip2cidr.lua ipops.lua ip.merge.txt
+cniplist.orig.set: cnip2cidr.lua ipops.lua ip.merge.txt apnic.txt
 	lua cnip2cidr.lua >cniplist.orig.set
+	cat apnic.txt | grep CN | grep ipv4 | cut -d\| -f4,5 >cniplist.txt.tmp
+	lua apnic.lua cniplist.txt.tmp >>cniplist.orig.set
+	@rm -f cniplist.txt.tmp
+	lua ipgroup_merge.lua cniplist.orig.set >cniplist.orig.set.tmp
+	@mv cniplist.orig.set.tmp cniplist.orig.set
 
 hkiplist.orig.set: apnic.txt ipops.lua
 	cat apnic.txt | grep HK | grep ipv4 | cut -d\| -f4,5 >hkiplist.txt.tmp
