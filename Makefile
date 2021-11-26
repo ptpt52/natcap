@@ -35,14 +35,15 @@ modules_clean:
 
 clean: modules_clean
 
-cniplist.set: cniplist.orig.set local.set ipops.lua
+cniplist.set: cniplist.orig.set local.set sub.set ipops.lua
 	lua ipgroup_merge.lua cniplist.orig.set local.set >cniplist.set.tmp
-	@mv cniplist.set.tmp cniplist.set
+	lua ipgroup_sub.lua cniplist.set.tmp sub.set >cniplist.set
+	@rm -f cniplist.set.tmp
 
-C_cniplist.set: cniplist.set local.set ipops.lua
+C_cniplist.set: cniplist.set local.set sub.set ipops.lua
 	lua ipgroup_invert.lua cniplist.set >C_cniplist.orig.set.tmp
 	lua ipgroup_merge.lua C_cniplist.orig.set.tmp local.set >C_cniplist.set.tmp
-	@mv C_cniplist.set.tmp C_cniplist.set
+	lua ipgroup_sub.lua C_cniplist.set.tmp sub.set >C_cniplist.set
 	@rm -f C_cniplist.orig.set.tmp
 
 ipset: cniplist.set C_cniplist.set cniplist6.set getflix.set hkiplist.orig.set
