@@ -44,7 +44,7 @@ C_cniplist.set: cniplist.set local.set sub.set ipops.lua
 	lua ipgroup_invert.lua cniplist.set >C_cniplist.orig.set.tmp
 	lua ipgroup_merge.lua C_cniplist.orig.set.tmp local.set >C_cniplist.set.tmp
 	lua ipgroup_sub.lua C_cniplist.set.tmp sub.set >C_cniplist.set
-	@rm -f C_cniplist.orig.set.tmp
+	@rm -f C_cniplist.orig.set.tmp C_cniplist.set.tmp
 
 ipset: cniplist.set C_cniplist.set cniplist6.set getflix.set hkiplist.orig.set
 
