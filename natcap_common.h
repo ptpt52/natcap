@@ -727,9 +727,7 @@ static inline void skb_nfct_reset(struct sk_buff *skb)
 #endif
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
-#define nf_reset nf_reset_ct
-#else
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0)
 #define skb_frag_off(f) (f)->page_offset
 #endif
 
