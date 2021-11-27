@@ -661,6 +661,7 @@ struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be16 spor
 		skb_nfct_reset(uskb);
 		return NULL;
 	}
+	user = nf_ct_get(uskb, &ctinfo);
 
 	nf_conntrack_get(&user->ct_general);
 	skb_nfct_reset(uskb);
@@ -788,6 +789,7 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 		skb_nfct_reset(uskb);
 		return NULL;
 	}
+	user = nf_ct_get(uskb, &ctinfo);
 
 	ue = peer_user_expect(user);
 
@@ -1107,6 +1109,7 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 		skb_nfct_reset(uskb);
 		return 0;
 	}
+	user = nf_ct_get(uskb, &ctinfo);
 
 	ue = peer_user_expect(user);
 
@@ -1237,6 +1240,7 @@ static inline void natcap_auth_user_confirm(const unsigned char *client_mac, int
 		skb_nfct_reset(uskb);
 		return;
 	}
+	user = nf_ct_get(uskb, &ctinfo);
 
 	ue = peer_user_expect(user);
 
@@ -3220,6 +3224,7 @@ syn_out:
 							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": FACK https sni, nf_conntrack_confirm fail=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 							goto sni_skip;
 						}
+						ct = nf_ct_get(skb, &ctinfo);
 
 						cache_skb = peer_cache_detach(ct);
 						if (cache_skb == NULL) {
