@@ -1138,6 +1138,7 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 		            &old_ip, &client_ip, ntohs(ue->map_port),
 		            ue->last_active_auth != 0 ? (uintmindiff(ue->last_active_auth, jiffies) + HZ / 2) / HZ : (-1));
 		user->mark = ntohl(client_ip);
+		ue->ip = client_ip;
 	}
 
 	if ((ue->status & PEER_SUBTYPE_AUTH)) {
