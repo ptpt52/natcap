@@ -855,6 +855,15 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 				goto bypass_tcp;
 			}
 			natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
+			ns = natcap_session_in(ct);
+			if (!ns) {
+				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+				return NF_ACCEPT;
+			}
+			natcap_tuple_to_ns(ns, &server, iph->protocol);
+			ns->n.group_x = SERVER_GROUP_MAX; // no use
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, knock select target server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		} else if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
 		           IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
