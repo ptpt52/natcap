@@ -41,12 +41,13 @@
 
 unsigned short knock_port = __constant_htons(65535);
 unsigned int knock_flood = 0;
+unsigned int knock_encryption = 0;
 
 void natcap_knock_info_select(__be32 ip, __be16 port, struct tuple *dst)
 {
 	dst->ip = ip;
 	dst->port = knock_port;
-	dst->encryption = 0;
+	dst->encryption = knock_encryption;
 
 	if (dst->port == __constant_htons(0)) {
 		dst->port = port;
