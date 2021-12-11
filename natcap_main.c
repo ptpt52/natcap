@@ -103,7 +103,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             "#    http_confusion=%u\n"
 		             "#    encode_http_only=%u\n"
 		             "#    sproxy=%u\n"
-		             "#    knock_port=%u\n"
+		             "#    knock_port=%u-%s\n"
 		             "#    knock_flood=%u\n"
 		             "#    natcap_redirect_port=%u\n"
 		             "#    natcap_client_redirect_port=%u\n"
@@ -149,7 +149,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             natcap_rx_speed_get(),
 		             tx_pkts_threshold,
 		             rx_pkts_threshold,
-		             http_confusion, encode_http_only, sproxy, ntohs(knock_port), knock_flood,
+		             http_confusion, encode_http_only, sproxy, ntohs(knock_port), knock_encryption ? "e" : "o", knock_flood,
 		             ntohs(natcap_redirect_port), ntohs(natcap_client_redirect_port), natcap_max_pmtu, natcap_touch_timeout,
 		             flow_total_tx_bytes, flow_total_rx_bytes,
 		             auth_http_redirect_url,
@@ -570,9 +570,16 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	} else if (strncmp(data, "knock_port=", 11) == 0) {
 		if (mode == KNOCK_MODE || mode == CLIENT_MODE || mode == MIXING_MODE) {
 			unsigned int d;
+			char e;
 			n = sscanf(data, "knock_port=%u", &d);
 			if (n == 1 && d <= 65535) {
 				knock_port = htons((unsigned short)(d & 0xffff));
+				n = sscanf(data, "knock_port=%u-%c", &d, &e);
+				if (n == 2 && e == 'e') {
+					knock_encryption = 1;
+				} else {
+					knock_encryption = 0;
+				}
 				goto done;
 			}
 		}
