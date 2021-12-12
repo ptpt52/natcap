@@ -43,7 +43,7 @@
 unsigned short natcap_udp_seq_lock = 0;
 unsigned short natcap_ignore_forward = 0;
 unsigned int natcap_ignore_mask = 0x00000000;
-unsigned int natcap_max_pmtu = 1440;
+unsigned int natcap_max_pmtu = 1420;
 
 unsigned int natcap_touch_timeout = 32;
 
