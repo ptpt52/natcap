@@ -786,6 +786,24 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": natcapd server local out bypass\n", DEBUG_TCP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
+	if (hooknum == NF_INET_LOCAL_OUT) {
+		char tname[TASK_COMM_LEN];
+		get_task_comm(tname, current);
+
+		switch (iph->protocol) {
+		case IPPROTO_TCP:
+			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": p[%s]\n", DEBUG_TCP_ARG(iph,l4), tname);
+			break;
+		case IPPROTO_UDP:
+			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": p[%s]\n", DEBUG_UDP_ARG(iph,l4), tname);
+			break;
+		}
+		if (strncmp(tname, "tinyproxy", 9) == 0 || strncmp(tname, "sockd", 5) == 0) {
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
+			return NF_ACCEPT;
+		}
+	}
 
 	if (hooknum != NF_INET_LOCAL_OUT) {
 		if (macfilter == NATCAP_ACL_ALLOW && IP_SET_test_src_mac(state, in, out, skb, "natcap_maclist") <= 0) {
