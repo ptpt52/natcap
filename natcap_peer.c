@@ -51,7 +51,7 @@
 
 static unsigned int peer_open_portmap = 0;
 static unsigned int peer_mode = 0;
-static unsigned int peer_max_pmtu = 1440;
+static unsigned int peer_max_pmtu = 1420;
 static unsigned int peer_sni_ban = 0;
 
 struct peer_cache_node {
