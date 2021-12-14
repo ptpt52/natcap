@@ -61,7 +61,10 @@ apnic.txt:
 	@mv apnic.txt.tmp apnic.txt
 	@touch apnic.txt
 
-cniplist.orig.set: cnip2cidr.lua ipops.lua ip.merge.txt apnic.txt
+china_ip_list.txt:
+	wget -4 https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt -O china_ip_list.txt
+
+cniplist.orig.set: cnip2cidr.lua ipops.lua ip.merge.txt apnic.txt china_ip_list.txt geoip.txt.out.cn geoip.txt.out.cn1
 	lua cnip2cidr.lua >cniplist.orig.set.1
 	cat apnic.txt | grep CN | grep ipv4 | cut -d\| -f4,5 >cniplist.txt.tmp
 	lua apnic.lua cniplist.txt.tmp >cniplist.orig.set.2
@@ -75,6 +78,17 @@ cniplist.orig.set: cnip2cidr.lua ipops.lua ip.merge.txt apnic.txt
 	cat cniplist.orig.set.12 | sed 's/,/\n/g' >cniplist.orig.set.exclude
 	cat cniplist.orig.set.21 | sed 's/,/\n/g' >>cniplist.orig.set.exclude
 	cat geoip.txt.out.cn | cut -d= -f1 | while read ip; do grep "$$ip/" cniplist.orig.set.exclude; done | sort -n >>cniplist.orig.set
+	lua ipgroup_merge.lua cniplist.orig.set >cniplist.orig.set.tmp
+	mv cniplist.orig.set.tmp cniplist.orig.set
+	lua ipops.lua netStrings_sub_netStrings "$$(echo `cat china_ip_list.txt` | sed 's/ /,/g')" "$$(echo `cat cniplist.orig.set` | sed 's/ /,/g')" >cniplist.orig.set.12
+	lua ipops.lua netStrings_sub_netStrings "$$(echo `cat cniplist.orig.set` | sed 's/ /,/g')" "$$(echo `cat china_ip_list.txt` | sed 's/ /,/g')" >cniplist.orig.set.21
+	lua ipgroup_merge.lua cniplist.orig.set china_ip_list.txt >cniplist.orig.set.tmp
+	mv cniplist.orig.set.tmp cniplist.orig.set
+	lua ipops.lua netStrings_sub_netStrings "$$(echo `cat cniplist.orig.set` | sed 's/ /,/g')" "$$(echo `cat cniplist.orig.set.12`,`cat cniplist.orig.set.21`)" >cniplist.orig.set.tmp
+	cat cniplist.orig.set.tmp | sed 's/,/\n/g' >cniplist.orig.set
+	cat cniplist.orig.set.12 | sed 's/,/\n/g' >cniplist.orig.set.exclude1
+	cat cniplist.orig.set.21 | sed 's/,/\n/g' >>cniplist.orig.set.exclude1
+	cat geoip.txt.out.cn1 | cut -d= -f1 | while read ip; do grep "$$ip/" cniplist.orig.set.exclude1; done | sort -n >>cniplist.orig.set
 	lua ipgroup_merge.lua cniplist.orig.set >cniplist.orig.set.tmp
 	mv cniplist.orig.set.tmp cniplist.orig.set
 	@rm -f cniplist.orig.set.1 cniplist.orig.set.2 cniplist.orig.set.12 cniplist.orig.set.21 cniplist.orig.set.tmp
