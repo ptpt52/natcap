@@ -103,7 +103,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             "#    http_confusion=%u\n"
 		             "#    encode_http_only=%u\n"
 		             "#    sproxy=%u\n"
-		             "#    knock_port=%u-%s\n"
+		             "#    knock_port=%u-%c-%c-%c\n"
 		             "#    knock_flood=%u\n"
 		             "#    natcap_redirect_port=%u\n"
 		             "#    natcap_client_redirect_port=%u\n"
@@ -149,7 +149,9 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             natcap_rx_speed_get(),
 		             tx_pkts_threshold,
 		             rx_pkts_threshold,
-		             http_confusion, encode_http_only, sproxy, ntohs(knock_port), knock_encryption ? "e" : "o", knock_flood,
+		             http_confusion, encode_http_only, sproxy, ntohs(knock_port), knock_encryption ? 'e' : 'o',
+			     knock_tcp_encode == TCP_ENCODE ? 'T' : 'U', knock_udp_encode == UDP_ENCODE ? 'U' : 'T',
+			     knock_flood,
 		             ntohs(natcap_redirect_port), ntohs(natcap_client_redirect_port), natcap_max_pmtu, natcap_touch_timeout,
 		             flow_total_tx_bytes, flow_total_rx_bytes,
 		             auth_http_redirect_url,
@@ -579,6 +581,14 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 					knock_encryption = 1;
 				} else {
 					knock_encryption = 0;
+				}
+				if (n == 2) {
+					char g, h;
+					n = sscanf(data, "knock_port=%u-%c-%c-%c", &d, &e, &g, &h);
+					if (n == 4 && (e == 'e' || e == 'o') && (g == 'T' || g == 'U') && (h == 'U' || h == 'T')) {
+						knock_tcp_encode = g == 'T' ? TCP_ENCODE : UDP_ENCODE;
+						knock_udp_encode = h == 'U' ? UDP_ENCODE : TCP_ENCODE;
+					}
 				}
 				goto done;
 			}

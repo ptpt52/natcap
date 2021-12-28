@@ -27,7 +27,9 @@
 
 extern unsigned short knock_port;
 extern unsigned int knock_flood;
-extern unsigned int knock_encryption;
+extern unsigned short knock_encryption;
+extern unsigned char knock_tcp_encode;
+extern unsigned char knock_udp_encode;
 
 extern void natcap_knock_info_select(__be32 ip, __be16 port, struct tuple *dst);
 
