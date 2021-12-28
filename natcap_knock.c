@@ -48,6 +48,8 @@ void natcap_knock_info_select(__be32 ip, __be16 port, struct tuple *dst)
 	dst->ip = ip;
 	dst->port = knock_port;
 	dst->encryption = knock_encryption;
+	dst->tcp_encode = TCP_ENCODE;
+	dst->udp_encode = UDP_ENCODE;
 
 	if (dst->port == __constant_htons(0)) {
 		dst->port = port;
