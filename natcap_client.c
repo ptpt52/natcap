@@ -36,6 +36,7 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <linux/version.h>
+#include <linux/vmalloc.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_helper.h>
 #include <net/netfilter/nf_conntrack_acct.h>
@@ -4890,7 +4891,11 @@ int cn_domain_load_from_path(char *path)
 		return -1;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 	while ((bytes = kernel_read(filp, buf + r_idx, 4096 - r_idx, &pos)) > 0) {
+#else
+	while ((bytes = kernel_read(filp, pos, buf + r_idx, 4096 - r_idx)) > 0) {
+#endif
 		r_cnt = r_idx + bytes;
 		s = 0;
 		for (i = 0; i < r_cnt;) {
@@ -4939,7 +4944,11 @@ int cn_domain_load_from_raw(char *path)
 		return -1;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 	while ((bytes = kernel_read(filp, buf, 4096, &pos)) > 0) {
+#else
+	while ((bytes = kernel_read(filp, pos, buf, 4096)) > 0) {
+#endif
 		if (cn_domain_tmp == NULL || nbytes + bytes > cn_domain_tmp_size * CN_DOMAIN_SIZE) {
 			char *tmp;
 			cn_domain_tmp_size += 128 * 1024 / CN_DOMAIN_SIZE;
@@ -4990,7 +4999,11 @@ int cn_domain_dump_path(char *path)
 		return -1;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 	bytes = kernel_write(filp, cn_domain + pos, cn_domain_count * CN_DOMAIN_SIZE - pos, &pos);
+#else
+	bytes = kernel_write(filp, cn_domain + pos, cn_domain_count * CN_DOMAIN_SIZE - pos, pos);
+#endif
 	printk("cn_domain dump: write %d\n", (int)bytes);
 
 	filp_close(filp, NULL);
