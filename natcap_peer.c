@@ -2532,6 +2532,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
 					if (!(IPS_NATCAP_PEER & user->status)) {
 						nf_ct_put(user);
+						skb_nfct_reset(skb);
 						return NF_ACCEPT;
 					}
 					nf_ct_put(user);
@@ -2611,6 +2612,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		if (h) {
 			struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
 			nf_ct_put(user);
+			skb_nfct_reset(skb);
 			return NF_ACCEPT;
 		}
 
@@ -2843,6 +2845,8 @@ sni_out:
 	if (tcpopt == NULL) {
 		return NF_ACCEPT;
 	}
+
+	skb_nfct_reset(skb);
 
 	if (hooknum == NF_INET_PRE_ROUTING && !inet_is_local(in, iph->daddr)) {
 		return NF_ACCEPT;
