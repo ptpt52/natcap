@@ -1303,6 +1303,12 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		return -1;
 	}
 
+	if (test_and_set_bit(IPS_NATCAP_SESSION_BIT, &ct->status)) {
+		/* someone else is already running in this progress */
+		NATCAP_WARN(DEBUG_FMT_PREFIX "someone else is already running in this progress!\n", DEBUG_ARG_PREFIX);
+		return -1;
+	}
+
 	for (i = 0; i < ARRAY_SIZE((((struct nf_ct_ext *)0)->offset)); i++) {
 		if (!nf_ct_ext_exist(ct, i)) compat_nf_ct_ext_add(ct, i, gfp);
 	}

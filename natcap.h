@@ -349,6 +349,10 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define xt_mark_natcap_set(mark, at) *(unsigned int *)(at) = ((*(unsigned int *)(at)) & (~XT_MARK_NATCAP_MASK)) | ((mark) & XT_MARK_NATCAP_MASK)
 #define xt_mark_natcap_get(at) ((*(unsigned int *)(at)) & XT_MARK_NATCAP_MASK)
 
+/*XXX: reuse IPS_HW_OFFLOAD_BIT=15 for atomic lock purpose, to atomic lock for ct->ext alloc */
+#define IPS_NATCAP_SESSION_BIT 15
+#define IPS_NATCAP_SESSION (1 << IPS_NATCAP_SESSION_BIT)
+
 /* @linux/netfilter/nf_conntrack_common.h */
 /* ct->status use bits:[31-24] for ecap status */
 
