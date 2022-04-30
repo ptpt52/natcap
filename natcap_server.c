@@ -1513,6 +1513,14 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 		if (ret != NF_ACCEPT) {
 			return ret;
 		}
+		ct = nf_ct_get(skb, &ctinfo);
+		if (NULL == ct) {
+			return NF_DROP;
+		}
+		ns = natcap_session_get(ct);
+		if (NULL == ns) {
+			return NF_DROP;
+		}
 
 		if (skb_is_gso(skb)) {
 			struct sk_buff *segs;
@@ -1686,6 +1694,15 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			if (ret != NF_ACCEPT) {
 				return ret;
 			}
+			ct = nf_ct_get(skb, &ctinfo);
+			if (NULL == ct) {
+				return NF_DROP;
+			}
+			ns = natcap_session_get(ct);
+			if (NULL == ns) {
+				return NF_DROP;
+			}
+
 			natcap_udp_to_tcp_pack(skb, ns, 1, NULL);
 		}
 		return NF_ACCEPT;
@@ -1826,6 +1843,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			ret = nf_conntrack_confirm(skb);
 			if (ret != NF_ACCEPT) {
 				return ret;
+			}
+			master = nf_ct_get(skb, &ctinfo);
+			if (NULL == master) {
+				return NF_ACCEPT;
 			}
 			skb_nfct_reset(skb);
 
@@ -1973,6 +1994,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					if (ret != NF_ACCEPT) {
 						return ret;
 					}
+					master = nf_ct_get(skb, &ctinfo);
+					if (NULL == master) {
+						return NF_ACCEPT;
+					}
 
 					ct = master->master;
 					ns = natcap_session_in(ct);
@@ -2063,6 +2088,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					if (ret != NF_ACCEPT) {
 						return ret;
 					}
+					master = nf_ct_get(skb, &ctinfo);
+					if (NULL == master) {
+						return NF_ACCEPT;
+					}
 
 					ct = master->master;
 					ns = natcap_session_in(ct);
@@ -2113,6 +2142,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					ret = nf_conntrack_confirm(skb);
 					if (ret != NF_ACCEPT) {
 						return ret;
+					}
+					master = nf_ct_get(skb, &ctinfo);
+					if (NULL == master) {
+						return NF_ACCEPT;
 					}
 					skb_nfct_reset(skb);
 
@@ -2298,6 +2331,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		if (ret != NF_ACCEPT) {
 			return ret;
 		}
+		master = nf_ct_get(skb, &ctinfo);
+		if (NULL == master) {
+			return NF_ACCEPT;
+		}
 		skb_nfct_reset(skb);
 
 		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4 - 8;
@@ -2381,6 +2418,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			ret = nf_conntrack_confirm(skb);
 			if (ret != NF_ACCEPT) {
 				return ret;
+			}
+			master = nf_ct_get(skb, &ctinfo);
+			if (NULL == master) {
+				return NF_ACCEPT;
 			}
 			skb_nfct_reset(skb);
 
@@ -2683,6 +2724,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			ret = nf_conntrack_confirm(skb);
 			if (ret != NF_ACCEPT) {
 				return ret;
+			}
+			master = nf_ct_get(skb, &ctinfo);
+			if (NULL == master) {
+				return NF_ACCEPT;
 			}
 			skb_nfct_reset(skb);
 

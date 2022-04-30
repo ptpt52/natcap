@@ -1595,6 +1595,10 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			if (ret != NF_ACCEPT) {
 				return ret;
 			}
+			master = nf_ct_get(skb, &ctinfo);
+			if (NULL == master) {
+				return NF_ACCEPT;
+			}
 			skb_nfct_reset(skb);
 
 			memmove((void *)UDPH(l4) + sizeof(struct udphdr), (void *)UDPH(l4) + tcphdr_len, skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - tcphdr_len);
@@ -1741,6 +1745,10 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					if (ret != NF_ACCEPT) {
 						return ret;
 					}
+					master = nf_ct_get(skb, &ctinfo);
+					if (NULL == master) {
+						return NF_ACCEPT;
+					}
 
 					ct = master->master;
 					ns = natcap_session_in(ct);
@@ -1831,6 +1839,10 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					if (ret != NF_ACCEPT) {
 						return ret;
 					}
+					master = nf_ct_get(skb, &ctinfo);
+					if (NULL == master) {
+						return NF_ACCEPT;
+					}
 
 					ct = master->master;
 					ns = natcap_session_in(ct);
@@ -1881,6 +1893,10 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					ret = nf_conntrack_confirm(skb);
 					if (ret != NF_ACCEPT) {
 						return ret;
+					}
+					master = nf_ct_get(skb, &ctinfo);
+					if (NULL == master) {
+						return NF_ACCEPT;
 					}
 					skb_nfct_reset(skb);
 
@@ -2066,6 +2082,10 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		if (ret != NF_ACCEPT) {
 			return ret;
 		}
+		master = nf_ct_get(skb, &ctinfo);
+		if (NULL == master) {
+			return NF_ACCEPT;
+		}
 		skb_nfct_reset(skb);
 
 		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4 - 8;
@@ -2149,6 +2169,10 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			ret = nf_conntrack_confirm(skb);
 			if (ret != NF_ACCEPT) {
 				return ret;
+			}
+			master = nf_ct_get(skb, &ctinfo);
+			if (NULL == master) {
+				return NF_ACCEPT;
 			}
 			skb_nfct_reset(skb);
 
@@ -2437,6 +2461,10 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			ret = nf_conntrack_confirm(skb);
 			if (ret != NF_ACCEPT) {
 				return ret;
+			}
+			master = nf_ct_get(skb, &ctinfo);
+			if (NULL == master) {
+				return NF_ACCEPT;
 			}
 			skb_nfct_reset(skb);
 
@@ -3000,6 +3028,14 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			}
 			return ret;
 		}
+		ct = nf_ct_get(skb, &ctinfo);
+		if (NULL == ct) {
+			return NF_DROP;
+		}
+		ns = natcap_session_get(ct);
+		if (NULL == ns) {
+			return NF_DROP;
+		}
 
 		if (skb_is_gso(skb)) {
 			struct sk_buff *segs;
@@ -3306,6 +3342,18 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 				if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
 					struct sk_buff *ping_skb = NULL;
+
+					ct = nf_ct_get(nskb, &ctinfo);
+					if (NULL == ct) {
+						consume_skb(nskb);
+						return NF_DROP;
+					}
+					ns = natcap_session_get(ct);
+					if (NULL == ns) {
+						consume_skb(nskb);
+						return NF_DROP;
+					}
+
 					natcap_udp_to_tcp_pack(nskb, ns, 0, &ping_skb);
 					if (ping_skb)
 						NF_OKFN(ping_skb);
@@ -3371,6 +3419,15 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			if (ret != NF_ACCEPT) {
 				return ret;
 			}
+			ct = nf_ct_get(skb, &ctinfo);
+			if (NULL == ct) {
+				return NF_DROP;
+			}
+			ns = natcap_session_get(ct);
+			if (NULL == ns) {
+				return NF_DROP;
+			}
+
 			natcap_udp_to_tcp_pack(skb, ns, 0, &ping_skb);
 			if (ping_skb)
 				NF_OKFN(ping_skb);
@@ -3637,7 +3694,6 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 		return NF_ACCEPT;
 	}
-
 	master = nf_ct_get(skb, &ctinfo);
 	if (!master || master == ct) {
 		consume_skb(skb);
@@ -3755,6 +3811,18 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
+	/* XXX I am going to eat it, make the caller happy  */
+	ret = nf_conntrack_confirm(skb_orig);
+	if (ret != NF_ACCEPT) {
+		consume_skb(skb);
+		return ret;
+	}
+	ct = nf_ct_get(skb_orig, &ctinfo);
+	if (NULL == ct) {
+		consume_skb(skb);
+		return NF_ACCEPT;
+	}
+
 	/* XXX I just confirm it first  */
 	ret = nf_conntrack_confirm(skb);
 	if (ret != NF_ACCEPT) {
@@ -3763,12 +3831,15 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		}
 		return NF_ACCEPT;
 	}
-
-	/* XXX I am going to eat it, make the caller happy  */
-	ret = nf_conntrack_confirm(skb_orig);
-	if (ret != NF_ACCEPT) {
+	master = nf_ct_get(skb, &ctinfo);
+	if (!master || master == ct) {
 		consume_skb(skb);
-		return ret;
+		return NF_ACCEPT;
+	}
+	master_ns = natcap_session_get(master);
+	if (NULL == master_ns) {
+		consume_skb(skb);
+		return NF_ACCEPT;
 	}
 
 	if (!(NS_NATCAP_NOLIMIT & master_ns->n.status) && natcap_tx_flow_ctrl(skb, master) < 0) {
