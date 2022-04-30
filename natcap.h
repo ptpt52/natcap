@@ -216,6 +216,9 @@ struct natcap_session {
 #define NS_NATCAP_SYN2_BIT      11
 #define NS_NATCAP_SYN2          (1 << NS_NATCAP_SYN2_BIT)
 
+#define NS_NATCAP_CONE_BIT      12
+#define NS_NATCAP_CONE          (1 << NS_NATCAP_CONE_BIT)
+
 #define NS_NATCAP_TCPENC_BIT    13
 #define NS_NATCAP_TCPENC        (1 << NS_NATCAP_TCPENC_BIT)
 #define NS_NATCAP_UDPENC_BIT    14
@@ -381,10 +384,7 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_SERVER_BIT 27
 #define IPS_NATCAP_SERVER (1 << IPS_NATCAP_SERVER_BIT)
 
-#define IPS_NATCAP_CONE_BIT 28
-#define IPS_NATCAP_CONE (1 << IPS_NATCAP_CONE_BIT)
-
-#define IPS_NATCAP_DUAL_BIT 29
+#define IPS_NATCAP_DUAL_BIT 28
 #define IPS_NATCAP_DUAL (1 << IPS_NATCAP_DUAL_BIT)
 
 #define NATCAP_UDP_GET_TYPE(x) (__constant_htons(0x00ff) & (x))

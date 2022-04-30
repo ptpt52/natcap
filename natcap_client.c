@@ -2396,7 +2396,6 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				set_bit(IPS_NATCAP_ACK_BIT, &master->status);
 				set_bit(IPS_NATFLOW_FF_STOP_BIT, &master->status);
 				set_bit(IPS_NATCAP_CFM_BIT, &master->status);
-				set_bit(IPS_NATCAP_CONE_BIT, &master->status);
 			}
 
 			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
