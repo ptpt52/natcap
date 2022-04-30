@@ -3872,7 +3872,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 
 		user = nf_ct_tuplehash_to_ctrack(h);
 		if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
-			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": user found but status or dir mismatch\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_INFO("(PD)" DEBUG_TCP_FMT ": user found but status or dir mismatch\n", DEBUG_TCP_ARG(iph,l4));
 			goto h_out;
 		}
 		//XXX fire expect. renew this user for fast timeout
