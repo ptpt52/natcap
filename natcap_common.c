@@ -1766,10 +1766,6 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	if ((IPS_NATCAP & ct->status)) {
 		return NF_ACCEPT;
 	}
-	if ((IPS_NATCAP_CONE & ct->status)) {
-		xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
-		return NF_ACCEPT;
-	}
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)
 	if (nf_nat_initialized(ct, IP_NAT_MANIP_DST)) {
@@ -1789,6 +1785,10 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	ns = natcap_session_in(ct);
 	if (!ns) {
 		NATCAP_DEBUG("(CCI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+		return NF_ACCEPT;
+	}
+	if ((NS_NATCAP_CONE & ns->n.status)) {
+		xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 		return NF_ACCEPT;
 	}
 
@@ -1824,7 +1824,7 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 				NATCAP_INFO("(CCI)" DEBUG_UDP_FMT ": do mapping, target=%pI4:%u @port=%u\n",
 				            DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
 
-				set_bit(IPS_NATCAP_CONE_BIT, &ct->status);
+				short_set_bit(NS_NATCAP_CONE_BIT, &ns->n.status);
 				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 
 				return NF_ACCEPT;
@@ -1903,7 +1903,7 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if ((IPS_NATCAP_CONE & ct->status)) {
+	if ((NS_NATCAP_CONE & ns->p.status)) {
 		if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status)) {
 			return NF_ACCEPT;
 		}
@@ -2121,7 +2121,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if ((IPS_NATCAP_CONE & ct->status)) {
+	if ((NS_NATCAP_CONE & ns->n.status)) {
 		//restore original src ip decode && do SNAT
 		if ((NS_NATCAP_CONECFM & ns->n.status) && ns->n.cone_pkts >= 32) {
 			return NF_ACCEPT;
