@@ -3731,21 +3731,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 		nf_conntrack_get(&ct->ct_general);
 		master->master = ct;
-		if (!(IPS_NATCAP & master->status) && !test_and_set_bit(IPS_NATCAP_BIT, &master->status)) {
-			if (natcap_session_init(master, GFP_ATOMIC) != 0) {
-				switch(iph->protocol) {
-				case IPPROTO_TCP:
-					NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
-					break;
-				case IPPROTO_UDP:
-					NATCAP_WARN("(CPMO)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
-					break;
-				}
-				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
-				consume_skb(skb);
-				return NF_ACCEPT;
-			}
-		}
+		set_bit(IPS_NATCAP_BIT, &master->status);
 
 		switch (iph->protocol) {
 		case IPPROTO_TCP:
