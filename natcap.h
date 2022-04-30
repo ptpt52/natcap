@@ -189,41 +189,46 @@ struct tuple3 {
 
 struct natcap_session {
 #define NS_NATCAP_CONFUSION_BIT 0
-#define NS_NATCAP_CONFUSION (1 << NS_NATCAP_CONFUSION_BIT)
-#define NS_NATCAP_DST_BIT 1
-#define NS_NATCAP_DST (1 << NS_NATCAP_DST_BIT)
+#define NS_NATCAP_CONFUSION     (1 << NS_NATCAP_CONFUSION_BIT)
+#define NS_NATCAP_DST_BIT       1
+#define NS_NATCAP_DST           (1 << NS_NATCAP_DST_BIT)
 #define NS_NATCAP_TCPUDPENC_BIT 2
-#define NS_NATCAP_TCPUDPENC (1 << NS_NATCAP_TCPUDPENC_BIT)
-#define NS_NATCAP_AUTH_BIT 3
-#define NS_NATCAP_AUTH (1 << NS_NATCAP_AUTH_BIT)
-#define NS_NATCAP_DROP_BIT 4
-#define NS_NATCAP_DROP (1 << NS_NATCAP_DROP_BIT)
-#define NS_NATCAP_NOLIMIT_BIT 5
-#define NS_NATCAP_NOLIMIT (1 << NS_NATCAP_NOLIMIT_BIT)
+#define NS_NATCAP_TCPUDPENC     (1 << NS_NATCAP_TCPUDPENC_BIT)
+#define NS_NATCAP_AUTH_BIT      3
+#define NS_NATCAP_AUTH          (1 << NS_NATCAP_AUTH_BIT)
+#define NS_NATCAP_DROP_BIT      4
+#define NS_NATCAP_DROP          (1 << NS_NATCAP_DROP_BIT)
+#define NS_NATCAP_NOLIMIT_BIT   5
+#define NS_NATCAP_NOLIMIT       (1 << NS_NATCAP_NOLIMIT_BIT)
 
-#define NS_NATCAP_CONECFM_BIT 6
-#define NS_NATCAP_CONECFM (1 << NS_NATCAP_CONECFM_BIT)
-#define NS_NATCAP_CONESNAT_BIT 7
-#define NS_NATCAP_CONESNAT (1 << NS_NATCAP_CONESNAT_BIT)
+#define NS_NATCAP_CONECFM_BIT   6
+#define NS_NATCAP_CONECFM       (1 << NS_NATCAP_CONECFM_BIT)
+#define NS_NATCAP_CONESNAT_BIT  7
+#define NS_NATCAP_CONESNAT      (1 << NS_NATCAP_CONESNAT_BIT)
 
-#define NS_NATCAP_DNSDROP0_BIT 8
-#define NS_NATCAP_DNSDROP0 (1 << NS_NATCAP_DNSDROP0_BIT)
-#define NS_NATCAP_DNSDROP1_BIT 9
-#define NS_NATCAP_DNSDROP1 (1 << NS_NATCAP_DNSDROP1_BIT)
+#define NS_NATCAP_DNSDROP0_BIT  8
+#define NS_NATCAP_DNSDROP0      (1 << NS_NATCAP_DNSDROP0_BIT)
+#define NS_NATCAP_DNSDROP1_BIT  9
+#define NS_NATCAP_DNSDROP1      (1 << NS_NATCAP_DNSDROP1_BIT)
 
-#define NS_NATCAP_TCPENC_BIT 13
-#define NS_NATCAP_TCPENC (1 << NS_NATCAP_TCPENC_BIT)
-#define NS_NATCAP_UDPENC_BIT 14
-#define NS_NATCAP_UDPENC (1 << NS_NATCAP_UDPENC_BIT)
-#define NS_NATCAP_ENC_BIT 15
-#define NS_NATCAP_ENC (1 << NS_NATCAP_ENC_BIT)
+#define NS_NATCAP_SYN1_BIT      10
+#define NS_NATCAP_SYN1          (1 << NS_NATCAP_SYN1_BIT)
+#define NS_NATCAP_SYN2_BIT      11
+#define NS_NATCAP_SYN2          (1 << NS_NATCAP_SYN2_BIT)
 
-#define NS_PEER_SSYN_BIT 11
-#define NS_PEER_SSYN (1 << NS_PEER_SSYN_BIT)
-#define NS_PEER_KNOCK_BIT 12
-#define NS_PEER_KNOCK (1 << NS_PEER_KNOCK_BIT)
-#define NS_PEER_TCPUDPENC_BIT NS_NATCAP_TCPUDPENC_BIT
-#define NS_PEER_TCPUDPENC NS_NATCAP_TCPUDPENC
+#define NS_NATCAP_TCPENC_BIT    13
+#define NS_NATCAP_TCPENC        (1 << NS_NATCAP_TCPENC_BIT)
+#define NS_NATCAP_UDPENC_BIT    14
+#define NS_NATCAP_UDPENC        (1 << NS_NATCAP_UDPENC_BIT)
+#define NS_NATCAP_ENC_BIT       15
+#define NS_NATCAP_ENC           (1 << NS_NATCAP_ENC_BIT)
+
+#define NS_PEER_SSYN_BIT        0
+#define NS_PEER_SSYN            (1 << NS_PEER_SSYN_BIT)
+#define NS_PEER_KNOCK_BIT       1
+#define NS_PEER_KNOCK           (1 << NS_PEER_KNOCK_BIT)
+#define NS_PEER_TCPUDPENC_BIT   NS_NATCAP_TCPUDPENC_BIT
+#define NS_PEER_TCPUDPENC       NS_NATCAP_TCPUDPENC
 	union {
 		struct {
 			unsigned short status;
@@ -349,8 +354,7 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define xt_mark_natcap_set(mark, at) *(unsigned int *)(at) = ((*(unsigned int *)(at)) & (~XT_MARK_NATCAP_MASK)) | ((mark) & XT_MARK_NATCAP_MASK)
 #define xt_mark_natcap_get(at) ((*(unsigned int *)(at)) & XT_MARK_NATCAP_MASK)
 
-/*XXX: reuse IPS_HW_OFFLOAD_BIT=15 for atomic lock purpose, to atomic lock for ct->ext alloc */
-#define IPS_NATCAP_SESSION_BIT 15
+#define IPS_NATCAP_SESSION_BIT 30
 #define IPS_NATCAP_SESSION (1 << IPS_NATCAP_SESSION_BIT)
 
 /* @linux/netfilter/nf_conntrack_common.h */
@@ -382,12 +386,6 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 
 #define IPS_NATCAP_DUAL_BIT 29
 #define IPS_NATCAP_DUAL (1 << IPS_NATCAP_DUAL_BIT)
-
-#define IPS_NATCAP_SYN1_BIT 30
-#define IPS_NATCAP_SYN1 (1 << IPS_NATCAP_SYN1_BIT)
-
-#define IPS_NATCAP_SYN2_BIT 31
-#define IPS_NATCAP_SYN2 (1 << IPS_NATCAP_SYN2_BIT)
 
 #define NATCAP_UDP_GET_TYPE(x) (__constant_htons(0x00ff) & (x))
 #define NATCAP_UDP_GET_ENC(x) (__constant_htons(0x0f00) & (x))

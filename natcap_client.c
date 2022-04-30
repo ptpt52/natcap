@@ -1260,16 +1260,21 @@ natcaped_out:
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
+		ns = natcap_session_in(ct);
+		if (!ns) {
+			NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+			return NF_ACCEPT;
+		}
 		if (TCPH(l4)->syn && !TCPH(l4)->ack && cnipwhitelist_mode == 0) {
-			if (!(IPS_NATCAP_SYN1 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
+			if (!(NS_NATCAP_SYN1 & ns->n.status) && !short_test_and_set_bit(NS_NATCAP_SYN1_BIT, &ns->n.status)) {
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": natcaped syn1\n", DEBUG_TCP_ARG(iph,l4));
 				return NF_ACCEPT;
 			}
-			if (!(IPS_NATCAP_SYN2 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
+			if (!(NS_NATCAP_SYN2 & ns->n.status) && !short_test_and_set_bit(NS_NATCAP_SYN2_BIT, &ns->n.status)) {
 				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": natcaped syn2\n", DEBUG_TCP_ARG(iph,l4));
 				return NF_ACCEPT;
 			}
-			if ((IPS_NATCAP_SYN1 & ct->status) && (IPS_NATCAP_SYN2 & ct->status)) {
+			if ((NS_NATCAP_SYN1 & ns->n.status) && (NS_NATCAP_SYN2 & ns->n.status)) {
 				if (!is_natcap_server(iph->daddr)) {
 					NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": natcaped syn3 del target from gfwlist0\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_del_dst_ip(state, in, out, skb, "gfwlist0");
@@ -2824,15 +2829,19 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL && iph->protocol == IPPROTO_TCP && cnipwhitelist_mode == 0) {
 			if (TCPH(l4)->syn && !TCPH(l4)->ack) {
-				if (!(IPS_NATCAP_SYN1 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN1_BIT, &ct->status)) {
+				ns = natcap_session_get(ct);
+				if (NULL == ns) {
+					return NF_ACCEPT;
+				}
+				if (!(NS_NATCAP_SYN1 & ns->n.status) && !short_test_and_set_bit(NS_NATCAP_SYN1_BIT, &ns->n.status)) {
 					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn1\n", DEBUG_TCP_ARG(iph,l4));
 					return NF_ACCEPT;
 				}
-				if (!(IPS_NATCAP_SYN2 & ct->status) && !test_and_set_bit(IPS_NATCAP_SYN2_BIT, &ct->status)) {
+				if (!(NS_NATCAP_SYN2 & ns->n.status) && !short_test_and_set_bit(NS_NATCAP_SYN2_BIT, &ns->n.status)) {
 					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn2\n", DEBUG_TCP_ARG(iph,l4));
 					return NF_ACCEPT;
 				}
-				if ((IPS_NATCAP_SYN1 & ct->status) && (IPS_NATCAP_SYN2 & ct->status)) {
+				if ((NS_NATCAP_SYN1 & ns->n.status) && (NS_NATCAP_SYN2 & ns->n.status)) {
 					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn3 del target from bypasslist\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_del_dst_ip(state, in, out, skb, "bypasslist");
 				}
