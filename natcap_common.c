@@ -1305,7 +1305,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 
 	if (test_and_set_bit(IPS_NATCAP_SESSION_BIT, &ct->status)) {
 		/* someone else is already running in this progress */
-		NATCAP_WARN(DEBUG_FMT_PREFIX "someone else is already running in this progress!\n", DEBUG_ARG_PREFIX);
+		NATCAP_INFO(DEBUG_FMT_PREFIX "someone else is already running in this progress!\n", DEBUG_ARG_PREFIX);
 		return -1;
 	}
 
