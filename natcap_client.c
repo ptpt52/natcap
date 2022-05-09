@@ -799,7 +799,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": p[%s]\n", DEBUG_UDP_ARG(iph,l4), tname);
 			break;
 		}
-		if (strncmp(tname, "tinyproxy", 9) == 0 || strncmp(tname, "sockd", 5) == 0) {
+		if (strncmp(tname, "tinyproxy", 9) == 0 || strncmp(tname, "sockd", 5) == 0 || strncmp(tname, "busybox", 7) == 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
