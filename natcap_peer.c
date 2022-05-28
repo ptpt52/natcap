@@ -4569,6 +4569,10 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 
 			n = sscanf(qname, "%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
 			if (n != 6) {
+				if (memcmp(qname, "x-wrt.lan", 9) == 0) {
+					ip = iph->daddr;
+					goto reply_dns;
+				}
 				break;
 			}
 			client_mac[0] = a;
@@ -4610,7 +4614,7 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 			if (ip == 0) {
 				break;
 			}
-
+reply_dns:
 			if (nskb == NULL) {
 				struct ethhdr *neth;
 				struct iphdr *niph;
