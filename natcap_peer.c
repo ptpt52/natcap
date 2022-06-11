@@ -2563,6 +2563,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			skb_rcsum_tcpudp(skb);
 
 			pt_mode = PT_MODE_UDP;
+			skb_nfct_reset(skb);
 		} else {
 			return NF_ACCEPT;
 		}
