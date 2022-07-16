@@ -810,6 +810,48 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			cone_nat_drop(iip, iport, eip, eport);
 			goto done;
 		}
+	} else if (strncmp(data, "natmap_add=", 11) == 0) {
+		unsigned int a, b, c, d;
+		unsigned int port;
+		n = sscanf(data, "natmap_add=%u-%u.%u.%u.%u", &port, &a, &b, &c, &d);
+		if ( (n == 5) && ((port & 0xffff) == port) &&
+		        (((a & 0xff) == a) &&
+		         ((b & 0xff) == b) &&
+		         ((c & 0xff) == c) &&
+		         ((d & 0xff) == d)) ) {
+			if (!natmap_dip) {
+				natmap_dip = vmalloc(sizeof(__be32) * 65536);
+				if (!natmap_dip) {
+					return -ENOMEM;
+				}
+				memset(natmap_dip, 0, sizeof(__be32) * 65536);
+			}
+			natmap_dip[port] = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+			goto done;
+		}
+	} else if (strncmp(data, "natmap_clean", 12) == 0) {
+		natmap_start = 0;
+		natmap_end = 0;
+		synchronize_rcu();
+		if (natmap_dip) {
+			vfree(natmap_dip);
+			natmap_dip = NULL;
+		}
+		goto done;
+	} else if (strncmp(data, "natmap_start=", 13) == 0) {
+		unsigned int port;
+		n = sscanf(data, "natmap_start=%u", &port);
+		if ( (n == 1) && ((port & 0xffff) == port) ) {
+			natmap_start = port;
+			goto done;
+		}
+	} else if (strncmp(data, "natmap_end=", 11) == 0) {
+		unsigned int port;
+		n = sscanf(data, "natmap_end=%u", &port);
+		if ( (n == 1) && ((port & 0xffff) == port) ) {
+			natmap_end = port;
+			goto done;
+		}
 	}
 
 	NATCAP_println("ignoring line[%s]", data);
