@@ -1806,7 +1806,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			} else if (iph->protocol == IPPROTO_UDP) {
 				dport = UDPH(l4)->dest;
 			}
-			if (dport && ntohs(dport) >= natmap_start && ntohs(dport) <= natmap_end) {
+			if (dport && ntohs(dport) >= natmap_start && ntohs(dport) <= natmap_end && inet_is_local(in, iph->daddr)) {
 				unsigned int idx = ntohs(dport);
 				if (natmap_dip && natmap_dip[idx] != 0) {
 					dport = htons(prandom_u32() % (65536 - 1024) + 1024);
