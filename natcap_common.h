@@ -81,6 +81,10 @@ static inline void natcap_tuple_to_ns(struct natcap_session *ns, const struct tu
 	ns->n.target_port = t->port;
 }
 
+extern unsigned short natmap_start;
+extern unsigned short natmap_end;
+extern __be32 *natmap_dip;
+
 extern unsigned int peer_multipath;
 
 extern unsigned short natcap_udp_seq_lock;

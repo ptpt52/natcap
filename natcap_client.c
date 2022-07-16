@@ -1550,10 +1550,58 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 	}
 	if (!nf_ct_is_confirmed(master)) {
 		if (skb->mark & natcap_ignore_mask) {
+			if (natcap_ignore_forward) {
+				__be32 ip;
+				__be16 port;
+				unsigned int i, idx;
+				unsigned int off = prandom_u32();
+				struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+				for (i = 0; i < PEER_PUB_NUM; i++) {
+					idx = (i + off) % PEER_PUB_NUM;
+					ip = peer_pub_ip[idx];
+					ip_hdr(uskb)->daddr = ip;
+					if (ip != 0 && ip != iph->saddr && ip != iph->daddr &&
+					        IP_SET_test_dst_ip(state, in, out, uskb, "ignorelist") <= 0) {
+						port = htons(prandom_u32() % (65536 - 1024) + 1024);
+						natcap_dnat_setup(master, ip, port);
+						break;
+					}
+				}
+			}
 			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
 			set_bit(IPS_NATCAP_BYPASS_BIT, &master->status);
 			set_bit(IPS_NATCAP_SERVER_BIT, &master->status);
 			return NF_ACCEPT;
+		}
+		if (hooknum == NF_INET_PRE_ROUTING) {
+			__be32 dport = 0;
+			if (iph->protocol == IPPROTO_TCP) {
+				dport = TCPH(l4)->dest;
+			} else if (iph->protocol == IPPROTO_UDP) {
+				dport = UDPH(l4)->dest;
+			}
+			if (dport && ntohs(dport) >= natmap_start && ntohs(dport) <= natmap_end) {
+				unsigned int idx = ntohs(dport);
+				if (natmap_dip && natmap_dip[idx] != 0) {
+					dport = htons(prandom_u32() % (65536 - 1024) + 1024);
+					if (natcap_dnat_setup(master, natmap_dip[idx], dport) != NF_ACCEPT) {
+						return NF_DROP;
+					}
+					set_bit(IPS_NATCAP_PRE_BIT, &master->status);
+					set_bit(IPS_NATCAP_BYPASS_BIT, &master->status);
+					set_bit(IPS_NATCAP_SERVER_BIT, &master->status);
+
+					switch (iph->protocol) {
+					case IPPROTO_TCP:
+						NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new natmap to %pI4:%u\n", DEBUG_TCP_ARG(iph,l4), &natmap_dip[idx], dport);
+						break;
+					case IPPROTO_UDP:
+						NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new natmap to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &natmap_dip[idx], dport);
+						break;
+					}
+					return NF_ACCEPT;
+				}
+			}
 		}
 	}
 

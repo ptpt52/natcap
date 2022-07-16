@@ -40,6 +40,10 @@
 #include "natcap_knock.h"
 #include "natcap_peer.h"
 
+unsigned short natmap_start = 0;
+unsigned short natmap_end = 0;
+__be32 *natmap_dip = NULL;
+
 unsigned short natcap_udp_seq_lock = 0;
 unsigned short natcap_ignore_forward = 0;
 unsigned int natcap_ignore_mask = 0x00000000;
@@ -2388,5 +2392,15 @@ void natcap_common_exit(void)
 			kfree(peer_user_uskbs[i]);
 			peer_user_uskbs[i] = NULL;
 		}
+	}
+
+	if (natmap_start) {
+		natmap_start = 0;
+		natmap_end = 0;
+		synchronize_rcu();
+	}
+	if (natmap_dip) {
+		vfree(natmap_dip);
+		natmap_dip = NULL;
 	}
 }
