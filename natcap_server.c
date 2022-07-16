@@ -1763,6 +1763,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 	if (iph->protocol != IPPROTO_TCP && iph->protocol != IPPROTO_UDP) {
 		return NF_ACCEPT;
 	}
+	l4 = (void *)iph + iph->ihl * 4;
 
 	master = nf_ct_get(skb, &ctinfo);
 	if (NULL == master) {
@@ -1797,6 +1798,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
 			set_bit(IPS_NATCAP_BYPASS_BIT, &master->status);
 			set_bit(IPS_NATCAP_SERVER_BIT, &master->status);
+			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 			return NF_ACCEPT;
 		}
 		if (hooknum == NF_INET_PRE_ROUTING) {
@@ -1816,13 +1818,14 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					set_bit(IPS_NATCAP_PRE_BIT, &master->status);
 					set_bit(IPS_NATCAP_BYPASS_BIT, &master->status);
 					set_bit(IPS_NATCAP_SERVER_BIT, &master->status);
+					xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 
 					switch (iph->protocol) {
 					case IPPROTO_TCP:
-						NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new natmap to %pI4:%u\n", DEBUG_TCP_ARG(iph,l4), &natmap_dip[idx], dport);
+						NATCAP_INFO("(SPI)" DEBUG_TCP_FMT ": new natmap to %pI4:%u\n", DEBUG_TCP_ARG(iph,l4), &natmap_dip[idx], ntohs(dport));
 						break;
 					case IPPROTO_UDP:
-						NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new natmap to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &natmap_dip[idx], dport);
+						NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": new natmap to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &natmap_dip[idx], ntohs(dport));
 						break;
 					}
 					return NF_ACCEPT;
