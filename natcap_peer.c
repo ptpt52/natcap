@@ -673,7 +673,7 @@ struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be16 spor
 	return user;
 }
 
-struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, __be32 client_ip, const unsigned char *client_mac, struct peer_tuple **ppt)
+struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, __be16 sport, __be16 dport, __be32 client_ip, const unsigned char *client_mac, struct peer_tuple **ppt)
 {
 	int ret;
 	unsigned int i;
@@ -814,12 +814,13 @@ struct nf_conn *peer_user_expect_in(__be32 saddr, __be32 daddr, __be16 sport, __
 
 	if (ntohl(saddr) != user->mark) {
 		__be32 old_ip = htonl(user->mark);
-		NATCAP_WARN("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] change ip from %pI4 to %pI4 P=%u AS=%d\n",
+		NATCAP_WARN("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] change ip from %pI4(ttl=%u) to %pI4(ttl=%u) P=%u AS=%d\n",
 		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		            &saddr, ntohs(sport), &daddr, ntohs(dport),
-		            &old_ip, &saddr, ntohs(ue->map_port),
+		            &old_ip, user->cpu, &saddr, ttl, ntohs(ue->map_port),
 		            ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1));
 		user->mark = ntohl(saddr);
+		user->cpu = ttl;
 	}
 	natcap_user_timeout_touch(user, peer_port_map_timeout);
 
@@ -3077,7 +3078,7 @@ sni_out:
 		client_ip = get_byte4((const void *)&tcpopt->peer.data.user.ip);
 		memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
 
-		user = peer_user_expect_in(iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, client_ip, client_mac, &pt);
+		user = peer_user_expect_in(iph->ttl, iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, client_ip, client_mac, &pt);
 		if (user != NULL && pt != NULL) {
 			struct user_expect *ue = peer_user_expect(user);
 			spin_lock_bh(&ue->lock);
@@ -3277,7 +3278,7 @@ sni_skip:
 		client_ip = get_byte4((const void *)&tcpopt->peer.data.user.ip);
 		memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
 
-		user = peer_user_expect_in(iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, client_ip, client_mac, &pt);
+		user = peer_user_expect_in(iph->ttl, iph->saddr, iph->daddr, TCPH(l4)->source, TCPH(l4)->dest, client_ip, client_mac, &pt);
 		if (user != NULL && pt != NULL) {
 			struct user_expect *ue = peer_user_expect(user);
 			spin_lock_bh(&ue->lock);
