@@ -817,10 +817,11 @@ struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, __be16 
 		NATCAP_WARN("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] change ip from %pI4(ttl=%u) to %pI4(ttl=%u) P=%u AS=%d\n",
 		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		            &saddr, ntohs(sport), &daddr, ntohs(dport),
-		            &old_ip, user->cpu, &saddr, ttl, ntohs(ue->map_port),
+		            &old_ip, (unsigned int)((user->status & 0xff000000) >> 24), &saddr, ttl, ntohs(ue->map_port),
 		            ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1));
 		user->mark = ntohl(saddr);
-		user->cpu = ttl;
+		user->status &= ~(0xff << 24);
+		user->status |= ((ttl & 0xff) << 24);
 	}
 	natcap_user_timeout_touch(user, peer_port_map_timeout);
 
