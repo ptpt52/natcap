@@ -814,6 +814,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	} else if (strncmp(data, "natmap_add=", 11) == 0) {
 		unsigned int a, b, c, d;
 		unsigned int port;
+		unsigned int port1;
 		n = sscanf(data, "natmap_add=%u-%u.%u.%u.%u", &port, &a, &b, &c, &d);
 		if ( (n == 5) && ((port & 0xffff) == port) &&
 		        (((a & 0xff) == a) &&
@@ -828,6 +829,23 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				memset(natmap_dip, 0, sizeof(__be32) * 65536);
 			}
 			natmap_dip[port] = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+			goto done;
+		}
+		n = sscanf(data, "natmap_add=%u-%u-%u.%u.%u.%u", &port, &port1, &a, &b, &c, &d);
+		if ( (n == 6) && ((port & 0xffff) == port) && ((port1 & 0xffff) == port1) && port <= port1 &&
+		        (((a & 0xff) == a) &&
+		         ((b & 0xff) == b) &&
+		         ((c & 0xff) == c) &&
+		         ((d & 0xff) == d)) ) {
+			if (!natmap_dip) {
+				natmap_dip = vmalloc(sizeof(__be32) * 65536);
+				if (!natmap_dip) {
+					return -ENOMEM;
+				}
+				memset(natmap_dip, 0, sizeof(__be32) * 65536);
+			}
+			for (; port <= port1; port = ((port + 1) & 0xffff))
+				natmap_dip[port] = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 			goto done;
 		}
 	} else if (strncmp(data, "natmap_clean", 12) == 0) {
