@@ -70,7 +70,7 @@ static inline int server_index_natcap_get(unsigned int *at)
 }
 
 unsigned int peer_multipath = 4;
-unsigned int dns_proxy_drop = 0;
+unsigned int dns_proxy_drop = 0; /* 0/1: access_from_cn, 2: access_to_cn */
 unsigned int server_persist_lock = 0;
 unsigned int server_persist_timeout = 0;
 module_param(server_persist_timeout, int, 0);
@@ -4743,7 +4743,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 									}
 								}
 								iph->daddr = old_ip;
-								if (is_cn_domain && cn_domain) {
+								if (is_cn_domain && cn_domain && (dns_proxy_drop == 0 || dns_proxy_drop == 1)) {
 									if (!(NS_NATCAP_DNSDROP0 & ns->n.status)) {
 										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x proxy DNS ANS is cn_domain ip = %pI4, drop\n",
 										            DEBUG_UDP_ARG(iph,l4), id, &ip);
@@ -4770,6 +4770,17 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 									}
 								}
 								iph->daddr = old_ip;
+								if (is_cn_domain && cn_domain && (dns_proxy_drop == 2)) {
+									if (!(NS_NATCAP_DNSDROP0 & ns->n.status)) {
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is cn_domain ip = %pI4, drop\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+										short_set_bit(NS_NATCAP_DNSDROP1_BIT, &ns->n.status);
+										return NF_DROP;
+									} else {
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS is cn_domain ip = %pI4, ignore\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+									}
+								}
 							}
 						} while (0);
 					}
