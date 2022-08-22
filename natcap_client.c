@@ -4580,7 +4580,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			unsigned short an_count;
 			unsigned short ns_count;
 			unsigned short ar_count;
-			int is_cn_domain;
+			int is_cn_domain = 0;
 
 			unsigned char *p = (unsigned char *)UDPH(l4) + sizeof(struct udphdr);
 			int len = skb->len - iph->ihl * 4 - sizeof(struct udphdr);
@@ -4666,7 +4666,6 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					}
 				}
 
-				is_cn_domain = 0;
 				if (cn_domain) {
 					int name_len;
 					char name[128];
@@ -4734,38 +4733,38 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 									if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) {
 										iph->daddr = old_ip;
 										if (dns_proxy_drop == 1) {
-											if (!(NS_NATCAP_DNSDROP0 & ns->n.status)) {
-												NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]proxy DNS ANS is in cniplist ip = %pI4, drop\n",
-												            DEBUG_UDP_ARG(iph,l4), id, &ip);
-												short_set_bit(NS_NATCAP_DNSDROP1_BIT, &ns->n.status);
-											}
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]proxy DNS ANS is in cniplist ip = %pI4, drop\n",
+											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 											return NF_DROP;
 										} else {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]proxy DNS ANS is in cniplist ip = %pI4, ignore\n",
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]proxy DNS ANS is in cniplist ip = %pI4, accept\n",
 											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 										}
 									}
 									iph->daddr = old_ip;
 									if (is_cn_domain && cn_domain) {
-										if (!(NS_NATCAP_DNSDROP0 & ns->n.status)) {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]proxy DNS ANS is cn_domain ip = %pI4, drop\n",
-											            DEBUG_UDP_ARG(iph,l4), id, &ip);
-											short_set_bit(NS_NATCAP_DNSDROP1_BIT, &ns->n.status);
-										}
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]proxy DNS ANS is cn_domain ip = %pI4, drop\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
 										return NF_DROP;
+									} else {
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]proxy DNS ANS is not cn_domain ip = %pI4, accept\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
 									}
 								} else if (dns_proxy_drop == 2) {
 									iph->daddr = ip;
 									if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) { //XXX: now cniplist=C_cniplist
 										iph->daddr = old_ip;
 										if ((!is_cn_domain && cn_domain) || !cn_domain) {
-											if (!(NS_NATCAP_DNSDROP0 & ns->n.status)) {
-												NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]proxy DNS ANS is C_cniplist and not cn_domain ip = %pI4, drop\n",
-												            DEBUG_UDP_ARG(iph,l4), id, &ip);
-												short_set_bit(NS_NATCAP_DNSDROP1_BIT, &ns->n.status);
-											}
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]proxy DNS ANS is C_cniplist and not cn_domain ip = %pI4, drop\n",
+											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 											return NF_DROP;
+										} else {
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]proxy DNS ANS is C_cniplist and cn_domain ip = %pI4, accept\n",
+											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 										}
+									} else {
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]proxy DNS ANS is cniplist ip = %pI4, accept\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
 									}
 									iph->daddr = old_ip;
 								}
@@ -4775,22 +4774,23 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 									iph->daddr = ip;
 									if (IP_SET_test_dst_ip(state, in, out, skb, "dnsdroplist") > 0) {
 										iph->daddr = old_ip;
-										if (!(NS_NATCAP_DNSDROP1 & ns->n.status)) {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]direct DNS ANS is dnsdroplist ip = %pI4, drop\n",
-											            DEBUG_UDP_ARG(iph,l4), id, &ip);
-											short_set_bit(NS_NATCAP_DNSDROP0_BIT, &ns->n.status);
-										}
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]direct DNS ANS is dnsdroplist ip = %pI4, drop\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
 										return NF_DROP;
 									} else if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") <= 0) {
 										iph->daddr = old_ip;
 										if ((!is_cn_domain && cn_domain) || !cn_domain) {
-											if (!(NS_NATCAP_DNSDROP1 & ns->n.status)) {
-												NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]direct DNS ANS is C_cniplist and not cn_domain ip = %pI4, drop\n",
-												            DEBUG_UDP_ARG(iph,l4), id, &ip);
-												short_set_bit(NS_NATCAP_DNSDROP0_BIT, &ns->n.status);
-											}
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]direct DNS ANS is C_cniplist and not cn_domain ip = %pI4, drop\n",
+											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 											return NF_DROP;
+										} else {
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]direct DNS ANS is C_cniplist and cn_domain ip = %pI4, accept\n",
+											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 										}
+									} else {
+										iph->daddr = old_ip;
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]direct DNS ANS is cniplist ip = %pI4, accept\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
 									}
 									iph->daddr = old_ip;
 								} else if (dns_proxy_drop == 2) {
@@ -4799,13 +4799,16 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 									if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) { //XXX: now cniplist=C_cniplist
 										iph->daddr = old_ip;
 										if ((is_cn_domain && cn_domain)) {
-											if (!(NS_NATCAP_DNSDROP1 & ns->n.status)) {
-												NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]direct DNS ANS is C_cniplist and cn_domain ip = %pI4, drop\n",
-												            DEBUG_UDP_ARG(iph,l4), id, &ip);
-												short_set_bit(NS_NATCAP_DNSDROP0_BIT, &ns->n.status);
-											}
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]direct DNS ANS is C_cniplist and cn_domain ip = %pI4, drop\n",
+											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 											return NF_DROP;
+										} else {
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]direct DNS ANS is C_cniplist and not cn_domain ip = %pI4, accept\n",
+											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 										}
+									} else {
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]direct DNS ANS is cniplist ip = %pI4, accept\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
 									}
 									iph->daddr = old_ip;
 								}
