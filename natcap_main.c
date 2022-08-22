@@ -464,7 +464,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			int d;
 			n = sscanf(data, "dns_proxy_drop=%u", &d);
 			if (n == 1) {
-				dns_proxy_drop = !!d;
+				dns_proxy_drop = d;
 				goto done;
 			}
 		}
