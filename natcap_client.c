@@ -4620,6 +4620,19 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 						kfree(qname);
 					}
 				}
+
+				if (cn_domain) {
+					int name_len;
+					char name[128];
+					if ((name_len = get_rdata(p, len, pos, name, 127)) > 0) {
+						name[name_len - 1] = 0;
+						if (cn_domain_lookup(name)) {
+							is_cn_domain = 1;
+							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s is_cn_domain\n", DEBUG_UDP_ARG(iph,l4), id, name);
+						}
+					}
+				}
+
 				while (pos < len && ((v = get_byte1(p + pos)) != 0)) {
 					if (v > 0x3f) {
 						pos++;
@@ -4663,18 +4676,6 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 							NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
 						}
 						kfree(name);
-					}
-				}
-
-				if (cn_domain) {
-					int name_len;
-					char name[128];
-					if ((name_len = get_rdata(p, len, pos, name, 127)) > 0) {
-						name[name_len - 1] = 0;
-						if (cn_domain_lookup(name)) {
-							is_cn_domain = 1;
-							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s is_cn_domain\n", DEBUG_UDP_ARG(iph,l4), id, name);
-						}
 					}
 				}
 
