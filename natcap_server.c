@@ -1435,6 +1435,10 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 		return NF_DROP;
 	}
 
+	//rewrite set ttl to 128
+	csum_replace2(&iph->check, htons(iph->ttl << 8), htons(128 << 8));
+	iph->ttl = 128;
+
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
 		if (server_flow_stop && hooknum == NF_INET_POST_ROUTING) {
 			/* no stop for UDP 53 */
