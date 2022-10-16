@@ -481,27 +481,25 @@ void __natcap_server_info_select(enum server_group_t x, const struct net_device 
 	unsigned int hash;
 	unsigned int i, found = 0;
 
-	if (x == SERVER_GROUP_1) {
-		if ((natcap_server_use_peer & 0x1)) {
-			__be32 dst_ip;
-			__be16 dst_port;
-			unsigned int i, idx;
-			unsigned int off = prandom_u32();
-			struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
-			for (i = 0; i < PEER_PUB_NUM; i++) {
-				idx = (i + off) % PEER_PUB_NUM;
-				dst_ip = peer_pub_ip[idx];
-				ip_hdr(uskb)->daddr = dst_ip;
-				if (dst_ip != 0 && dst_ip != ip &&
-				        IP_SET_test_dst_ip(state, in, out, uskb, "ignorelist") <= 0) {
-					dst_port = htons(prandom_u32() % (65536 - 1024) + 1024);
-					dst->ip = dst_ip;
-					dst->port = dst_port;
-					dst->encryption = !!(natcap_server_use_peer & 0x2);
-					dst->tcp_encode = (natcap_server_use_peer & 0x4) ? UDP_ENCODE : TCP_ENCODE;
-					dst->udp_encode = (natcap_server_use_peer & 0x8) ? UDP_ENCODE : TCP_ENCODE;
-					return;
-				}
+	if ((natcap_server_use_peer & 0x1)) {
+		__be32 dst_ip;
+		__be16 dst_port;
+		unsigned int i, idx;
+		unsigned int off = prandom_u32();
+		struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+		for (i = 0; i < PEER_PUB_NUM; i++) {
+			idx = (i + off) % PEER_PUB_NUM;
+			dst_ip = peer_pub_ip[idx];
+			ip_hdr(uskb)->daddr = dst_ip;
+			if (dst_ip != 0 && dst_ip != ip &&
+			        IP_SET_test_dst_ip(state, in, out, uskb, "ignorelist") <= 0) {
+				dst_port = htons(prandom_u32() % (65536 - 1024) + 1024);
+				dst->ip = dst_ip;
+				dst->port = dst_port;
+				dst->encryption = !!(natcap_server_use_peer & 0x2);
+				dst->tcp_encode = (natcap_server_use_peer & 0x4) ? UDP_ENCODE : TCP_ENCODE;
+				dst->udp_encode = (natcap_server_use_peer & 0x8) ? UDP_ENCODE : TCP_ENCODE;
+				return;
 			}
 		}
 	}
