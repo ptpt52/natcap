@@ -157,13 +157,9 @@ static int natcap_flow_ctrl(struct sk_buff *skb, struct nf_conn *ct, struct natc
 	}
 
 	current_jiffies = jiffies;
-	if (current_jiffies > ntc->jiffies) {
-		feed_jiffies = current_jiffies - ntc->jiffies;
-	} else {
-		feed_jiffies = ntc->jiffies - current_jiffies;
-	}
-	if (feed_jiffies > 64 * HZ) {
-		feed_jiffies = 64 * HZ;
+	feed_jiffies = ulongmindiff(current_jiffies, ntc->jiffies);
+	if (feed_jiffies > HZ) {
+		feed_jiffies = HZ;
 	}
 
 	ret = ntc->tokens + (int)(ntc->tokens_per_jiffy * feed_jiffies);
