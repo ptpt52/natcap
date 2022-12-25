@@ -301,7 +301,7 @@ static inline void get_dns_proxy_server(__be16 port, struct tuple *dst)
 	if (dst->port == __constant_htons(0)) {
 		dst->port = port;
 	} else if (dst->port == __constant_htons(65535)) {
-		dst->port = htons(prandom_u32() % (65536 - 1024) + 1024);
+		dst->port = htons(get_random_u32() % (65536 - 1024) + 1024);
 	}
 }
 
@@ -327,7 +327,7 @@ void natcap_server_info_change(enum server_group_t x, int change)
 	        (!server_persist_lock &&
 	         time_after(jiffies, nsi->server_jiffies + (7 * server_persist_timeout / 8 + jiffies % (server_persist_timeout / 4 + 1)) * HZ))) {
 		nsi->server_jiffies = jiffies;
-		nsi->server_index += 1 + prandom_u32();
+		nsi->server_index += 1 + get_random_u32();
 	}
 }
 
@@ -481,7 +481,7 @@ void __natcap_server_info_select(enum server_group_t x, const struct net_device 
 		__be32 dst_ip;
 		__be16 dst_port;
 		unsigned int i, idx;
-		unsigned int off = prandom_u32();
+		unsigned int off = get_random_u32();
 		struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
 		for (i = 0; i < PEER_PUB_NUM; i++) {
 			idx = (i + off) % PEER_PUB_NUM;
@@ -489,7 +489,7 @@ void __natcap_server_info_select(enum server_group_t x, const struct net_device 
 			ip_hdr(uskb)->daddr = dst_ip;
 			if (dst_ip != 0 && dst_ip != ip &&
 			        IP_SET_test_dst_ip(state, in, out, uskb, "ignorelist") <= 0) {
-				dst_port = htons(prandom_u32() % (65536 - 1024) + 1024);
+				dst_port = htons(get_random_u32() % (65536 - 1024) + 1024);
 				dst->ip = dst_ip;
 				dst->port = dst_port;
 				dst->encryption = !!(natcap_server_use_peer & 0x2);
@@ -1549,7 +1549,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				__be32 ip;
 				__be16 port;
 				unsigned int i, idx;
-				unsigned int off = prandom_u32();
+				unsigned int off = get_random_u32();
 				struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
 				for (i = 0; i < PEER_PUB_NUM; i++) {
 					idx = (i + off) % PEER_PUB_NUM;
@@ -1557,7 +1557,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					ip_hdr(uskb)->daddr = ip;
 					if (ip != 0 && ip != iph->saddr && ip != iph->daddr &&
 					        IP_SET_test_dst_ip(state, in, out, uskb, "ignorelist") <= 0) {
-						port = htons(prandom_u32() % (65536 - 1024) + 1024);
+						port = htons(get_random_u32() % (65536 - 1024) + 1024);
 						natcap_dnat_setup(master, ip, port);
 						break;
 					}
@@ -1579,7 +1579,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			if (dport && ntohs(dport) >= natmap_start && ntohs(dport) <= natmap_end && inet_is_local(in, iph->daddr)) {
 				unsigned int idx = ntohs(dport);
 				if (natmap_dip && natmap_dip[idx] != 0) {
-					dport = htons(prandom_u32() % (65536 - 1024) + 1024);
+					dport = htons(get_random_u32() % (65536 - 1024) + 1024);
 					if (natcap_dnat_setup(master, natmap_dip[idx], dport) != NF_ACCEPT) {
 						return NF_DROP;
 					}
@@ -2236,7 +2236,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
 					__be32 ip;
 					unsigned int i, j, idx;
-					unsigned int off = prandom_u32();
+					unsigned int off = get_random_u32();
 					for (i = 0; i < PEER_PUB_NUM; i++) {
 						idx = (i + off) % PEER_PUB_NUM;
 						ip = peer_pub_ip[idx];
@@ -2250,8 +2250,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 									if (ns->peer.tuple3[j].dip == 0) {
 										ns->peer.cnt++;
 										ns->peer.tuple3[j].dip = ip;
-										ns->peer.tuple3[j].dport = htons(prandom_u32() % (65536 - 1024) + 1024);
-										ns->peer.tuple3[j].sport = htons(prandom_u32() % (65536 - 1024) + 1024);
+										ns->peer.tuple3[j].dport = htons(get_random_u32() % (65536 - 1024) + 1024);
+										ns->peer.tuple3[j].sport = htons(get_random_u32() % (65536 - 1024) + 1024);
 										ns->peer.total_weight += 1;
 										ns->peer.weight[j] = 1;
 										NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": peer%px select %u-%pI4:%u j=%u\n", DEBUG_UDP_ARG(iph,l4), (void *)&ns,
@@ -2273,8 +2273,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 						if (ns->peer.tuple3[j].dip == 0 && is_fastpath_route_ready(&natcap_pfr[j])) {
 							ns->peer.cnt++;
 							ns->peer.tuple3[j].dip = iph->saddr;
-							ns->peer.tuple3[j].dport = htons(prandom_u32() % (65536 - 1024) + 1024);
-							ns->peer.tuple3[j].sport = htons(prandom_u32() % (65536 - 1024) + 1024);
+							ns->peer.tuple3[j].dport = htons(get_random_u32() % (65536 - 1024) + 1024);
+							ns->peer.tuple3[j].sport = htons(get_random_u32() % (65536 - 1024) + 1024);
 							ns->peer.total_weight += natcap_pfr[j].weight;
 							ns->peer.weight[j] = natcap_pfr[j].weight;
 							ns->peer.req_cnt = 3; /* init notify weight */
@@ -2432,7 +2432,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 			if (!nf_ct_is_confirmed(master)) {
 				__be32 dip = get_byte4((void *)UDPH(l4) + 8 + 4 + 4 + 4 + 4 + 2 + 2 + 2 + 2);
-				__be16 dport = htons(prandom_u32() % (65536 - 1024) + 1024);
+				__be16 dport = htons(get_random_u32() % (65536 - 1024) + 1024);
 				if (natcap_dnat_setup(master, dip, dport) != NF_ACCEPT) {
 					return NF_DROP;
 				}
@@ -3139,7 +3139,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			skb->next = NULL;
 
 			if (ns->peer.ver == 1 && ns->peer.mark && total_weight > 0) {
-				unsigned int ball = prandom_u32() % total_weight;
+				unsigned int ball = get_random_u32() % total_weight;
 				unsigned int weight = 0;
 				int i, idx = -1;
 				for (i = 0; i < MAX_PEER_NUM; i++) {
@@ -3607,7 +3607,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 			min = 1024;
 			range_size = 65535 - 1024 + 1;
-			off = prandom_u32();
+			off = get_random_u32();
 
 			if (nf_nat_used_tuple(&tuple, ct)) {
 				for (i = 0; i != range_size; ++off, ++i) {
@@ -3664,7 +3664,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 				min = 1024;
 				range_size = 65535 - 1024 + 1;
-				off = prandom_u32();
+				off = get_random_u32();
 
 				if (nf_nat_used_tuple(&tuple, ct)) {
 					for (i = 0; i != range_size; ++off, ++i) {

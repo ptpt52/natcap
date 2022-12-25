@@ -837,4 +837,8 @@ static inline struct sk_buff *natcap_peer_ctrl_alloc(struct sk_buff *oskb, int d
 
 extern struct sk_buff *uskb_of_this_cpu(unsigned int id);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
+#define get_random_u32 prandom_u32
+#endif
+
 #endif /* _NATCAP_COMMON_H_ */

@@ -664,7 +664,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			if (n == 1 && strlen(tmp) <= 63) {
 				strcpy(htp_confusion_host, tmp);
 				kfree(tmp);
-				sprintf(htp_confusion_req, htp_confusion_req_format, prandom_u32(), htp_confusion_host);
+				sprintf(htp_confusion_req, htp_confusion_req_format, get_random_u32(), htp_confusion_host);
 				goto done;
 			}
 			kfree(tmp);

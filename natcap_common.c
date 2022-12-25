@@ -1559,7 +1559,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 				ns->ping.jiffies = jiffies;
 				ns->ping.stage = 0;
 				ns->ping.lock = 1;
-				TCPH(l4)->source = htons(prandom_u32() % (65536 - 1024) + 1024);
+				TCPH(l4)->source = htons(get_random_u32() % (65536 - 1024) + 1024);
 			}
 			TCPH(l4)->dest = ns->ping.saddr ? ns->ping.dest : TCPH(l4)->dest;
 
@@ -2181,7 +2181,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 
 			min = 1024;
 			range_size = 65535 - 1024 + 1;
-			off = prandom_u32();
+			off = get_random_u32();
 
 			if (nf_nat_used_tuple(&tuple, ct)) {
 				for (i = 0; i != range_size; ++off, ++i) {
