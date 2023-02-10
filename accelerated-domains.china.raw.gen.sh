@@ -2,7 +2,7 @@ modprobe ip_set
 modprobe nf_nat
 modprobe  nf_conntrack
 insmod ./natcap.ko
-wget https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf -O accelerated-domains.china.conf && \
+wget -4 https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf -O accelerated-domains.china.conf && \
 cat accelerated-domains.china.conf | cut -d\/ -f2 >accelerated-domains.china.raw.txt && {
 	cp accelerated-domains.china.raw.txt accelerated-domains.china.raw.txt.tmp && \
 	cat accelerated-domains.china.raw.txt.tmp \
