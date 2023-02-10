@@ -844,7 +844,8 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				}
 				memset(natmap_dip, 0, sizeof(__be32) * 65536);
 			}
-			for (; port <= port1; port = ((port + 1) & 0xffff))
+			natmap_dip[port1] = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+			for (; port < port1; port = ((port + 1) & 0xffff))
 				natmap_dip[port] = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
 			goto done;
 		}
