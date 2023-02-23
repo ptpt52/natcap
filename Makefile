@@ -73,7 +73,10 @@ cniplist.orig.set: cnip2cidr.lua ipops.lua ip.merge.txt apnic.txt china_ip_list.
 	cat geoip.txt.out.cn | cut -d= -f1 | sort -n >>cniplist.orig.set.tmp
 	cat geoip.txt.out.cn1 | cut -d= -f1 | sort -n >>cniplist.orig.set.tmp
 	lua ipgroup_merge.lua cniplist.orig.set.tmp >cniplist.orig.set
-	@rm -f cniplist.orig.set.1 cniplist.orig.set.2 cniplist.orig.set.tmp
+	lua hkip2cidr.lua >cniplist.orig.set.cn2
+	lua ipops.lua netStrings_sub_netStrings "$$(echo `cat cniplist.orig.set` | sed 's/ /,/g')" "$$(echo `cat cniplist.orig.set.cn2` | sed 's/ /,/g')" >cniplist.orig.set.tmp
+	cat cniplist.orig.set.tmp | sed 's/,/\n/g' >cniplist.orig.set
+	@rm -f cniplist.orig.set.1 cniplist.orig.set.2 cniplist.orig.set.tmp cniplist.orig.set.cn2
 
 hkiplist.orig.set: apnic.txt ipops.lua
 	cat apnic.txt | grep HK | grep ipv4 | cut -d\| -f4,5 >hkiplist.txt.tmp
