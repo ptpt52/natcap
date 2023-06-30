@@ -1314,8 +1314,9 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 	}
 
 	for (i = 0; i < ARRAY_SIZE((((struct nf_ct_ext *)0)->offset)); i++) {
-		if (!nf_ct_ext_exist(ct, i)) compat_nf_ct_ext_add(ct, i, gfp);
+		if (!nf_ct_ext_exist(ct, i) && i != NF_CT_EXT_HELPER) compat_nf_ct_ext_add(ct, i, gfp);
 	}
+	if (!nf_ct_ext_exist(ct, NF_CT_EXT_HELPER)) compat_nf_ct_ext_add(ct, NF_CT_EXT_HELPER, gfp);
 
 	if (!ct->ext) {
 		return -1;
