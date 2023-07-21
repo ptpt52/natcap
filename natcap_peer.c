@@ -5320,7 +5320,11 @@ int natcap_peer_init(void)
 		goto cdev_add_failed;
 	}
 
-	natcap_peer_class = class_create(THIS_MODULE,"natcap_peer_class");
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
+	natcap_peer_class = class_create(THIS_MODULE, "natcap_peer_class");
+#else
+	natcap_peer_class = class_create("natcap_peer_class");
+#endif
 	if (IS_ERR(natcap_peer_class)) {
 		NATCAP_println("failed in creating class");
 		ret = -EINVAL;
