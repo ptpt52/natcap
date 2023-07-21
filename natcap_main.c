@@ -1037,7 +1037,11 @@ static int __init natcap_init(void) {
 		goto cdev_add_failed;
 	}
 
-	natcap_class = class_create(THIS_MODULE,"natcap_class");
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
+	natcap_class = class_create(THIS_MODULE, "natcap_class");
+#else
+	natcap_class = class_create("natcap_class");
+#endif
 	if (IS_ERR(natcap_class)) {
 		NATCAP_println("failed in creating class");
 		retval = -EINVAL;
