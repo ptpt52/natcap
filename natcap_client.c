@@ -4719,7 +4719,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 						NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n",
 						             DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
 						do {
-							unsigned int old_ip;
+							unsigned int old_ip = 0;
 
 							if ((IPS_NATCAP & ct->status)) {
 								if (dns_proxy_drop == 0 || dns_proxy_drop == 1) {
@@ -4920,7 +4920,7 @@ int cn_domain_insert(char *d)
 {
 	int low;
 	int high;
-	int mid;
+	int mid = 0;
 	int res = 0;
 
 	if (cn_domain == NULL) {
