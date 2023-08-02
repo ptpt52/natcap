@@ -2527,7 +2527,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			if (ns->peer.cnt > 0 && peer_multipath <= MAX_PEER_NUM) {
 				int ret;
 				unsigned int i;
-				__be32 saddr;
+				__be32 saddr = 0;
 				struct ethhdr *neth;
 				struct sk_buff *nskb;
 				for (i = 0; i < MAX_PEER_NUM; i++) {
