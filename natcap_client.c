@@ -783,7 +783,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 	}
 	if (hooknum == NF_INET_LOCAL_OUT) {
 		char tname[TASK_COMM_LEN];
-		get_task_comm(tname, current);
+		strncpy(tname, current->comm, TASK_COMM_LEN);
 
 		switch (iph->protocol) {
 		case IPPROTO_TCP:
