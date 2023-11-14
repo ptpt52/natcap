@@ -221,13 +221,13 @@ extern char htp_confusion_host[64];
 #define DEBUG_FMT_PREFIX "(%s:%u)"
 #define DEBUG_ARG_PREFIX __FUNCTION__, __LINE__
 
-#define DEBUG_FMT_TCP "[" IP_TCPUDP_FMT "|ID:%04x,IL:%u|" TCP_ST_FMT "]"
+#define DEBUG_FMT_TCP "[" IP_TCPUDP_FMT "|ID:%04X,IL:%u|" TCP_ST_FMT "]"
 #define DEBUG_ARG_TCP(i, t) IP_TCPUDP_ARG(i,t), ntohs(((struct iphdr *)(i))->id), ntohs(((struct iphdr *)(i))->tot_len), TCP_ST_ARG(t)
 
-#define DEBUG_FMT_UDP "[" IP_TCPUDP_FMT "|ID:%04x,IL:%u|" UDP_ST_FMT "]"
+#define DEBUG_FMT_UDP "[" IP_TCPUDP_FMT "|ID:%04X,IL:%u|" UDP_ST_FMT "]"
 #define DEBUG_ARG_UDP(i, u) IP_TCPUDP_ARG(i,u), ntohs((i)->id), ntohs((i)->tot_len), UDP_ST_ARG(u)
 
-#define DEBUG_FMT_ICMP "[%pI4->%pI4|ID:%04x,IL:%u|" ICMP_ST_FMT "]"
+#define DEBUG_FMT_ICMP "[%pI4->%pI4|ID:%04X,IL:%u|" ICMP_ST_FMT "]"
 #define DEBUG_ARG_ICMP(i, m) &(i)->saddr, &(i)->daddr, ntohs((i)->id), ntohs((i)->tot_len), ICMP_ST_ARG(m)
 
 #define DEBUG_TCP_FMT "[%s]" DEBUG_FMT_PREFIX DEBUG_FMT_TCP
