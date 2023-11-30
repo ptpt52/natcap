@@ -4470,6 +4470,8 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
 #endif
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
 	struct net *net = &init_net;
 	struct iphdr *iph;
 	void *l4;
@@ -4489,6 +4491,15 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 	l4 = (void *)iph + iph->ihl * 4;
 
 	if (UDPH(l4)->dest != __constant_htons(53)) {
+		return NF_ACCEPT;
+	}
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (NULL == ct) {
+		return NF_ACCEPT;
+	}
+
+	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		return NF_ACCEPT;
 	}
 
@@ -4640,13 +4651,13 @@ reply_dns:
 					//neth->h_proto = htons(ETH_P_IP);
 				}
 
-				niph->saddr = iph->daddr;
-				niph->daddr = iph->saddr;
+				niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+				niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 				niph->tot_len = htons(nskb->len);
 
 				nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
-				nudph->source = UDPH(l4)->dest;
-				nudph->dest = UDPH(l4)->source;
+				nudph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
+				nudph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all;
 				nudph->len = ntohs(nskb->len - niph->ihl * 4);
 				nudph->check = CSUM_MANGLED_0;
 
