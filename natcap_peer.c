@@ -54,6 +54,8 @@ static unsigned int peer_mode = 0;
 static unsigned int peer_max_pmtu = 1420;
 static unsigned int peer_sni_ban = 0;
 
+static struct in6_addr peer_local_ip6_addr;
+
 struct peer_cache_node {
 	struct nf_conn *user;
 	struct sk_buff *skb;
@@ -1843,8 +1845,9 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		set_byte2((void *)&tcpopt->peer.data.icmp_payload_len, htons(payload_len));
 		if (payload_len > 16)
 			payload_len = 16;
-		memcpy((void *)tcpopt->peer.data.timeval, (const void *)otcph + sizeof(struct icmphdr), payload_len);
-		memset((void *)tcpopt->peer.data.timeval + payload_len, 0, 16 - payload_len);
+		memcpy(fue->fake_icmp_time, (const void *)otcph + sizeof(struct icmphdr), payload_len);
+		memset((void *)fue->fake_icmp_time + payload_len, 0, 16 - payload_len);
+		memcpy((void *)tcpopt->peer.data.timeval, &peer_local_ip6_addr, 16);
 	}
 	set_byte4((void *)&tcpopt->peer.data.user.ip, niph->saddr);
 	memcpy(tcpopt->peer.data.user.mac_addr, default_mac_addr, ETH_ALEN);
@@ -3010,7 +3013,7 @@ sni_out:
 					        16 + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int)) &&
 					        skb->len >= iph->ihl * 4 + sizeof(struct tcphdr) + \
 					        16 + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int))) {
-						memcpy(timeval, tcpopt->peer.data.timeval, 16);
+						memcpy(timeval, fue->fake_icmp_time, 16);
 					}
 					if (payload_len > ICMP_PAYLOAD_LIMIT)
 						payload_len = ICMP_PAYLOAD_LIMIT;
@@ -3138,6 +3141,10 @@ sni_out:
 				ue->last_active_peer = jiffies;
 				natcap_peer_echo_request(in, skb, client_mac);
 			}
+
+			memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
+			short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
+
 			spin_unlock_bh(&ue->lock);
 		}
 
@@ -3395,6 +3402,10 @@ sni_skip:
 				ue->last_active_peer = jiffies;
 				natcap_peer_echo_request(in, skb, client_mac);
 			}
+
+			memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
+			short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
+
 			spin_unlock_bh(&ue->lock);
 		}
 
@@ -3459,6 +3470,13 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 	        ipv6h->hop_limit != 1 ||
 	        (ipv6h->daddr.s6_addr[0] != 0xff || ipv6h->daddr.s6_addr[1] != 0x99)) {
 		return NF_ACCEPT;
+	}
+
+	if (memcmp(ipv6h->daddr.s6_addr, "\xff\x99\xAA\xBB\xCC\xDD\xEE\xFF", 8) == 0) {
+		NATCAP_INFO("(IPI): local ip6=%pI6\n", &ipv6h->saddr);
+		memcpy(&peer_local_ip6_addr, &ipv6h->saddr, sizeof(peer_local_ip6_addr));
+		consume_skb(skb);
+		return NF_STOLEN;
 	}
 
 	//ping6 ff99:AABB:CCDD:EEFF:: -t1 -s1 -w1

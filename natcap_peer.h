@@ -73,6 +73,7 @@ struct fakeuser_expect {
 	unsigned int last_active;
 	unsigned int rt_out_magic;
 	struct natcap_route rt_out;
+	unsigned char fake_icmp_time[16];
 };
 
 struct natcap_fastpath_route {
