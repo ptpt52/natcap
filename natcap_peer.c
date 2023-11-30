@@ -4510,7 +4510,9 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 	l4 = (void *)iph + iph->ihl * 4;
 
 	do {
+		struct in6_addr in6;
 		__be32 ip = 0;
+		unsigned short ip6 = 0;
 		unsigned short id = 0;
 		int i = 0, pos;
 		unsigned int v;
@@ -4581,6 +4583,10 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 
 			NATCAP_DEBUG("(PD)" DEBUG_UDP_FMT ": id=0x%04x, qtype=%d, qclass=%d, qname=%s\n", DEBUG_UDP_ARG(iph,l4), id, qtype, qclass, qname);
 
+			if (qtype != 0x0001 && qtype != 0x001c) {
+				break;
+			}
+
 			n = sscanf(qname, "%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
 			if (n != 6) {
 				if (memcmp(qname, "x-wrt.lan", 9) == 0) {
@@ -4617,6 +4623,10 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 				}
 
 				ue = peer_user_expect(user);
+				if ((ue->status & PEER_SUBTYPE_PUB6)) {
+					ip6 = 1;
+					memcpy(&in6, &ue->in6, sizeof(in6));
+				}
 				if (ue->ip == ue->local_ip || (ue->status & PEER_SUBTYPE_PUB)) {
 					ip = ue->ip;
 				} else {
@@ -4625,23 +4635,24 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 				}
 				nf_ct_put(user);
 			}
-			if (ip == 0) {
-				break;
+			if (ip == 0 && qtype == 0x0001) {
+				continue;
+			}
+			if (ip6 == 0 && qtype == 0x001c) {
+				continue;
 			}
 reply_dns:
 			if (nskb == NULL) {
 				struct ethhdr *neth;
 				struct iphdr *niph;
 				struct udphdr *nudph;
-				int offset = skb_headlen(skb) + 16 * qd_count - (skb_headlen(skb) + skb_tailroom(skb));
+				int offset = skb_headlen(skb) + 28 * 2 - (skb_headlen(skb) + skb_tailroom(skb));
 				int add_len = offset < 0 ? 0 : offset;
 				offset += skb_tailroom(skb);
 				nskb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 				if (!nskb) {
 					break;
 				}
-				nskb->tail += offset;
-				nskb->len += 16 * qd_count;
 
 				neth = eth_hdr(nskb);
 				niph = ip_hdr(nskb);
@@ -4653,17 +4664,15 @@ reply_dns:
 
 				niph->saddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 				niph->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
-				niph->tot_len = htons(nskb->len);
 
 				nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
 				nudph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
 				nudph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all;
-				nudph->len = ntohs(nskb->len - niph->ihl * 4);
 				nudph->check = CSUM_MANGLED_0;
 
-				an_p = (unsigned char *)niph + nskb->len - 16 * qd_count;
+				an_p = (unsigned char *)niph + nskb->len;
 				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 2, htons(flags | 0x8080));
-				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6, htons(qd_count));
+				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6, htons(0));
 				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 8, __constant_htons(0));
 				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 10, __constant_htons(0));
 			}
@@ -4671,32 +4680,64 @@ reply_dns:
 				break;
 			}
 
-			set_byte2(an_p, htons(0xc000 | qname_off));
-			set_byte2(an_p + 2, __constant_htons(1));
-			set_byte2(an_p + 4, __constant_htons(1));
-			set_byte4(an_p + 6, __constant_htonl(128));
-			set_byte2(an_p + 10, __constant_htons(4));
-			set_byte4(an_p + 12, ip); //ip
+			if (qtype == 0x0001 && ip != 0) {
+				struct iphdr *niph = ip_hdr(nskb);
+				struct udphdr *nudph = nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
+				unsigned short qd = get_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6);
 
-			an_p += 16;
-			//set as
+				qd = ntohs(qd) + 1;
+				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6, htons(qd));
+
+				skb_put(nskb, 16);
+				niph->tot_len = htons(nskb->len);
+				nudph->len = ntohs(nskb->len - niph->ihl * 4);
+
+				set_byte2(an_p, htons(0xc000 | qname_off));
+				set_byte2(an_p + 2, __constant_htons(0x0001));
+				set_byte2(an_p + 4, __constant_htons(0x0001));
+				set_byte4(an_p + 6, __constant_htonl(128));
+				set_byte2(an_p + 10, __constant_htons(4));
+				set_byte4(an_p + 12, ip);
+
+				an_p += 16;
+
+				ip = 0;
+				if (ip == 0 && ip6 == 0) {
+					break;
+				}
+			} else if (qtype == 0x001c && ip6 != 0) {
+				struct iphdr *niph = ip_hdr(nskb);
+				struct udphdr *nudph = nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
+				unsigned short qd = get_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6);
+
+				qd = ntohs(qd) + 1;
+				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6, htons(qd));
+
+				skb_put(nskb, 28);
+				niph->tot_len = htons(nskb->len);
+				nudph->len = ntohs(nskb->len - niph->ihl * 4);
+
+				set_byte2(an_p, htons(0xc000 | qname_off));
+				set_byte2(an_p + 2, __constant_htons(0x001c));
+				set_byte2(an_p + 4, __constant_htons(0x0001));
+				set_byte4(an_p + 6, __constant_htonl(128));
+				set_byte2(an_p + 10, __constant_htons(16));
+				set_byte4(an_p + 12, in6.s6_addr32[0]);
+				set_byte4(an_p + 12 + 4, in6.s6_addr32[1]);
+				set_byte4(an_p + 12 + 8, in6.s6_addr32[2]);
+				set_byte4(an_p + 12 + 12, in6.s6_addr32[3]);
+
+				an_p += 28;
+
+				ip6 = 0;
+				if (ip == 0 && ip6 == 0) {
+					break;
+				}
+			}
 		}
 
 		if (nskb == NULL) {
 			break;
-		}
-		if (i != qd_count || ip == 0) {
-			consume_skb(nskb);
-			break;
-		}
-
-		if (len > pos) {
-			memmove((void *)ip_hdr(nskb) + ip_hdr(nskb)->ihl * 4 + sizeof(struct udphdr) + pos,
-			        (void *)ip_hdr(nskb) + ip_hdr(nskb)->ihl * 4 + sizeof(struct udphdr) + len,
-			        16 * qd_count);
-			nskb->len -= len - pos;
-			ip_hdr(nskb)->tot_len = htons(nskb->len);
-			UDPH((void *)ip_hdr(nskb) + ip_hdr(nskb)->ihl * 4)->len = ntohs(nskb->len - ip_hdr(nskb)->ihl * 4);
 		}
 
 		nskb->ip_summed = CHECKSUM_UNNECESSARY;

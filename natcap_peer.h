@@ -37,6 +37,8 @@ struct peer_server_node {
 #define PEER_SUBTYPE_PUB (1 << PEER_SUBTYPE_PUB_BIT)
 #define PEER_SUBTYPE_AUTH_BIT 3
 #define PEER_SUBTYPE_AUTH (1 << PEER_SUBTYPE_AUTH_BIT)
+#define PEER_SUBTYPE_PUB6_BIT 6
+#define PEER_SUBTYPE_PUB6 (1 << PEER_SUBTYPE_PUB6_BIT)
 	unsigned short status;
 	__be32 ip;
 	__be16 map_port;
@@ -124,6 +126,7 @@ struct user_expect {
 	__be32 ip;
 	__be16 map_port;
 	unsigned short status;
+	struct in6_addr in6;
 #define MAX_PEER_TUPLE 8
 	struct peer_tuple tuple[MAX_PEER_TUPLE];
 
