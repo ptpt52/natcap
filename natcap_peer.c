@@ -1847,7 +1847,8 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 			payload_len = 16;
 		memcpy(fue->fake_icmp_time, (const void *)otcph + sizeof(struct icmphdr), payload_len);
 		memset((void *)fue->fake_icmp_time + payload_len, 0, 16 - payload_len);
-		memcpy((void *)tcpopt->peer.data.timeval, &peer_local_ip6_addr, 16);
+		memcpy((void *)tcpopt->peer.data.timeval, peer_local_ip6_addr.s6_addr, payload_len);
+		memcpy((void *)tcpopt->peer.data.timeval + payload_len, peer_local_ip6_addr.s6_addr + payload_len, 16 - payload_len);
 	}
 	set_byte4((void *)&tcpopt->peer.data.user.ip, niph->saddr);
 	memcpy(tcpopt->peer.data.user.mac_addr, default_mac_addr, ETH_ALEN);
