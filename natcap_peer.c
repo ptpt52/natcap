@@ -1840,13 +1840,14 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		set_byte2((void *)&tcpopt->peer.data.icmp_payload_len, 0);
 	} else {
 		u16 payload_len = oskb->len - oiph->ihl * 4 - sizeof(struct icmphdr);
-		set_byte2((void *)&tcpopt->peer.data.icmp_id, ICMPH(otcph)->un.echo.id);
+		set_byte2((void *)&tcpopt->peer.data.icmp_id, __constant_htons(65535));
 		set_byte2((void *)&tcpopt->peer.data.icmp_sequence, ICMPH(otcph)->un.echo.sequence);
 		set_byte2((void *)&tcpopt->peer.data.icmp_payload_len, htons(payload_len));
 		if (payload_len > 16)
 			payload_len = 16;
 		memcpy(fue->fake_icmp_time, (const void *)otcph + sizeof(struct icmphdr), payload_len);
 		memset((void *)fue->fake_icmp_time + payload_len, 0, 16 - payload_len);
+		set_byte2((void *)&fue->fake_icmp_time[16], ICMPH(otcph)->un.echo.id);
 		memcpy((void *)tcpopt->peer.data.timeval, peer_local_ip6_addr.s6_addr, payload_len);
 		memcpy((void *)tcpopt->peer.data.timeval + payload_len, peer_local_ip6_addr.s6_addr + payload_len, 16 - payload_len);
 	}
@@ -3001,7 +3002,7 @@ sni_out:
 				do {
 					int offset, add_len;
 					u8 timeval[16] = { };
-					__be16 id = get_byte2((const void *)&tcpopt->peer.data.icmp_id);
+					__be16 id = get_byte2((const void *)&fue->fake_icmp_time[16]);
 					__be16 sequence = get_byte2((const void *)&tcpopt->peer.data.icmp_sequence);
 					u16 payload_len = get_byte2((const void *)&tcpopt->peer.data.icmp_payload_len);
 
@@ -3146,7 +3147,7 @@ sni_out:
 			do {
 				unsigned short payload_len = get_byte2((const void *)&tcpopt->peer.data.icmp_payload_len);
 				payload_len = ntohs(payload_len);
-				if (payload_len >= 16) {
+				if (payload_len >= 16 && get_byte2((const void *)&tcpopt->peer.data.icmp_id) == __constant_htons(65535)) {
 					if ((tcpopt->peer.data.timeval[0] & 0xE0) == 0x20) {
 						if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
 							memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
@@ -3421,7 +3422,7 @@ sni_skip:
 			do {
 				unsigned short payload_len = get_byte2((const void *)&tcpopt->peer.data.icmp_payload_len);
 				payload_len = ntohs(payload_len);
-				if (payload_len >= 16) {
+				if (payload_len >= 16 && get_byte2((const void *)&tcpopt->peer.data.icmp_id) == __constant_htons(65535)) {
 					if ((tcpopt->peer.data.timeval[0] & 0xE0) == 0x20) {
 						if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
 							memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
