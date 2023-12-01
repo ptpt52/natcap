@@ -3150,6 +3150,8 @@ sni_out:
 					if ((tcpopt->peer.data.timeval[0] & 0xE0) == 0x20) {
 						if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
 							memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
+						}
+						if (!(ue->status & PEER_SUBTYPE_PUB6)) {
 							short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
 						}
 					} if ((ue->status & PEER_SUBTYPE_PUB6)) {
@@ -3423,6 +3425,8 @@ sni_skip:
 					if ((tcpopt->peer.data.timeval[0] & 0xE0) == 0x20) {
 						if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
 							memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
+						}
+						if (!(ue->status & PEER_SUBTYPE_PUB6)) {
 							short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
 						}
 					} if ((ue->status & PEER_SUBTYPE_PUB6)) {
