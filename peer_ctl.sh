@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#ping6 ff99:aabb:ccdd:eeff:: -t1 -s1 -c1 -W1
+#ping6 3f99:aabb:ccdd:eeff:: -t1 -s1 -c1 -W1
 send_msg()
 {
 	echo $1 | sed 's/:/ /g;s/-/ /g;' | tr A-F a-f | while read m0 m1 m2 m3 m4 m5; do
@@ -10,7 +10,7 @@ send_msg()
 		test -n "$m3" && \
 		test -n "$m4" && \
 		test -n "$m5" && {
-			ping6 ff99:$m0$m1:$m2$m3:$m4$m5:: -t1 -s1 -c1 -W1
+			ping6 3f99:$m0$m1:$m2$m3:$m4$m5:: -t1 -s1 -c1 -W1
 		}
 	done
 }
