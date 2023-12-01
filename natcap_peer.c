@@ -3147,9 +3147,13 @@ sni_out:
 				unsigned short payload_len = get_byte2((const void *)&tcpopt->peer.data.icmp_payload_len);
 				payload_len = ntohs(payload_len);
 				if (payload_len >= 16) {
-					if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
-						memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
-						short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
+					if ((tcpopt->peer.data.timeval[0] & 0xE0) == 0x20) {
+						if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
+							memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
+							short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
+						}
+					} if ((ue->status & PEER_SUBTYPE_PUB6)) {
+						short_clear_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
 					}
 				}
 			} while (0);
@@ -3416,9 +3420,13 @@ sni_skip:
 				unsigned short payload_len = get_byte2((const void *)&tcpopt->peer.data.icmp_payload_len);
 				payload_len = ntohs(payload_len);
 				if (payload_len >= 16) {
-					if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
-						memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
-						short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
+					if ((tcpopt->peer.data.timeval[0] & 0xE0) == 0x20) {
+						if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
+							memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
+							short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
+						}
+					} if ((ue->status & PEER_SUBTYPE_PUB6)) {
+						short_clear_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
 					}
 				}
 			} while (0);
@@ -4975,10 +4983,10 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			spin_lock_bh(&ue->lock);
 			n = snprintf(natcap_peer_ctl_buffer,
 			             SEQ_PGSZ - 1,
-			             "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] pub=%d\n",
+			             "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] pub=%d pub6=%d\n",
 			             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 			             &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1),
-			             !!(ue->status & PEER_SUBTYPE_PUB)
+			             !!(ue->status & PEER_SUBTYPE_PUB), !!(ue->status & PEER_SUBTYPE_PUB6)
 			            );
 			spin_unlock_bh(&ue->lock);
 			put_peer_user(user);
