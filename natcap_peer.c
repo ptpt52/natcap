@@ -3466,14 +3466,12 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 		return NF_ACCEPT;
 
 	ipv6h = ipv6_hdr(skb);
-	if (hooknum != NF_INET_LOCAL_OUT ||
-	        ipv6h->nexthdr != NEXTHDR_ICMP ||
-	        ipv6h->hop_limit != 1 ||
-	        (ipv6h->daddr.s6_addr[0] != 0xff || ipv6h->daddr.s6_addr[1] != 0x99)) {
+	if (ipv6h->nexthdr != NEXTHDR_ICMP ||
+	        (ipv6h->daddr.s6_addr[0] != 0x3f || ipv6h->daddr.s6_addr[1] != 0x99)) {
 		return NF_ACCEPT;
 	}
 
-	if (memcmp(ipv6h->daddr.s6_addr, "\xff\x99\xAA\xBB\xCC\xDD\xEE\xFF", 8) == 0) {
+	if (memcmp(ipv6h->daddr.s6_addr, "\x3f\x99\xAA\xBB\xCC\xDD\xEE\xFF", 8) == 0) {
 		NATCAP_INFO("(IPI): local ip6=%pI6\n", &ipv6h->saddr);
 		memcpy(&peer_local_ip6_addr, &ipv6h->saddr, sizeof(peer_local_ip6_addr));
 		consume_skb(skb);
@@ -4863,8 +4861,8 @@ static struct nf_hook_ops peer_hooks[] = {
 #endif
 		.hook = natcap_icmpv6_pre_in_hook,
 		.pf = PF_INET6,
-		.hooknum = NF_INET_LOCAL_OUT,
-		.priority = NF_IP_PRI_CONNTRACK - 5,
+		.hooknum = NF_INET_POST_ROUTING,
+		.priority = NF_IP_PRI_NAT_SRC + 25,
 	},
 };
 
