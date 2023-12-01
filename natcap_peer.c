@@ -3143,10 +3143,16 @@ sni_out:
 				natcap_peer_echo_request(in, skb, client_mac);
 			}
 
-			if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
-				memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
-				short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
-			}
+			do {
+				unsigned short payload_len = get_byte2((const void *)&tcpopt->peer.data.icmp_payload_len);
+				payload_len = ntohs(payload_len);
+				if (payload_len >= 16) {
+					if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
+						memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
+						short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
+					}
+				}
+			} while (0);
 
 			spin_unlock_bh(&ue->lock);
 		}
@@ -3406,10 +3412,16 @@ sni_skip:
 				natcap_peer_echo_request(in, skb, client_mac);
 			}
 
-			if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
-				memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
-				short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
-			}
+			do {
+				unsigned short payload_len = get_byte2((const void *)&tcpopt->peer.data.icmp_payload_len);
+				payload_len = ntohs(payload_len);
+				if (payload_len >= 16) {
+					if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
+						memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
+						short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
+					}
+				}
+			} while (0);
 
 			spin_unlock_bh(&ue->lock);
 		}
@@ -4567,7 +4579,6 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 			struct nf_conntrack_tuple tuple;
 			struct nf_conntrack_tuple_hash *h;
 
-			ip = 0;
 			if (pos >= len) {
 				break;
 			}
@@ -4650,9 +4661,6 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 				}
 				if (ue->ip == ue->local_ip || (ue->status & PEER_SUBTYPE_PUB)) {
 					ip = ue->ip;
-				} else {
-					nf_ct_put(user);
-					break;
 				}
 				nf_ct_put(user);
 			}
