@@ -3154,7 +3154,7 @@ sni_out:
 						if (!(ue->status & PEER_SUBTYPE_PUB6)) {
 							short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
 						}
-					} if ((ue->status & PEER_SUBTYPE_PUB6)) {
+					} else if ((ue->status & PEER_SUBTYPE_PUB6)) {
 						short_clear_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
 					}
 				}
@@ -3429,7 +3429,7 @@ sni_skip:
 						if (!(ue->status & PEER_SUBTYPE_PUB6)) {
 							short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
 						}
-					} if ((ue->status & PEER_SUBTYPE_PUB6)) {
+					} else if ((ue->status & PEER_SUBTYPE_PUB6)) {
 						short_clear_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
 					}
 				}
