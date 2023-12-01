@@ -3143,8 +3143,10 @@ sni_out:
 				natcap_peer_echo_request(in, skb, client_mac);
 			}
 
-			memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
-			short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
+			if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
+				memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
+				short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
+			}
 
 			spin_unlock_bh(&ue->lock);
 		}
@@ -3404,8 +3406,10 @@ sni_skip:
 				natcap_peer_echo_request(in, skb, client_mac);
 			}
 
-			memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
-			short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
+			if (memcmp(&ue->in6, tcpopt->peer.data.timeval, 16) != 0) {
+				memcpy(&ue->in6, tcpopt->peer.data.timeval, sizeof(ue->in6));
+				short_set_bit(PEER_SUBTYPE_PUB6_BIT, &ue->status);
+			}
 
 			spin_unlock_bh(&ue->lock);
 		}
