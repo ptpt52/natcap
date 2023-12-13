@@ -9,6 +9,8 @@ cat accelerated-domains.china.conf | cut -d\/ -f2 >accelerated-domains.china.raw
 		| grep -v alibaba \
 		| grep -v rustdesk.com \
 		| grep -v linkedin.com \
+		| grep -v bing.com \
+		| grep -v microsoft.com \
 	> accelerated-domains.china.raw.txt
 	rm -f accelerated-domains.china.raw.txt.tmp
 	echo cn_domain_clean >/dev/natcap_ctl
