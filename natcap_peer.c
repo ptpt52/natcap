@@ -2998,6 +2998,7 @@ sni_out:
 					}
 				}
 
+				skb_nfct_reset(skb);
 				//pass up to icmp
 				do {
 					int offset, add_len;
