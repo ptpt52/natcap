@@ -22,7 +22,9 @@
 #define _NATCAP_H_
 
 #define MODULE_NAME "natcap"
+#ifndef NATCAP_VERSION
 #define NATCAP_VERSION "8.0.0"
+#endif
 
 #ifdef __KERNEL__
 #include <linux/ctype.h>
