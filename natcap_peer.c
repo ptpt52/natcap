@@ -475,7 +475,7 @@ static __be16 alloc_peer_port(struct nf_conn *user, const unsigned char *mac)
 	return 0;
 }
 
-struct peer_server_node *peer_server_node_in(__be32 ip, unsigned short conn, int new)
+static struct peer_server_node *peer_server_node_in(__be32 ip, unsigned short conn, int new)
 {
 	unsigned int i;
 	unsigned long maxdiff = 0;
@@ -545,7 +545,7 @@ init_out:
 	return ps;
 }
 
-void natcap_user_timeout_touch(struct nf_conn *ct, unsigned long timeout)
+static void natcap_user_timeout_touch(struct nf_conn *ct, unsigned long timeout)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
 	unsigned long newtimeout = jiffies + timeout * HZ;
@@ -557,7 +557,7 @@ void natcap_user_timeout_touch(struct nf_conn *ct, unsigned long timeout)
 #endif
 }
 
-struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, int pmi)
+static struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be16 sport, __be16 dport, int pmi)
 {
 	struct fakeuser_expect *fue;
 	struct nf_conn *user;
@@ -675,7 +675,7 @@ struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be16 spor
 	return user;
 }
 
-struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, __be16 sport, __be16 dport, __be32 client_ip, const unsigned char *client_mac, struct peer_tuple **ppt)
+static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, __be16 sport, __be16 dport, __be32 client_ip, const unsigned char *client_mac, struct peer_tuple **ppt)
 {
 	int ret;
 	unsigned int i;
@@ -890,7 +890,7 @@ struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, __be16 
 
 static __be32 peer_upstream_auth_ip = 0;
 
-void natcap_auth_request_upstream(const unsigned char *client_mac, __be32 client_ip)
+static void natcap_auth_request_upstream(const unsigned char *client_mac, __be32 client_ip)
 {
 	struct nf_conn *user;
 	struct sk_buff *skb;
@@ -2069,7 +2069,7 @@ static inline int peer_sni_send_synack(const struct net_device *dev, struct sk_b
 	return 0;
 }
 
-unsigned char *tls_sni_search(unsigned char *data, int *data_len)
+static unsigned char *tls_sni_search(unsigned char *data, int *data_len)
 {
 	unsigned char *p = data;
 	int p_len = *data_len;

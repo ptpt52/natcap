@@ -463,10 +463,10 @@ void natcap_server_in_touch(enum server_group_t x, __be32 ip)
 unsigned int natcap_server_use_peer = 0;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
-void __natcap_server_info_select(enum server_group_t x, const struct nf_hook_state *state, struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst)
+static void __natcap_server_info_select(enum server_group_t x, const struct nf_hook_state *state, struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst)
 #define natcap_server_info_select(x, state, in, out, skb, ip, port, dst) __natcap_server_info_select(x, state, skb, ip, port, dst)
 #else
-void __natcap_server_info_select(enum server_group_t x, const struct net_device *in, const struct net_device *out, struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst)
+static void __natcap_server_info_select(enum server_group_t x, const struct net_device *in, const struct net_device *out, struct sk_buff *skb, __be32 ip, __be16 port, struct tuple *dst)
 #define natcap_server_info_select(x, state, in, out, skb, ip, port, dst) __natcap_server_info_select(x, in, out, skb, ip, port, dst)
 #endif
 {
