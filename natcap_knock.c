@@ -57,6 +57,7 @@ void natcap_knock_info_select(__be32 ip, __be16 port, struct tuple *dst)
 		dst->port = port;
 	} else if (dst->port == __constant_htons(65535)) {
 		dst->port = ((jiffies^ip) & 0xffff);
+		dst->port = htons(ntohs(dst->port) % (65536 - 1024) + 1024);
 	}
 }
 

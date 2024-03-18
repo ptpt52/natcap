@@ -575,6 +575,7 @@ found:
 		dst->port = port;
 	} else if (dst->port == __constant_htons(65535)) {
 		dst->port = atomic_add_return(1, &server_port) ^ (ip & 0xffff) ^ ((ip >> 16) & 0xffff);
+		dst->port = htons(ntohs(dst->port) % (65536 - 1024) + 1024);
 	}
 
 	if (encode_http_only == 0)
