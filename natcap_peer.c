@@ -1526,7 +1526,7 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + header_len + TCPOLEN_MSS + ext_header_len;
 	if (ext_header_len > 0) {
 		ext_header_len = header_len + TCPOLEN_MSS;
-		if (!skb_make_writable(nskb, nskb->len)) {
+		if (!skb_set_writable(nskb, nskb->len)) {
 			consume_skb(nskb);
 			return;
 		}
@@ -2281,7 +2281,7 @@ static inline void sni_cache_skb_pass_back(struct sk_buff *oskb, struct sk_buff 
 
 	if (cache_skb == NULL)
 		return;
-	if (!skb_make_writable(cache_skb, ntohs(ip_hdr(cache_skb)->tot_len))) {
+	if (!skb_set_writable(cache_skb, ntohs(ip_hdr(cache_skb)->tot_len))) {
 		return;
 	}
 
@@ -2553,7 +2553,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
 			}
 
-			if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4 + 8)) {
+			if (!skb_set_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4 + 8)) {
 				return NF_DROP;
 			}
 			iph = ip_hdr(skb);
@@ -2630,7 +2630,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			consume_skb(skb);
 			return NF_STOLEN;
 		}
-		if (!skb_make_writable(skb, skb->len)) {
+		if (!skb_set_writable(skb, skb->len)) {
 			return NF_DROP;
 		}
 		iph = ip_hdr(skb);
@@ -4550,7 +4550,7 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (!skb_make_writable(skb, skb->len)) {
+	if (!skb_set_writable(skb, skb->len)) {
 		return NF_ACCEPT;
 	}
 	iph = ip_hdr(skb);
