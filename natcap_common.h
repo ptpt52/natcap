@@ -803,16 +803,6 @@ static inline int inet_is_local(const struct net_device *dev, __be32 ip)
 #define skb_make_writable !skb_ensure_writable
 #endif
 
-static inline int skb_set_writable(struct sk_buff *skb, unsigned int write_len)
-{
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
-	if ((skb_shinfo(skb)->gso_type & SKB_GSO_FRAGLIST)) {
-		skb_shinfo(skb)->gso_type &= ~SKB_GSO_FRAGLIST;
-	}
-#endif
-	return skb_make_writable(skb, write_len);
-}
-
 static inline struct sk_buff *natcap_peer_ctrl_alloc(struct sk_buff *oskb, int data_len)
 {
 	struct sk_buff *nskb;
