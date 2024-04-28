@@ -132,7 +132,7 @@ static unsigned int natcap_knock_dnat_hook(void *priv,
 		}
 	}
 
-	if (!skb_set_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
 		return NF_DROP;
 	}
 	iph = ip_hdr(skb);

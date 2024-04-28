@@ -664,12 +664,12 @@ static inline unsigned int natcap_try_http_redirect(struct iphdr *iph, struct sk
 		return NF_ACCEPT;
 	}
 
-	if (!skb_set_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
 		return NF_DROP;
 	}
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
-	if (!skb_set_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
+	if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
 		return NF_DROP;
 	}
 	iph = ip_hdr(skb);
@@ -915,12 +915,12 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
-		if (!skb_set_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
 			return NF_DROP;
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
-		if (!skb_set_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
 			return NF_DROP;
 		}
 		iph = ip_hdr(skb);
@@ -940,19 +940,19 @@ static unsigned int natcap_server_pre_ct_test_hook(void *priv,
 		}
 		return NF_ACCEPT;
 	} else if (iph->protocol == IPPROTO_UDP) {
-		if (!skb_set_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
 			return NF_DROP;
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (skb_set_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12)) {
+		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12)) {
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 
 			if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_E_MAGIC) ||
 			        (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC) &&
-			         skb_set_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
+			         skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
 				iph = ip_hdr(skb);
 				l4 = (void *)iph + iph->ihl * 4;
 
@@ -1046,12 +1046,12 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 	}
 
 	if (iph->protocol == IPPROTO_TCP) {
-		if (!skb_set_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
 			return NF_DROP;
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
-		if (!skb_set_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
 			return NF_DROP;
 		}
 		iph = ip_hdr(skb);
@@ -1185,19 +1185,19 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 		NATCAP_DEBUG("(SPCI)" DEBUG_TCP_FMT ": after decode\n", DEBUG_TCP_ARG(iph,l4));
 	} else if (iph->protocol == IPPROTO_UDP) {
-		if (!skb_set_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
 			return NF_DROP;
 		}
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		if (skb_set_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12)) {
+		if (skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 12)) {
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 
 			if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_E_MAGIC) ||
 			        (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_D_MAGIC) &&
-			         skb_set_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
+			         skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
 				int off = 12;
 				iph = ip_hdr(skb);
 				l4 = (void *)iph + iph->ihl * 4;
@@ -1320,8 +1320,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 
 			if ((NS_NATCAP_ENC & ns->n.status)) {
-				if (!skb_set_writable(skb, skb->len)) {
-					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": skb_set_writable() failed\n", DEBUG_UDP_ARG(iph,l4));
+				if (!skb_make_writable(skb, skb->len)) {
+					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": skb_make_writable() failed\n", DEBUG_UDP_ARG(iph,l4));
 					return NF_DROP;
 				}
 				iph = ip_hdr(skb);
@@ -1687,8 +1687,8 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	} else if (iph->protocol == IPPROTO_UDP) {
 		NATCAP_DEBUG("(SPO)" DEBUG_UDP_FMT ": pass data reply\n", DEBUG_UDP_ARG(iph,l4));
 		if ((NS_NATCAP_ENC & ns->n.status)) {
-			if (!skb_set_writable(skb, skb->len)) {
-				NATCAP_ERROR("(SPO)" DEBUG_UDP_FMT ": skb_set_writable() failed\n", DEBUG_UDP_ARG(iph,l4));
+			if (!skb_make_writable(skb, skb->len)) {
+				NATCAP_ERROR("(SPO)" DEBUG_UDP_FMT ": skb_make_writable() failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
 			iph = ip_hdr(skb);
@@ -1876,7 +1876,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
 			}
 
-			if (!skb_set_writable(skb, iph->ihl * 4 + tcphdr_len)) {
+			if (!skb_make_writable(skb, iph->ihl * 4 + tcphdr_len)) {
 				return NF_DROP;
 			}
 			iph = ip_hdr(skb);
@@ -2363,7 +2363,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 		}
 
-		if (!skb_set_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4 + 8)) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4 + 8)) {
 			return NF_DROP;
 		}
 		iph = ip_hdr(skb);
@@ -2938,7 +2938,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 		}
 
-		if (!skb_set_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4 + 8)) {
+		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4 + 8)) {
 			return NF_DROP;
 		}
 		iph = ip_hdr(skb);
