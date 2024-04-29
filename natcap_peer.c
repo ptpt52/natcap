@@ -1985,7 +1985,7 @@ static inline struct sk_buff *peer_sni_to_syn(struct sk_buff *oskb, unsigned sho
 	set_byte1((void *)tcpopt + header_len + 1, TCPOLEN_MSS);
 	set_byte2((void *)tcpopt + header_len + 2, ntohs(mss)); //just use mss from client.
 
-	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	oskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(oskb);
 
 	return nskb;
@@ -2762,7 +2762,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					consume_skb(cache_skb);
 					goto sni_out;
 				}
-				iph = ip_hdr(cache_skb);
+				iph = ip_hdr(skb);
 				l4 = (void *)iph + iph->ihl * 4;
 
 				ret = nf_conntrack_in_compat(net, pf, NF_INET_PRE_ROUTING, skb);
