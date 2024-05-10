@@ -191,6 +191,99 @@ static inline void peer_cache_cleanup(void)
 	spin_unlock_bh(&peer_cache_lock);
 }
 
+struct peer_sni_cache_node {
+	unsigned long active_jiffies;
+	__be32 src_ip;
+	__be16 src_port;
+	struct sk_buff *skb;
+};
+
+#define MAX_PEER_SNI_CACHE_NODE 64
+static struct peer_sni_cache_node peer_sni_cache[NR_CPUS][MAX_PEER_SNI_CACHE_NODE];
+
+static inline void peer_sni_cache_init(void)
+{
+	memset((void *)peer_sni_cache, 0, sizeof(struct peer_sni_cache_node) * NR_CPUS * MAX_PEER_SNI_CACHE_NODE);
+}
+
+static inline void peer_sni_cache_cleanup(void)
+{
+	int i, j;
+	for (i = 0; i < NR_CPUS; i++) {
+		for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
+			if (peer_sni_cache[i][j].skb != NULL) {
+				consume_skb(peer_sni_cache[i][j].skb);
+				peer_sni_cache[i][j].skb = NULL;
+				peer_sni_cache[i][j].src_ip = 0;
+				peer_sni_cache[i][j].src_port = 0;
+			}
+		}
+	}
+}
+
+static inline int peer_sni_cache_attach(__be32 src_ip, __be16 src_port, struct sk_buff *skb)
+{
+	int i = smp_processor_id();
+	int j;
+	int next_to_use = MAX_PEER_SNI_CACHE_NODE;
+	for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
+		if (peer_sni_cache[i][j].src_ip == src_ip) {
+			if (peer_sni_cache[i][j].src_port == src_port) {
+				return -EEXIST;
+			}
+		} else if (next_to_use == MAX_PEER_SNI_CACHE_NODE && peer_sni_cache[i][j].skb == NULL) {
+			next_to_use = j;
+		}
+	}
+	if (next_to_use == MAX_PEER_SNI_CACHE_NODE) {
+		return -ENOMEM;
+	}
+
+	peer_sni_cache[i][next_to_use].src_ip = src_ip;
+	peer_sni_cache[i][next_to_use].src_port = src_port;
+	peer_sni_cache[i][next_to_use].skb = skb;
+	peer_sni_cache[i][next_to_use].active_jiffies = (unsigned long)jiffies;
+
+	return 0;
+}
+
+static inline struct sk_buff *peer_sni_cache_detach(__be32 src_ip, __be16 src_port)
+{
+	int i = smp_processor_id();
+	int j = 0;
+	struct sk_buff *skb = NULL;
+	for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
+		if (peer_sni_cache[i][j].skb != NULL) {
+			if (time_after(jiffies, peer_sni_cache[i][j].active_jiffies + PEER_CACHE_TIMEOUT * HZ)) {
+				consume_skb(peer_sni_cache[i][j].skb);
+				peer_sni_cache[i][j].skb = NULL;
+				peer_sni_cache[i][j].src_ip = 0;
+				peer_sni_cache[i][j].src_port = 0;
+			} else if (peer_sni_cache[i][j].src_ip == src_ip) {
+				if (peer_sni_cache[i][j].src_port == src_port) {
+					skb = peer_sni_cache[i][j].skb;
+					peer_sni_cache[i][j].skb = NULL;
+					peer_sni_cache[i][j].src_ip = 0;
+					peer_sni_cache[i][j].src_port = 0;
+					break;
+				}
+			}
+		}
+	}
+	for (; j < MAX_PEER_SNI_CACHE_NODE; j++) {
+		if (peer_sni_cache[i][j].skb != NULL) {
+			if (time_after(jiffies, peer_sni_cache[i][j].active_jiffies + PEER_CACHE_TIMEOUT * HZ)) {
+				consume_skb(peer_sni_cache[i][j].skb);
+				peer_sni_cache[i][j].skb = NULL;
+				peer_sni_cache[i][j].src_ip = 0;
+				peer_sni_cache[i][j].src_port = 0;
+			}
+		}
+	}
+
+	return skb;
+}
+
 static int peer_stop = 1;
 
 static int peer_subtype = 0;
@@ -2069,7 +2162,7 @@ static inline int peer_sni_send_synack(const struct net_device *dev, struct sk_b
 	return 0;
 }
 
-static unsigned char *tls_sni_search(unsigned char *data, int *data_len)
+static unsigned char *tls_sni_search(unsigned char *data, int *data_len, int *needmore)
 {
 	unsigned char *p = data;
 	int p_len = *data_len;
@@ -2084,7 +2177,11 @@ static unsigned char *tls_sni_search(unsigned char *data, int *data_len)
 	len = ntohs(get_byte2(p + i + 0)); //content_len
 	i += 2;
 	if (i >= p_len) return NULL;
-	if (i + len > p_len) return NULL;
+	if (i + len > p_len) {
+		if (needmore)
+			*needmore = 1;
+		return NULL;
+	}
 
 	p = p + i;
 	p_len = len;
@@ -2598,6 +2695,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		struct nf_conn *ct;
 		struct nf_conntrack_tuple tuple;
 		struct nf_conntrack_tuple_hash *h;
+		struct sk_buff *prev_skb = NULL;
 		unsigned char *data;
 		int data_len;
 
@@ -2636,9 +2734,74 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
-		data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
-		data = tls_sni_search(data, &data_len);
+		prev_skb = peer_sni_cache_detach(iph->saddr, TCPH(l4)->source);
+		if (prev_skb) {
+			struct iphdr *prev_iph = ip_hdr(prev_skb);
+			void *prev_l4 = (void *)prev_iph + prev_iph->ihl * 4;
+			unsigned char *prev_data = prev_skb->data + prev_iph->ihl * 4 + TCPH(prev_l4)->doff * 4;
+			int prev_data_len = ntohs(prev_iph->tot_len) - (prev_iph->ihl * 4 + TCPH(prev_l4)->doff * 4);
+
+			data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
+			data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
+
+			if (ntohl(TCPH(l4)->seq) == ntohl(TCPH(prev_l4)->seq) + prev_data_len) {
+				if (skb_tailroom(prev_skb) < data_len && pskb_expand_head(prev_skb, 0, data_len, GFP_ATOMIC)) {
+					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": pskb_expand_head failed\n", DEBUG_TCP_ARG(iph,l4));
+					consume_skb(prev_skb);
+					consume_skb(skb);
+					return NF_STOLEN;
+				}
+				if (skb->len < prev_skb->len + data_len &&
+				        skb_tailroom(skb) < prev_skb->len + data_len - skb->len &&
+				        pskb_expand_head(skb, 0, prev_skb->len + data_len - skb->len, GFP_ATOMIC)) {
+					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": pskb_expand_head failed\n", DEBUG_TCP_ARG(iph,l4));
+					consume_skb(prev_skb);
+					consume_skb(skb);
+					return NF_STOLEN;
+				}
+				iph = ip_hdr(skb);
+				l4 = (void *)iph + iph->ihl * 4;
+				data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
+
+				prev_iph = ip_hdr(prev_skb);
+				prev_l4 = (void *)prev_iph + prev_iph->ihl * 4;
+				prev_data = prev_skb->data + prev_iph->ihl * 4 + TCPH(prev_l4)->doff * 4;
+
+				memcpy(prev_data + prev_data_len, data, data_len);
+				memcpy(skb->data, prev_skb->data, prev_skb->len + data_len);
+				skb->tail += prev_skb->len - skb->len;
+				skb->len += prev_skb->len - skb->len;
+
+				iph = ip_hdr(skb);
+				l4 = (void *)iph + iph->ihl * 4;
+				data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
+
+				data_len = prev_data_len + data_len;
+				data = tls_sni_search(data, &data_len, NULL);
+				consume_skb(prev_skb);
+			} else if (ntohl(TCPH(l4)->seq) == ntohl(TCPH(prev_l4)->seq)) {
+				if (peer_sni_cache_attach(iph->saddr, TCPH(l4)->source, prev_skb) != 0) {
+					consume_skb(prev_skb);
+				}
+				consume_skb(skb);
+				return NF_STOLEN;
+			} else {
+				consume_skb(prev_skb);
+				consume_skb(skb);
+				return NF_STOLEN;
+			}
+		} else {
+			int needmore = 0;
+			data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
+			data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
+			data = tls_sni_search(data, &data_len, &needmore);
+			if (!data && needmore == 1) {
+				if (peer_sni_cache_attach(iph->saddr, TCPH(l4)->source, skb) != 0) {
+					consume_skb(skb);
+				}
+				return NF_STOLEN;
+			}
+		}
 
 		if (data && data_len > 15 && data[14] == '.') { //m-0b1a29384756.xxx.com
 			int n;
@@ -5370,6 +5533,7 @@ int natcap_peer_init(void)
 	memset(peer_pub_ip, 0, sizeof(peer_pub_ip));
 	memset(peer_pub_active, 0, sizeof(peer_pub_active));
 
+	peer_sni_cache_init();
 	peer_cache_init();
 	memset(peer_server, 0, sizeof(peer_server));
 	for (i = 0; i < MAX_PEER_SERVER; i++) {
@@ -5496,4 +5660,5 @@ void natcap_peer_exit(void)
 	}
 
 	peer_cache_cleanup();
+	peer_sni_cache_cleanup();
 }
