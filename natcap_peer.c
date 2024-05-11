@@ -2742,7 +2742,6 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		if (prev_skb) {
 			struct iphdr *prev_iph = ip_hdr(prev_skb);
 			void *prev_l4 = (void *)prev_iph + prev_iph->ihl * 4;
-			unsigned char *prev_data = prev_skb->data + prev_iph->ihl * 4 + TCPH(prev_l4)->doff * 4;
 			int prev_data_len = ntohs(prev_iph->tot_len) - (prev_iph->ihl * 4 + TCPH(prev_l4)->doff * 4);
 
 			data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
@@ -2750,12 +2749,6 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 			if (ntohl(TCPH(l4)->seq) == ntohl(TCPH(prev_l4)->seq) + prev_data_len + add_data_len) {
 				int needmore = 0;
-				if (skb_tailroom(prev_skb) < data_len + add_data_len && pskb_expand_head(prev_skb, 0, data_len + add_data_len, GFP_ATOMIC)) {
-					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": pskb_expand_head failed\n", DEBUG_TCP_ARG(iph,l4));
-					consume_skb(prev_skb);
-					consume_skb(skb);
-					return NF_STOLEN;
-				}
 				if (skb->len < prev_skb->len + data_len + add_data_len &&
 				        skb_tailroom(skb) < prev_skb->len + data_len + add_data_len - skb->len &&
 				        pskb_expand_head(skb, 0, prev_skb->len + data_len + add_data_len - skb->len, GFP_ATOMIC)) {
@@ -2768,12 +2761,8 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				l4 = (void *)iph + iph->ihl * 4;
 				data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
 
-				prev_iph = ip_hdr(prev_skb);
-				prev_l4 = (void *)prev_iph + prev_iph->ihl * 4;
-				prev_data = prev_skb->data + prev_iph->ihl * 4 + TCPH(prev_l4)->doff * 4;
-
-				memcpy(prev_data + prev_data_len + add_data_len, data, data_len);
-				memcpy(skb->data, prev_skb->data, prev_skb->len + add_data_len + data_len);
+				memmove(data, skb->data + prev_skb->len + add_data_len, data_len);
+				memcpy(skb->data, prev_skb->data, prev_skb->len + add_data_len);
 				skb->tail += prev_skb->len - skb->len;
 				skb->len += prev_skb->len - skb->len;
 
