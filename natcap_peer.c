@@ -195,6 +195,7 @@ struct peer_sni_cache_node {
 	unsigned long active_jiffies;
 	__be32 src_ip;
 	__be16 src_port;
+	unsigned short add_data_len;
 	struct sk_buff *skb;
 };
 
@@ -221,7 +222,7 @@ static inline void peer_sni_cache_cleanup(void)
 	}
 }
 
-static inline int peer_sni_cache_attach(__be32 src_ip, __be16 src_port, struct sk_buff *skb)
+static inline int peer_sni_cache_attach(__be32 src_ip, __be16 src_port, struct sk_buff *skb, unsigned short add_data_len)
 {
 	int i = smp_processor_id();
 	int j;
@@ -241,13 +242,14 @@ static inline int peer_sni_cache_attach(__be32 src_ip, __be16 src_port, struct s
 
 	peer_sni_cache[i][next_to_use].src_ip = src_ip;
 	peer_sni_cache[i][next_to_use].src_port = src_port;
+	peer_sni_cache[i][next_to_use].add_data_len = add_data_len;
 	peer_sni_cache[i][next_to_use].skb = skb;
 	peer_sni_cache[i][next_to_use].active_jiffies = (unsigned long)jiffies;
 
 	return 0;
 }
 
-static inline struct sk_buff *peer_sni_cache_detach(__be32 src_ip, __be16 src_port)
+static inline struct sk_buff *peer_sni_cache_detach(__be32 src_ip, __be16 src_port, unsigned short *add_data_len)
 {
 	int i = smp_processor_id();
 	int j = 0;
@@ -262,6 +264,7 @@ static inline struct sk_buff *peer_sni_cache_detach(__be32 src_ip, __be16 src_po
 			} else if (peer_sni_cache[i][j].src_ip == src_ip) {
 				if (peer_sni_cache[i][j].src_port == src_port) {
 					skb = peer_sni_cache[i][j].skb;
+					*add_data_len = peer_sni_cache[i][j].add_data_len;
 					peer_sni_cache[i][j].skb = NULL;
 					peer_sni_cache[i][j].src_ip = 0;
 					peer_sni_cache[i][j].src_port = 0;
@@ -2698,6 +2701,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		struct sk_buff *prev_skb = NULL;
 		unsigned char *data;
 		int data_len;
+		unsigned short add_data_len = 0;
 
 		if (hooknum != NF_INET_PRE_ROUTING || !inet_is_local(in, iph->daddr)) {
 			return NF_ACCEPT;
@@ -2734,7 +2738,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		prev_skb = peer_sni_cache_detach(iph->saddr, TCPH(l4)->source);
+		prev_skb = peer_sni_cache_detach(iph->saddr, TCPH(l4)->source, &add_data_len);
 		if (prev_skb) {
 			struct iphdr *prev_iph = ip_hdr(prev_skb);
 			void *prev_l4 = (void *)prev_iph + prev_iph->ihl * 4;
@@ -2744,16 +2748,17 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
 			data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
 
-			if (ntohl(TCPH(l4)->seq) == ntohl(TCPH(prev_l4)->seq) + prev_data_len) {
-				if (skb_tailroom(prev_skb) < data_len && pskb_expand_head(prev_skb, 0, data_len, GFP_ATOMIC)) {
+			if (ntohl(TCPH(l4)->seq) == ntohl(TCPH(prev_l4)->seq) + prev_data_len + add_data_len) {
+				int needmore = 0;
+				if (skb_tailroom(prev_skb) < data_len + add_data_len && pskb_expand_head(prev_skb, 0, data_len + add_data_len, GFP_ATOMIC)) {
 					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": pskb_expand_head failed\n", DEBUG_TCP_ARG(iph,l4));
 					consume_skb(prev_skb);
 					consume_skb(skb);
 					return NF_STOLEN;
 				}
-				if (skb->len < prev_skb->len + data_len &&
-				        skb_tailroom(skb) < prev_skb->len + data_len - skb->len &&
-				        pskb_expand_head(skb, 0, prev_skb->len + data_len - skb->len, GFP_ATOMIC)) {
+				if (skb->len < prev_skb->len + data_len + add_data_len &&
+				        skb_tailroom(skb) < prev_skb->len + data_len + add_data_len - skb->len &&
+				        pskb_expand_head(skb, 0, prev_skb->len + data_len + add_data_len - skb->len, GFP_ATOMIC)) {
 					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": pskb_expand_head failed\n", DEBUG_TCP_ARG(iph,l4));
 					consume_skb(prev_skb);
 					consume_skb(skb);
@@ -2767,8 +2772,8 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				prev_l4 = (void *)prev_iph + prev_iph->ihl * 4;
 				prev_data = prev_skb->data + prev_iph->ihl * 4 + TCPH(prev_l4)->doff * 4;
 
-				memcpy(prev_data + prev_data_len, data, data_len);
-				memcpy(skb->data, prev_skb->data, prev_skb->len + data_len);
+				memcpy(prev_data + prev_data_len + add_data_len, data, data_len);
+				memcpy(skb->data, prev_skb->data, prev_skb->len + add_data_len + data_len);
 				skb->tail += prev_skb->len - skb->len;
 				skb->len += prev_skb->len - skb->len;
 
@@ -2776,17 +2781,21 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				l4 = (void *)iph + iph->ihl * 4;
 				data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
 
-				data_len = prev_data_len + data_len;
-				data = tls_sni_search(data, &data_len, NULL);
 				consume_skb(prev_skb);
-			} else if (ntohl(TCPH(l4)->seq) == ntohl(TCPH(prev_l4)->seq)) {
-				if (peer_sni_cache_attach(iph->saddr, TCPH(l4)->source, prev_skb) != 0) {
+
+				add_data_len += data_len;
+				data_len = prev_data_len + add_data_len;
+				data = tls_sni_search(data, &data_len, &needmore);
+				if (!data && needmore == 1) {
+					if (peer_sni_cache_attach(iph->saddr, TCPH(l4)->source, skb, add_data_len) != 0) {
+						consume_skb(skb);
+					}
+					return NF_STOLEN;
+				}
+			} else {
+				if (peer_sni_cache_attach(iph->saddr, TCPH(l4)->source, prev_skb, add_data_len) != 0) {
 					consume_skb(prev_skb);
 				}
-				consume_skb(skb);
-				return NF_STOLEN;
-			} else {
-				consume_skb(prev_skb);
 				consume_skb(skb);
 				return NF_STOLEN;
 			}
@@ -2796,7 +2805,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
 			data = tls_sni_search(data, &data_len, &needmore);
 			if (!data && needmore == 1) {
-				if (peer_sni_cache_attach(iph->saddr, TCPH(l4)->source, skb) != 0) {
+				if (peer_sni_cache_attach(iph->saddr, TCPH(l4)->source, skb, 0) != 0) {
 					consume_skb(skb);
 				}
 				return NF_STOLEN;
