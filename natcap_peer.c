@@ -2776,7 +2776,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				data_len = prev_data_len + add_data_len;
 				data = tls_sni_search(data, &data_len, &needmore);
 				if (!data && needmore == 1) {
-					if (peer_sni_cache_attach(iph->saddr, TCPH(l4)->source, skb, add_data_len) != 0) {
+					if (add_data_len >= 32 * 1024 || peer_sni_cache_attach(iph->saddr, TCPH(l4)->source, skb, add_data_len) != 0) {
 						consume_skb(skb);
 					}
 					return NF_STOLEN;
