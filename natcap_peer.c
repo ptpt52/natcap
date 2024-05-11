@@ -2178,7 +2178,7 @@ static unsigned char *tls_sni_search(unsigned char *data, int *data_len, int *ne
 	i += 2;
 	if (i >= p_len) return NULL;
 	if (i + len > p_len) {
-		if (needmore)
+		if (needmore && p[i] == 0x01) //HanShake Type is Client Hello
 			*needmore = 1;
 		return NULL;
 	}
