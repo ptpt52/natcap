@@ -2777,6 +2777,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				data = tls_sni_search(data, &data_len, &needmore);
 				if (!data && needmore == 1) {
 					if (add_data_len >= 32 * 1024 || peer_sni_cache_attach(iph->saddr, TCPH(l4)->source, skb, add_data_len) != 0) {
+						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": peer_sni_cache_attach failed with add_data_len=%u\n", DEBUG_TCP_ARG(iph,l4), add_data_len);
 						consume_skb(skb);
 					}
 					return NF_STOLEN;
@@ -2795,6 +2796,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			data = tls_sni_search(data, &data_len, &needmore);
 			if (!data && needmore == 1) {
 				if (peer_sni_cache_attach(iph->saddr, TCPH(l4)->source, skb, 0) != 0) {
+					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": peer_sni_cache_attach failed\n", DEBUG_TCP_ARG(iph,l4));
 					consume_skb(skb);
 				}
 				return NF_STOLEN;
