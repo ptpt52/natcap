@@ -2953,7 +2953,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					goto sni_out;
 				}
 				if (peer_cache_attach(ct, cache_skb) != 0) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: peer_cache_attach failed\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": tls sni: peer_cache_attach failed\n", DEBUG_TCP_ARG(iph,l4));
 					consume_skb(cache_skb);
 				}
 
@@ -3422,7 +3422,7 @@ syn_out:
 
 						cache_skb = peer_cache_detach(ct);
 						if (cache_skb == NULL) {
-							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": FACK https sni, peer_cache_detach got NULL\n", DEBUG_TCP_ARG(iph,l4));
+							NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": FACK https sni, peer_cache_detach got NULL\n", DEBUG_TCP_ARG(iph,l4));
 							goto sni_skip;
 						}
 						nf_ct_seqadj_init(ct, ctinfo, ntohl(TCPH((char *)ip_hdr(cache_skb) + sizeof(struct iphdr))->ack_seq) - 1 - ntohl(TCPH(l4)->seq));
