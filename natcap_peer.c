@@ -63,7 +63,11 @@ struct peer_cache_node {
 };
 
 DEFINE_SPINLOCK(peer_cache_lock);
+#if defined(CONFIG_64BIT) || defined(CONFIG_X86) || defined(CONFIG_X86_64) || defined(CONFIG_ARM) || defined(CONFIG_ARM64)
+#define MAX_PEER_CACHE 1024
+#else
 #define MAX_PEER_CACHE 64
+#endif
 static unsigned short peer_cache_next_to_clean = 0;
 static unsigned short peer_cache_next_to_use = 0;
 static struct peer_cache_node peer_cache[MAX_PEER_CACHE];
@@ -97,12 +101,12 @@ static inline int peer_cache_attach(struct nf_conn *ct, struct sk_buff *skb)
 	struct natcap_session *ns = natcap_session_get(ct);
 	//XXX we use p.cache_index - 1 as index
 	if (ns == NULL || ns->p.cache_index != 0) {
-		return -1;
+		return -EINVAL;
 	}
 	spin_lock_bh(&peer_cache_lock);
-	if (peer_cache[peer_cache_next_to_use].user != NULL) {
+	if ((peer_cache_next_to_use + 1) % MAX_PEER_CACHE == peer_cache_next_to_clean) {
 		spin_unlock_bh(&peer_cache_lock);
-		return -1;
+		return -ENOSPC;
 	}
 	nf_conntrack_get(&ct->ct_general);
 	peer_cache[peer_cache_next_to_use].jiffies = jiffies;
