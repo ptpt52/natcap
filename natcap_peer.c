@@ -2835,7 +2835,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				l4 = (void *)iph + iph->ihl * 4;
 				data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
 
-				memmove(data, skb->data + prev_skb->len + add_data_len, data_len);
+				memmove(skb->data + prev_skb->len + add_data_len, data, data_len);
 				memcpy(skb->data, prev_skb->data, prev_skb->len + add_data_len);
 				skb->tail += prev_skb->len - skb->len;
 				skb->len += prev_skb->len - skb->len;
