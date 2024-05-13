@@ -2169,6 +2169,71 @@ static inline int peer_sni_send_synack(const struct net_device *dev, struct sk_b
 	return 0;
 }
 
+static inline int peer_sni_send_ack(const struct net_device *dev, struct sk_buff *oskb)
+{
+	struct sk_buff *nskb;
+	struct ethhdr *neth, *oeth;
+	struct iphdr *niph, *oiph;
+	struct tcphdr *otcph, *ntcph;
+	int offset, add_len;
+
+	oeth = (struct ethhdr *)skb_mac_header(oskb);
+	oiph = ip_hdr(oskb);
+	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
+
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) - (skb_headlen(oskb) + skb_tailroom(oskb));
+	add_len = offset < 0 ? 0 : offset;
+	offset += skb_tailroom(oskb);
+	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
+	if (!nskb) {
+		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		return -1;
+	}
+	nskb->tail += offset;
+	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr);
+
+	neth = eth_hdr(nskb);
+	niph = ip_hdr(nskb);
+	if ((char *)niph - (char *)neth >= ETH_HLEN) {
+		memcpy(neth->h_dest, oeth->h_source, ETH_ALEN);
+		memcpy(neth->h_source, oeth->h_dest, ETH_ALEN);
+		//neth->h_proto = htons(ETH_P_IP);
+	}
+
+	memset(niph, 0, sizeof(struct iphdr));
+	niph->saddr = oiph->daddr;
+	niph->daddr = oiph->saddr;
+	niph->version = oiph->version;
+	niph->ihl = sizeof(struct iphdr) / 4;
+	niph->tos = 0;
+	niph->tot_len = htons(nskb->len);
+	niph->ttl = 0x80;
+	niph->protocol = IPPROTO_TCP;
+	niph->id = htons(jiffies);
+	niph->frag_off = 0x0;
+
+	ntcph = (struct tcphdr *)((char *)ip_hdr(nskb) + sizeof(struct iphdr));
+	ntcph->source = otcph->dest;
+	ntcph->dest = otcph->source;
+	ntcph->seq = otcph->ack_seq;
+	ntcph->ack_seq = htonl(ntohl(otcph->seq) + (ntohs(oiph->tot_len) - (oiph->ihl * 4 + otcph->doff * 4)));
+	tcp_flag_word(ntcph) = TCP_FLAG_ACK;
+	ntcph->res1 = 0;
+	ntcph->doff = (sizeof(struct tcphdr)) / 4;
+	ntcph->window = __constant_htons(65535);
+	ntcph->check = 0;
+	ntcph->urg_ptr = 0;
+
+	nskb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb_rcsum_tcpudp(nskb);
+
+	skb_push(nskb, (char *)niph - (char *)neth);
+	nskb->dev = (struct net_device *)dev;
+
+	dev_queue_xmit(nskb);
+	return 0;
+}
+
 static unsigned char *tls_sni_search(unsigned char *data, int *data_len, int *needmore)
 {
 	unsigned char *p = data;
@@ -2808,6 +2873,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": peer_sni_cache_attach failed\n", DEBUG_TCP_ARG(iph,l4));
 					consume_skb(skb);
 				}
+				peer_sni_send_ack(in, skb);
 				return NF_STOLEN;
 			}
 		}
