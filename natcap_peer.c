@@ -4911,7 +4911,8 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 					ip6 = 1;
 					memcpy(&in6, &ue->in6, sizeof(in6));
 				}
-				if (ue->ip == ue->local_ip || (ue->status & PEER_SUBTYPE_PUB)) {
+				if (ue->ip == ue->local_ip || (ue->status & PEER_SUBTYPE_PUB) ||
+				        (qname[12] == '.' && (qname[13] == 'n' || qname[13] == 'N') && (qname[14] == 's' || qname[14] == 'S') && qname[15] == '.')) {
 					ip = ue->ip;
 				}
 				nf_ct_put(user);
