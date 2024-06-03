@@ -1049,7 +1049,7 @@ static int __init natcap_init(void) {
 	}
 
 	natcap_dev = device_create(natcap_class, NULL, devno, NULL, natcap_dev_name);
-	if (!natcap_dev) {
+	if (IS_ERR(natcap_dev)) {
 		retval = -EINVAL;
 		goto device_create_failed;
 	}
