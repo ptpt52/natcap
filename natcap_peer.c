@@ -5667,7 +5667,7 @@ int natcap_peer_init(void)
 	}
 
 	natcap_peer_dev = device_create(natcap_peer_class, NULL, devno, NULL, natcap_peer_dev_name);
-	if (!natcap_peer_dev) {
+	if (IS_ERR(natcap_peer_dev)) {
 		ret = -EINVAL;
 		goto device_create_failed;
 	}
