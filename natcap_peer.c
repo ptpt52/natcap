@@ -208,7 +208,12 @@ static struct peer_sni_cache_node peer_sni_cache[NR_CPUS][MAX_PEER_SNI_CACHE_NOD
 
 static inline void peer_sni_cache_init(void)
 {
-	memset((void *)peer_sni_cache, 0, sizeof(struct peer_sni_cache_node) * NR_CPUS * MAX_PEER_SNI_CACHE_NODE);
+	int i, j;
+	for (i = 0; i < NR_CPUS; i++) {
+		for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
+			peer_sni_cache[i][j].skb = NULL;
+		}
+	}
 }
 
 static inline void peer_sni_cache_cleanup(void)
@@ -219,8 +224,6 @@ static inline void peer_sni_cache_cleanup(void)
 			if (peer_sni_cache[i][j].skb != NULL) {
 				consume_skb(peer_sni_cache[i][j].skb);
 				peer_sni_cache[i][j].skb = NULL;
-				peer_sni_cache[i][j].src_ip = 0;
-				peer_sni_cache[i][j].src_port = 0;
 			}
 		}
 	}
@@ -263,15 +266,11 @@ static inline struct sk_buff *peer_sni_cache_detach(__be32 src_ip, __be16 src_po
 			if (time_after(jiffies, peer_sni_cache[i][j].active_jiffies + PEER_CACHE_TIMEOUT * HZ)) {
 				consume_skb(peer_sni_cache[i][j].skb);
 				peer_sni_cache[i][j].skb = NULL;
-				peer_sni_cache[i][j].src_ip = 0;
-				peer_sni_cache[i][j].src_port = 0;
 			} else if (peer_sni_cache[i][j].src_ip == src_ip) {
 				if (peer_sni_cache[i][j].src_port == src_port) {
 					skb = peer_sni_cache[i][j].skb;
 					*add_data_len = peer_sni_cache[i][j].add_data_len;
 					peer_sni_cache[i][j].skb = NULL;
-					peer_sni_cache[i][j].src_ip = 0;
-					peer_sni_cache[i][j].src_port = 0;
 					break;
 				}
 			}
@@ -282,8 +281,6 @@ static inline struct sk_buff *peer_sni_cache_detach(__be32 src_ip, __be16 src_po
 			if (time_after(jiffies, peer_sni_cache[i][j].active_jiffies + PEER_CACHE_TIMEOUT * HZ)) {
 				consume_skb(peer_sni_cache[i][j].skb);
 				peer_sni_cache[i][j].skb = NULL;
-				peer_sni_cache[i][j].src_ip = 0;
-				peer_sni_cache[i][j].src_port = 0;
 			}
 		}
 	}
