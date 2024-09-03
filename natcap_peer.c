@@ -204,14 +204,15 @@ struct peer_sni_cache_node {
 };
 
 #define MAX_PEER_SNI_CACHE_NODE 64
-static struct peer_sni_cache_node peer_sni_cache[NR_CPUS][MAX_PEER_SNI_CACHE_NODE];
+static DEFINE_PER_CPU(struct peer_sni_cache_node[MAX_PEER_SNI_CACHE_NODE], peer_sni_cache);
 
 static inline void peer_sni_cache_init(void)
 {
 	int i, j;
-	for (i = 0; i < NR_CPUS; i++) {
+	for_each_possible_cpu(i) {
+		struct peer_sni_cache_node *ptr = this_cpu_ptr(peer_sni_cache);
 		for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
-			peer_sni_cache[i][j].skb = NULL;
+			ptr[j].skb = NULL;
 		}
 	}
 }
@@ -219,11 +220,12 @@ static inline void peer_sni_cache_init(void)
 static inline void peer_sni_cache_cleanup(void)
 {
 	int i, j;
-	for (i = 0; i < NR_CPUS; i++) {
+	for_each_possible_cpu(i) {
+		struct peer_sni_cache_node *ptr = this_cpu_ptr(peer_sni_cache);
 		for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
-			if (peer_sni_cache[i][j].skb != NULL) {
-				consume_skb(peer_sni_cache[i][j].skb);
-				peer_sni_cache[i][j].skb = NULL;
+			if (ptr[j].skb != NULL) {
+				consume_skb(ptr[j].skb);
+				ptr[j].skb = NULL;
 			}
 		}
 	}
@@ -231,15 +233,15 @@ static inline void peer_sni_cache_cleanup(void)
 
 static inline int peer_sni_cache_attach(__be32 src_ip, __be16 src_port, struct sk_buff *skb, unsigned short add_data_len)
 {
-	int i = smp_processor_id();
 	int j;
 	int next_to_use = MAX_PEER_SNI_CACHE_NODE;
+	struct peer_sni_cache_node *ptr = this_cpu_ptr(peer_sni_cache);
 	for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
-		if (peer_sni_cache[i][j].src_ip == src_ip) {
-			if (peer_sni_cache[i][j].src_port == src_port) {
+		if (ptr[j].src_ip == src_ip) {
+			if (ptr[j].src_port == src_port) {
 				return -EEXIST;
 			}
-		} else if (next_to_use == MAX_PEER_SNI_CACHE_NODE && peer_sni_cache[i][j].skb == NULL) {
+		} else if (next_to_use == MAX_PEER_SNI_CACHE_NODE && ptr[j].skb == NULL) {
 			next_to_use = j;
 		}
 	}
@@ -247,40 +249,40 @@ static inline int peer_sni_cache_attach(__be32 src_ip, __be16 src_port, struct s
 		return -ENOMEM;
 	}
 
-	peer_sni_cache[i][next_to_use].src_ip = src_ip;
-	peer_sni_cache[i][next_to_use].src_port = src_port;
-	peer_sni_cache[i][next_to_use].add_data_len = add_data_len;
-	peer_sni_cache[i][next_to_use].skb = skb;
-	peer_sni_cache[i][next_to_use].active_jiffies = (unsigned long)jiffies;
+	ptr[next_to_use].src_ip = src_ip;
+	ptr[next_to_use].src_port = src_port;
+	ptr[next_to_use].add_data_len = add_data_len;
+	ptr[next_to_use].skb = skb;
+	ptr[next_to_use].active_jiffies = (unsigned long)jiffies;
 
 	return 0;
 }
 
 static inline struct sk_buff *peer_sni_cache_detach(__be32 src_ip, __be16 src_port, unsigned short *add_data_len)
 {
-	int i = smp_processor_id();
 	int j = 0;
 	struct sk_buff *skb = NULL;
+	struct peer_sni_cache_node *ptr = this_cpu_ptr(peer_sni_cache);
 	for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
-		if (peer_sni_cache[i][j].skb != NULL) {
-			if (time_after(jiffies, peer_sni_cache[i][j].active_jiffies + PEER_CACHE_TIMEOUT * HZ)) {
-				consume_skb(peer_sni_cache[i][j].skb);
-				peer_sni_cache[i][j].skb = NULL;
-			} else if (peer_sni_cache[i][j].src_ip == src_ip) {
-				if (peer_sni_cache[i][j].src_port == src_port) {
-					skb = peer_sni_cache[i][j].skb;
-					*add_data_len = peer_sni_cache[i][j].add_data_len;
-					peer_sni_cache[i][j].skb = NULL;
+		if (ptr[j].skb != NULL) {
+			if (time_after(jiffies, ptr[j].active_jiffies + PEER_CACHE_TIMEOUT * HZ)) {
+				consume_skb(ptr[j].skb);
+				ptr[j].skb = NULL;
+			} else if (ptr[j].src_ip == src_ip) {
+				if (ptr[j].src_port == src_port) {
+					skb = ptr[j].skb;
+					*add_data_len = ptr[j].add_data_len;
+					ptr[j].skb = NULL;
 					break;
 				}
 			}
 		}
 	}
 	for (; j < MAX_PEER_SNI_CACHE_NODE; j++) {
-		if (peer_sni_cache[i][j].skb != NULL) {
-			if (time_after(jiffies, peer_sni_cache[i][j].active_jiffies + PEER_CACHE_TIMEOUT * HZ)) {
-				consume_skb(peer_sni_cache[i][j].skb);
-				peer_sni_cache[i][j].skb = NULL;
+		if (ptr[j].skb != NULL) {
+			if (time_after(jiffies, ptr[j].active_jiffies + PEER_CACHE_TIMEOUT * HZ)) {
+				consume_skb(ptr[j].skb);
+				ptr[j].skb = NULL;
 			}
 		}
 	}
