@@ -482,7 +482,7 @@ static void __natcap_server_info_select(enum server_group_t x, const struct net_
 		__be16 dst_port;
 		unsigned int i, idx;
 		unsigned int off = get_random_u32();
-		struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+		struct sk_buff *uskb = uskb_of_this_cpu();
 		for (i = 0; i < PEER_PUB_NUM; i++) {
 			idx = (i + off) % PEER_PUB_NUM;
 			dst_ip = peer_pub_ip[idx];
@@ -1551,7 +1551,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				__be16 port;
 				unsigned int i, idx;
 				unsigned int off = get_random_u32();
-				struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+				struct sk_buff *uskb = uskb_of_this_cpu();
 				for (i = 0; i < PEER_PUB_NUM; i++) {
 					idx = (i + off) % PEER_PUB_NUM;
 					ip = peer_pub_ip[idx];

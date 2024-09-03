@@ -835,7 +835,7 @@ static inline struct sk_buff *natcap_peer_ctrl_alloc(struct sk_buff *oskb, int d
 #define PEER_USKB_SIZE (sizeof(struct iphdr) + sizeof(struct udphdr))
 #define PEER_FAKEUSER_DADDR __constant_htonl(0x7ffffffe)
 
-extern struct sk_buff *uskb_of_this_cpu(unsigned int id);
+extern struct sk_buff *uskb_of_this_cpu(void);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
 #define get_random_u32 prandom_u32
