@@ -666,7 +666,7 @@ static struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be
 	struct iphdr *iph;
 	struct udphdr *udph;
 
-	uskb = uskb_of_this_cpu(smp_processor_id());
+	uskb = uskb_of_this_cpu();
 	if (uskb == NULL) {
 		return NULL;
 	}
@@ -787,7 +787,7 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 	struct udphdr *udph;
 	unsigned long last_jiffies = jiffies;
 
-	uskb = uskb_of_this_cpu(smp_processor_id());
+	uskb = uskb_of_this_cpu();
 	if (uskb == NULL) {
 		return NULL;
 	}
@@ -1111,7 +1111,7 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 	struct iphdr *iph;
 	struct udphdr *udph;
 
-	uskb = uskb_of_this_cpu(smp_processor_id());
+	uskb = uskb_of_this_cpu();
 	if (uskb == NULL) {
 		return 0;
 	}
@@ -1279,7 +1279,7 @@ static inline void natcap_auth_user_confirm(const unsigned char *client_mac, int
 	struct iphdr *iph;
 	struct udphdr *udph;
 
-	uskb = uskb_of_this_cpu(smp_processor_id());
+	uskb = uskb_of_this_cpu();
 	if (uskb == NULL) {
 		return;
 	}
@@ -2904,7 +2904,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 			if (peer_sni_auth) {
 				int ret;
-				struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+				struct sk_buff *uskb = uskb_of_this_cpu();
 				memcpy(eth_hdr(uskb)->h_source, client_mac, ETH_ALEN);
 				ret = IP_SET_test_src_mac(state, in, out, uskb, "snilist");
 				if (ret <= 0) {
@@ -3419,7 +3419,7 @@ syn_out:
 			memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
 
 			if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
-				struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+				struct sk_buff *uskb = uskb_of_this_cpu();
 				memcpy(eth_hdr(uskb)->h_source, client_mac, ETH_ALEN);
 				ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
 				if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP)) {

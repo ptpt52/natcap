@@ -124,7 +124,7 @@ static inline int natcap_auth(const struct net_device *in,
 			}
 		}
 		if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
-			struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+			struct sk_buff *uskb = uskb_of_this_cpu();
 			memcpy(eth_hdr(uskb)->h_source, tcpopt->all.data.mac_addr, ETH_ALEN);
 			ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
 			if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
@@ -152,7 +152,7 @@ static inline int natcap_auth(const struct net_device *in,
 			return E_NATCAP_INVAL;
 		}
 		if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
-			struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+			struct sk_buff *uskb = uskb_of_this_cpu();
 			memcpy(eth_hdr(uskb)->h_source, tcpopt->user.data.mac_addr, ETH_ALEN);
 			ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
 			if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
@@ -1245,7 +1245,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					get_byte6((void *)UDPH(l4) + sizeof(struct udphdr) + 16, client_mac);
 
 					if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
-						struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+						struct sk_buff *uskb = uskb_of_this_cpu();
 						memcpy(eth_hdr(uskb)->h_source, client_mac, ETH_ALEN);
 						ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
 						if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
@@ -1792,7 +1792,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 				__be16 port;
 				unsigned int i, idx;
 				unsigned int off = get_random_u32();
-				struct sk_buff *uskb = uskb_of_this_cpu(smp_processor_id());
+				struct sk_buff *uskb = uskb_of_this_cpu();
 				for (i = 0; i < PEER_PUB_NUM; i++) {
 					idx = (i + off) % PEER_PUB_NUM;
 					ip = peer_pub_ip[idx];

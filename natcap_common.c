@@ -2300,21 +2300,21 @@ static struct nf_hook_ops common_hooks[] = {
 	},
 };
 
-static struct sk_buff *peer_user_uskbs[NR_CPUS];
-struct sk_buff *uskb_of_this_cpu(unsigned int id)
+static DEFINE_PER_CPU(struct sk_buff *, peer_user_uskbs);
+struct sk_buff *uskb_of_this_cpu(void)
 {
-	BUG_ON(id >= NR_CPUS);
-	if (!peer_user_uskbs[id]) {
+	struct sk_buff **ptr = this_cpu_ptr(&peer_user_uskbs);
+	if (!*ptr) {
 		struct ethhdr *eth;
-		peer_user_uskbs[id] = __alloc_skb(PEER_USKB_SIZE + sizeof(struct ethhdr), GFP_ATOMIC, 0, numa_node_id());
-		skb_reset_mac_header(peer_user_uskbs[id]);
-		skb_put(peer_user_uskbs[id], sizeof(struct ethhdr));
-		skb_pull(peer_user_uskbs[id], sizeof(struct ethhdr));
-		eth = eth_hdr(peer_user_uskbs[id]);
+		*ptr = __alloc_skb(PEER_USKB_SIZE + sizeof(struct ethhdr), GFP_ATOMIC, 0, numa_node_id());
+		skb_reset_mac_header(*ptr);
+		skb_put(*ptr, sizeof(struct ethhdr));
+		skb_pull(*ptr, sizeof(struct ethhdr));
+		eth = eth_hdr(*ptr);
 		memset(eth, 0, sizeof(*eth));
 		eth->h_proto = __constant_htons(ETH_P_IP);
 	}
-	return peer_user_uskbs[id];
+	return *ptr;
 }
 
 int natcap_common_init(void)
@@ -2322,8 +2322,9 @@ int natcap_common_init(void)
 	int i;
 	int ret = 0;
 
-	for (i = 0; i < NR_CPUS; i++) {
-		peer_user_uskbs[i] = NULL;
+	for_each_possible_cpu(i) {
+		struct sk_buff **ptr = per_cpu_ptr(&peer_user_uskbs, i);
+		*ptr = NULL;
 	}
 
 	dnatcap_map_init();
@@ -2387,10 +2388,11 @@ void natcap_common_exit(void)
 		vfree(tmp);
 	}
 
-	for (i = 0; i < NR_CPUS; i++) {
-		if (peer_user_uskbs[i]) {
-			kfree(peer_user_uskbs[i]);
-			peer_user_uskbs[i] = NULL;
+	for_each_possible_cpu(i) {
+		struct sk_buff **ptr = per_cpu_ptr(&peer_user_uskbs, i);
+		if (*ptr) {
+			kfree(*ptr);
+			*ptr = NULL;
 		}
 	}
 
