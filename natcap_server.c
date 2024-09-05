@@ -1068,6 +1068,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 			tcpopt.header.encryption = !!(NS_NATCAP_ENC & ns->n.status);
 			ret = natcap_tcp_decode(ct, skb, &tcpopt, IP_CT_DIR_ORIGINAL);
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
 			if (ret != 0) {
 				NATCAP_ERROR("(SPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				return NF_DROP;
@@ -1102,6 +1104,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 			tcpopt.header.encryption = 0;
 			ret = natcap_tcp_decode(ct, skb, &tcpopt, IP_CT_DIR_ORIGINAL);
+			iph = ip_hdr(skb);
+			l4 = (void *)iph + iph->ihl * 4;
 			if (ret != 0) {
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
