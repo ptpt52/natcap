@@ -5147,15 +5147,14 @@ static inline struct peer_server_node *peer_server_node_get(unsigned int idx)
 	return NULL;
 }
 
-static int natcap_peer_ctl_buffer_use = 0;
-static char *natcap_peer_ctl_buffer = NULL;
 static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 {
 	int n = 0;
+	char *natcap_peer_ctl_buffer = m->private;
 
 	if ((*pos) == 0) {
 		n = snprintf(natcap_peer_ctl_buffer,
-		             SEQ_PGSZ - 1,
+		             PAGE_SIZE - 1,
 		             "# Info:\n"
 		             "#    local_target=%pI4:%u\n"
 		             "#    peer_conn_timeout=%us\n"
@@ -5196,7 +5195,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			spin_lock_bh(&ps->lock);
 			natcap_peer_ctl_buffer[0] = 0;
 			n = snprintf(natcap_peer_ctl_buffer,
-			             SEQ_PGSZ - 1,
+			             PAGE_SIZE - 1,
 			             "N[%pI4:%u] [AS %ds]\n"
 			             "    conn[%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u,%u:%u]\n",
 			             &ps->ip, ntohs(ps->map_port), ps->last_active != 0 ? (uintmindiff(ps->last_active, jiffies) + HZ / 2) / HZ : (-1),
@@ -5226,7 +5225,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			ue = peer_user_expect(user);
 			spin_lock_bh(&ue->lock);
 			n = snprintf(natcap_peer_ctl_buffer,
-			             SEQ_PGSZ - 1,
+			             PAGE_SIZE - 1,
 			             "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] pub=%d pub6=%d\n",
 			             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 			             &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1),
@@ -5245,7 +5244,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			}
 			natcap_peer_ctl_buffer[0] = 0;
 			n = snprintf(natcap_peer_ctl_buffer,
-			             SEQ_PGSZ - 1,
+			             PAGE_SIZE - 1,
 			             "peer=%pI4\n",
 			             &peer_pub_ip[(*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP]
 			            );
@@ -5263,7 +5262,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 			}
 			natcap_peer_ctl_buffer[0] = 0;
 			n = snprintf(natcap_peer_ctl_buffer,
-			             SEQ_PGSZ - 1,
+			             PAGE_SIZE - 1,
 			             "PFR=%u outdev=%s saddr=%pI4 ready=%d weight=%u last_rx=%u, tx=%u,%u,%u,%u,%u,%u,%u,%u, rx=%u,%u,%u,%u,%u,%u,%u,%u\n",
 			             (unsigned int)((*pos) - MAX_PEER_SERVER - MAX_PEER_PORT_MAP - PEER_PUB_NUM + 1),
 			             pfr->rt_out.outdev->name,
@@ -5514,16 +5513,7 @@ static int natcap_peer_open(struct inode *inode, struct file *file)
 	//set nonseekable
 	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
 
-	if (natcap_peer_ctl_buffer_use++ == 0)
-	{
-		natcap_peer_ctl_buffer = kmalloc(SEQ_PGSZ, GFP_KERNEL);
-		if (natcap_peer_ctl_buffer == NULL) {
-			natcap_peer_ctl_buffer_use--;
-			return -ENOMEM;
-		}
-	}
-
-	ret = seq_open(file, &natcap_peer_seq_ops);
+	ret = seq_open_private(file, &natcap_peer_seq_ops, PAGE_SIZE);
 	if (ret)
 		return ret;
 	return 0;
@@ -5531,13 +5521,7 @@ static int natcap_peer_open(struct inode *inode, struct file *file)
 
 static int natcap_peer_release(struct inode *inode, struct file *file)
 {
-	int ret = seq_release(inode, file);
-
-	if (--natcap_peer_ctl_buffer_use == 0) {
-		kfree(natcap_peer_ctl_buffer);
-		natcap_peer_ctl_buffer = NULL;
-	}
-
+	int ret = seq_release_private(inode, file);
 	return ret;
 }
 

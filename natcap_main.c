@@ -63,15 +63,14 @@ const char *natcap_dev_name = "natcap_ctl";
 static struct class *natcap_class;
 static struct device *natcap_dev;
 
-static int natcap_ctl_buffer_use = 0;
-static char *natcap_ctl_buffer = NULL;
 static void *natcap_start(struct seq_file *m, loff_t *pos)
 {
 	int n = 0;
+	char *natcap_ctl_buffer = m->private;
 
 	if ((*pos) == 0) {
 		n = snprintf(natcap_ctl_buffer,
-		             SEQ_PGSZ - 1,
+		             PAGE_SIZE - 1,
 		             "# Version: %s\n"
 		             "# Usage:\n"
 		             "#    disabled=Number -- set disable/enable\n"
@@ -179,7 +178,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 
 		if (dst) {
 			n = snprintf(natcap_ctl_buffer,
-			             SEQ_PGSZ - 1,
+			             PAGE_SIZE - 1,
 			             "server %d " TUPLE_FMT "\n",
 			             x, TUPLE_ARG(dst));
 			natcap_ctl_buffer[n] = 0;
@@ -890,16 +889,7 @@ static int natcap_open(struct inode *inode, struct file *file)
 	//set nonseekable
 	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
 
-	if (natcap_ctl_buffer_use++ == 0)
-	{
-		natcap_ctl_buffer = kmalloc(SEQ_PGSZ, GFP_KERNEL);
-		if (natcap_ctl_buffer == NULL) {
-			natcap_ctl_buffer_use--;
-			return -ENOMEM;
-		}
-	}
-
-	ret = seq_open(file, &natcap_seq_ops);
+	ret = seq_open_private(file, &natcap_seq_ops, PAGE_SIZE);
 	if (ret)
 		return ret;
 
@@ -908,13 +898,7 @@ static int natcap_open(struct inode *inode, struct file *file)
 
 static int natcap_release(struct inode *inode, struct file *file)
 {
-	int ret = seq_release(inode, file);
-
-	if (--natcap_ctl_buffer_use == 0) {
-		kfree(natcap_ctl_buffer);
-		natcap_ctl_buffer = NULL;
-	}
-
+	int ret = seq_release_private(inode, file);
 	return ret;
 }
 
