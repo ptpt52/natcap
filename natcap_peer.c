@@ -2855,6 +2855,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				}
 			} else {
 				if (peer_sni_cache_attach(iph->saddr, TCPH(l4)->source, prev_skb, add_data_len) != 0) {
+					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": peer_sni_cache_attach failed\n", DEBUG_TCP_ARG(iph,l4));
 					consume_skb(prev_skb);
 				}
 				consume_skb(skb);
@@ -2866,11 +2867,11 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
 			data = tls_sni_search(data, &data_len, &needmore);
 			if (!data && needmore == 1) {
+				peer_sni_send_ack(in, skb);
 				if (peer_sni_cache_attach(iph->saddr, TCPH(l4)->source, skb, 0) != 0) {
 					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": peer_sni_cache_attach failed\n", DEBUG_TCP_ARG(iph,l4));
 					consume_skb(skb);
 				}
-				peer_sni_send_ack(in, skb);
 				return NF_STOLEN;
 			}
 		}
