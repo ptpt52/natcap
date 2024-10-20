@@ -518,6 +518,8 @@ extern unsigned int natcap_snat_setup(struct nf_conn *ct, __be32 addr, __be16 ma
 
 extern u32 cone_snat_hash(__be32 ip, __be16 port, __be32 wan_ip);
 
+extern void natcap_probe_ct_ext(void);
+
 extern int natcap_session_init(struct nf_conn *ct, gfp_t gfp);
 extern struct natcap_session *natcap_session_get(struct nf_conn *ct);
 static inline struct natcap_session *natcap_session_in(struct nf_conn *ct)
