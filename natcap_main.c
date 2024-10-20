@@ -997,6 +997,8 @@ static int __init natcap_init(void) {
 
 	NATCAP_println("version: " NATCAP_VERSION "");
 
+	natcap_probe_ct_ext();
+
 	if (natcap_major>0) {
 		devno = MKDEV(natcap_major, natcap_minor);
 		retval = register_chrdev_region(devno, number_of_devices, natcap_dev_name);

@@ -30,6 +30,7 @@
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_conntrack_extend.h>
+#include <net/netfilter/nf_conntrack_seqadj.h>
 #include <net/netfilter/nf_nat.h>
 #include <linux/netfilter/ipset/ip_set.h>
 #include <linux/netfilter/x_tables.h>
@@ -1293,10 +1294,30 @@ void *compat_nf_ct_ext_add(struct nf_conn *ct, int id, gfp_t gfp)
 #define __ALIGN_64BITS 8
 #define __ALIGN_64BYTES (__ALIGN_64BITS * 8)
 #define NATCAP_FACTOR (__ALIGN_64BITS * 2)
+#define NATCAP_FIXED_EXT_OFF (256 / NATCAP_FACTOR)
+
+static int static_fixed_ext_off = NATCAP_FIXED_EXT_OFF;
+
+void natcap_probe_ct_ext(void)
+{
+	int i = 0;
+	struct nf_conn ct = { };
+
+	for (i = 0; i < ARRAY_SIZE((((struct nf_ct_ext *)0)->offset)); i++) {
+		if (!nf_ct_ext_exist(&ct, i)) compat_nf_ct_ext_add(&ct, i, GFP_KERNEL);
+	}
+	if (ct.ext) {
+		i = ALIGN(ct.ext->len, __ALIGN_64BYTES);
+		kfree(ct.ext);
+		static_fixed_ext_off = i / NATCAP_FACTOR;
+		NATCAP_println("probe static_fixed_ext_off = %u\n", static_fixed_ext_off);
+	} else {
+		NATCAP_println("default static_fixed_ext_off = %u\n", static_fixed_ext_off);
+	}
+}
 
 int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 {
-	unsigned int i;
 	struct nat_key_t *nk = NULL;
 	struct nf_ct_ext *old, *new;
 	unsigned int nkoff, newoff, newlen = 0;
@@ -1313,26 +1334,27 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		return -1;
 	}
 
-	for (i = 0; i < ARRAY_SIZE((((struct nf_ct_ext *)0)->offset)); i++) {
-		if (!nf_ct_ext_exist(ct, i)) compat_nf_ct_ext_add(ct, i, gfp);
-	}
+	nf_ct_nat_ext_add(ct);
+
+	if (!nfct_seqadj(ct) && !nfct_seqadj_ext_add(ct))
+		return -1;
 
 	if (!ct->ext) {
 		return -1;
 	}
 
 	old = ct->ext;
-	nkoff = ALIGN(old->len, __ALIGN_64BYTES);
+	nkoff = ALIGN(static_fixed_ext_off * NATCAP_FACTOR, __ALIGN_64BYTES);
 	newoff = ALIGN(nkoff + ALIGN(sizeof(struct nat_key_t), __ALIGN_64BITS), __ALIGN_64BITS);
 
-	if (old->len * NATCAP_FACTOR <= NATCAP_MAX_OFF) {
-		nk = (struct nat_key_t *)((void *)old + old->len * NATCAP_FACTOR);
+	if (static_fixed_ext_off * NATCAP_FACTOR <= NATCAP_MAX_OFF) {
+		nk = (struct nat_key_t *)((void *)old + static_fixed_ext_off * NATCAP_FACTOR);
 		if (nk->magic == NATCAP_MAGIC && nk->ext_magic == (((unsigned long)ct) & 0xffffffff)) {
 			if (nk->natcap_off) {
 				//natcap exist
 				return 0;
 			}
-			nkoff = old->len * NATCAP_FACTOR;
+			nkoff = static_fixed_ext_off * NATCAP_FACTOR;
 			newoff = ALIGN(nk->len, __ALIGN_64BITS);
 		} else {
 			nk = NULL;
@@ -1374,7 +1396,6 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 #endif
 	}
 
-	new->len = nkoff / NATCAP_FACTOR;
 	nk = (struct nat_key_t *)((void *)new + nkoff);
 	nk->magic = NATCAP_MAGIC;
 	nk->ext_magic = (unsigned long)ct & 0xffffffff;
@@ -1393,11 +1414,11 @@ struct natcap_session *natcap_session_get(struct nf_conn *ct)
 		return NULL;
 	}
 
-	if (ct->ext->len * NATCAP_FACTOR > NATCAP_MAX_OFF) {
+	if (static_fixed_ext_off * NATCAP_FACTOR > NATCAP_MAX_OFF) {
 		return NULL;
 	}
 
-	nk = (struct nat_key_t *)((void *)ct->ext + ct->ext->len * NATCAP_FACTOR);
+	nk = (struct nat_key_t *)((void *)ct->ext + static_fixed_ext_off * NATCAP_FACTOR);
 	if (nk->magic != NATCAP_MAGIC || nk->ext_magic != (((unsigned long)ct) & 0xffffffff)) {
 		return NULL;
 	}
