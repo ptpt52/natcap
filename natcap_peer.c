@@ -288,6 +288,20 @@ static inline struct sk_buff *peer_sni_cache_detach(__be32 src_ip, __be16 src_po
 	return skb;
 }
 
+int peer_sni_cache_used_nodes(void)
+{
+	int used = 0;
+	int i, j = 0;
+	for (i = 0; i < NR_CPUS; i++) {
+		for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
+			if (peer_sni_cache[i][j].skb != NULL) {
+				used++;
+			}
+		}
+	}
+	return used;
+}
+
 static int peer_stop = 1;
 
 static int peer_subtype = 0;

@@ -190,4 +190,6 @@ extern __be16 peer_sni_port;
 
 extern int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip);
 
+extern int peer_sni_cache_used_nodes(void);
+
 #endif /* _NATCAP_PEER_H_ */

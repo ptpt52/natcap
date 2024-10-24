@@ -120,6 +120,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             "#    dns_proxy_server=" TUPLE_FMT "\n"
 		             "#    server1_use_peer=%u\n"
 		             "#    natmap=%u-%u\n"
+		             "#    peer_sni_cache_used_nodes=%d\n"
 		             "#\n"
 		             "# Reload cmd:\n"
 		             "\n"
@@ -163,6 +164,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             ipfilter_acl_str[ipfilter], ipfilter,
 		             TUPLE_ARG(dns_proxy_server),
 		             natcap_server_use_peer, natmap_start, natmap_end,
+		             peer_sni_cache_used_nodes(),
 		             disabled, debug, server_persist_timeout,
 		             cnipwhitelist_mode, &dns_server, ntohs(dns_port));
 		natcap_ctl_buffer[n] = 0;
