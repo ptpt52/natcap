@@ -3078,7 +3078,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				if (ret != NF_ACCEPT) {
 					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 				}
-				xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+				xt_mark_natcap_set(XT_MARK_NATCAP_PEER2, &skb->mark);
 				if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 
 				if (!(IPS_NATCAP_PEER & ct->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &ct->status)) {
@@ -4233,7 +4233,7 @@ h_bypass:
 		if (ret != NF_ACCEPT) {
 			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		}
-		xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+		xt_mark_natcap_set(XT_MARK_NATCAP_PEER1, &skb->mark);
 		if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 
 		if (!(IPS_NATCAP_PEER & ct->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &ct->status)) {
@@ -4355,7 +4355,7 @@ knock:
 			if (ret != NF_ACCEPT) {
 				NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 			}
-			xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+			xt_mark_natcap_set(XT_MARK_NATCAP_PEER3, &skb->mark);
 			if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 
 			if (!(IPS_NATCAP_PEER & ct->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &ct->status)) {

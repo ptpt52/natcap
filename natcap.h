@@ -350,6 +350,9 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 }
 
 #define XT_MARK_NATCAP 0x99
+#define XT_MARK_NATCAP_PEER1 0x91
+#define XT_MARK_NATCAP_PEER2 0x92
+#define XT_MARK_NATCAP_PEER3 0x93
 #define XT_MARK_NATCAP_MASK 0xff
 #define xt_mark_natcap_set(mark, at) *(unsigned int *)(at) = ((*(unsigned int *)(at)) & (~XT_MARK_NATCAP_MASK)) | ((mark) & XT_MARK_NATCAP_MASK)
 #define xt_mark_natcap_get(at) ((*(unsigned int *)(at)) & XT_MARK_NATCAP_MASK)
