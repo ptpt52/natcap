@@ -3447,6 +3447,35 @@ syn_out:
 					iph->saddr = old_ip;
 				}
 			}
+			if (ret > 0) {
+				struct nf_conntrack_tuple tuple;
+				struct nf_conntrack_tuple_hash *h;
+				memset(&tuple, 0, sizeof(tuple));
+				tuple.src.u3.ip = get_byte4(client_mac);
+				tuple.src.u.udp.port = get_byte2(client_mac + 4);
+				tuple.dst.u3.ip = PEER_FAKEUSER_DADDR;
+				tuple.dst.u.udp.port = __constant_htons(65535);
+				tuple.src.l3num = PF_INET;
+				tuple.dst.protonum = IPPROTO_UDP;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+				h = nf_conntrack_find_get(net, NF_CT_DEFAULT_ZONE, &tuple);
+#else
+				h = nf_conntrack_find_get(net, &nf_ct_zone_dflt, &tuple);
+#endif
+				if (h) {
+					struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
+					if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_ORIGINAL) {
+						ret = 0;
+						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 auth fail0\n",
+						            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], &client_ip);
+					}
+					nf_ct_put(user);
+				} else {
+					ret = 0;
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 auth fail0\n",
+					            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], &client_ip);
+				}
+			}
 
 			if (ret <= 0) {
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 auth fail\n",
