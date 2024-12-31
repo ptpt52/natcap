@@ -37,9 +37,10 @@ clean: modules_clean
 
 cniplist.set: cniplist.orig.set local.set sub.set ipops.lua qq.com.set
 	lua ipgroup_merge.lua cniplist.orig.set local.set >cniplist.set.tmp
-	lua ipgroup_merge.lua cniplist.set.tmp qq.com.set >cniplist.set.tmp.1
+	cat qq.com.set | sed 's/\(.*\)/\1\/28/' >qq.com.set.overlay
+	lua ipgroup_merge.lua cniplist.set.tmp qq.com.set.overlay >cniplist.set.tmp.1
 	lua ipgroup_sub.lua cniplist.set.tmp.1 sub.set >cniplist.set
-	@rm -f cniplist.set.tmp cniplist.set.tmp.1
+	@rm -f cniplist.set.tmp cniplist.set.tmp.1 qq.com.set.overlay
 
 C_cniplist.set: cniplist.set local.set sub.set ipops.lua
 	lua ipgroup_invert.lua cniplist.set >C_cniplist.orig.set.tmp
