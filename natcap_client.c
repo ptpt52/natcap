@@ -2861,8 +2861,10 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 						while (i < data_len && data[i] != '\n') i++;
 						i++;
 						if (i + strlen(WECHAT_C_UA) < data_len && strncasecmp(data + i, WECHAT_C_UA, strlen(WECHAT_C_UA)) == 0) {
+							ip_hdr(skb)->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 							IP_SET_add_dst_ip(state, in, out, skb, "wechat_iplist");
 							NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": add to wechat_iplist\n", DEBUG_TCP_ARG(iph,l4));
+							ip_hdr(skb)->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
 						}
 					}
 				}
