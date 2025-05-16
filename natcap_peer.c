@@ -2536,6 +2536,24 @@ static inline void sni_cache_skb_pass_back(struct sk_buff *oskb, struct sk_buff 
 	dev_queue_xmit(nskb);
 }
 
+static struct work_struct request_natcapd_restart_work;
+
+static void request_natcapd_restart_work_func(struct work_struct *work)
+{
+	static char *argv[] = {
+		"/usr/sbin/natcapd", "start", NULL
+	};
+	static char *envp[] = {
+		"HOME=/",
+		"PATH=/sbin:/bin:/usr/sbin:/usr/bin",
+		NULL
+	};
+
+	int ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
+	printk(KERN_INFO "natcapd start %d\n", ret);
+}
+
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_peer_pre_in_hook(unsigned int hooknum,
         struct sk_buff *skb,
@@ -3175,6 +3193,7 @@ sni_out:
 				NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": get SUBTYPE_PEER_FMSG\n", DEBUG_TCP_ARG(iph,l4));
 				nf_ct_put(user);
 				consume_skb(skb);
+				schedule_work(&request_natcapd_restart_work);
 				return NF_STOLEN;
 			}
 
@@ -5713,6 +5732,8 @@ int natcap_peer_init(void)
 	peer_stop = 0;
 	peer_timer_start();
 
+	INIT_WORK(&request_natcapd_restart_work, request_natcapd_restart_work_func);
+
 	return 0;
 
 	//device_destroy(natcap_peer_class, devno);
@@ -5775,4 +5796,6 @@ void natcap_peer_exit(void)
 
 	peer_cache_cleanup();
 	peer_sni_cache_cleanup();
+
+	flush_work(&request_natcapd_restart_work);
 }
