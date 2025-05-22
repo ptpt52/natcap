@@ -39,7 +39,6 @@
 #include <linux/timer.h>
 #include <linux/version.h>
 #include <linux/vmalloc.h>
-#include <asm/unaligned.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_helper.h>
 #include <net/netfilter/nf_conntrack_acct.h>
