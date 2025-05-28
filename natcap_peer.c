@@ -4827,6 +4827,7 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 	const struct net_device *in = state->in;
 	const struct net_device *out = state->out;
 #endif
+	int ret = NF_ACCEPT;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	struct net *net = &init_net;
@@ -4989,6 +4990,11 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 				}
 				nf_ct_put(user);
 			}
+			if (ret != NF_DROP && (strncasecmp(qname + 13, "dns.x-wrt.", 10) == 0 ||
+			                       strncasecmp(qname + 13, "ns.x-wrt.", 9) == 0 ||
+			                       strncasecmp(qname + 13, "xns.x-wrt.", 10) == 0)) {
+				ret = NF_DROP;
+			}
 			if (ip == 0 && qtype == 0x0001) {
 				continue;
 			}
@@ -5106,7 +5112,7 @@ reply_dns:
 		return NF_STOLEN;
 	} while (0);
 
-	return NF_ACCEPT;
+	return ret;
 }
 
 
