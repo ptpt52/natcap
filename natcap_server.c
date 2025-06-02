@@ -595,7 +595,11 @@ static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_
 		char location[128];
 		char data[384];
 		char header[384];
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+		char payload[];
+#else
 		char payload[0];
+#endif
 	} *http = kmalloc(2048, GFP_ATOMIC);
 	if (!http)
 		return;
