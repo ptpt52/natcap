@@ -118,7 +118,11 @@ struct natcap_TCPOPT_peer {
 		u16 map_port;
 	};
 	u16 icmp_payload_len;
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+	u8 timeval[];
+#else
 	u8 timeval[0];
+#endif
 };
 
 #define NATCAP_TCPOPT_SYN (1<<7)
