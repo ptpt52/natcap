@@ -4876,9 +4876,9 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 		unsigned int v;
 		unsigned short flags;
 		unsigned short qd_count;
-		//unsigned short an_count;
-		//unsigned short ns_count;
-		//unsigned short ar_count;
+		unsigned short an_count;
+		unsigned short ns_count;
+		unsigned short ar_count;
 		struct sk_buff *nskb = NULL;
 
 		unsigned char *p = (unsigned char *)UDPH(l4) + sizeof(struct udphdr);
@@ -4887,14 +4887,15 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 		id = ntohs(get_byte2(p + 0));
 		flags = ntohs(get_byte2(p + 2));
 		qd_count = ntohs(get_byte2(p + 4));
-		//an_count = ntohs(get_byte2(p + 6));
-		//ns_count = ntohs(get_byte2(p + 8));
-		//ar_count = ntohs(get_byte2(p + 10));
+		an_count = ntohs(get_byte2(p + 6));
+		ns_count = ntohs(get_byte2(p + 8));
+		ar_count = ntohs(get_byte2(p + 10));
 
 		pos = 12;
 		for(i = 0; i < qd_count; i++) {
 			unsigned char *an_p = NULL;
 			unsigned short qtype, qclass;
+			int ar_pad_len = 0;
 			int qname_off = 0;
 			int qname_len = 0;
 			char qname[128];
@@ -4940,6 +4941,11 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 
 			NATCAP_DEBUG("(PD)" DEBUG_UDP_FMT ": id=0x%04x, qtype=%d, qclass=%d, qname=%s\n", DEBUG_UDP_ARG(iph,l4), id, qtype, qclass, qname);
 
+			if (ret != NF_DROP && (strncasecmp(qname + 13, "dns.x-wrt.", 10) == 0 ||
+			                       strncasecmp(qname + 13, "ns.x-wrt.", 9) == 0 ||
+			                       strncasecmp(qname + 13, "xns.x-wrt.", 10) == 0)) {
+				ret = NF_DROP;
+			}
 			if (qtype != 0x0001 && qtype != 0x001c) {
 				break;
 			}
@@ -4990,25 +4996,13 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 				}
 				nf_ct_put(user);
 			}
-			if (ret != NF_DROP && (strncasecmp(qname + 13, "dns.x-wrt.", 10) == 0 ||
-			                       strncasecmp(qname + 13, "ns.x-wrt.", 9) == 0 ||
-			                       strncasecmp(qname + 13, "xns.x-wrt.", 10) == 0)) {
-				ret = NF_DROP;
-			}
-			if (ip == 0 && qtype == 0x0001) {
-				continue;
-			}
-			if (ip6 == 0 && qtype == 0x001c) {
-				continue;
-			}
 reply_dns:
 			if (nskb == NULL) {
 				struct ethhdr *neth;
 				struct iphdr *niph;
 				struct udphdr *nudph;
-				int offset = skb_headlen(skb) + 28 * 2 - (skb_headlen(skb) + skb_tailroom(skb));
+				int offset = skb_headlen(skb) + 128 - (skb_headlen(skb) + skb_tailroom(skb));
 				int add_len = offset < 0 ? 0 : offset;
-				offset += skb_tailroom(skb);
 				nskb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 				if (!nskb) {
 					break;
@@ -5030,11 +5024,21 @@ reply_dns:
 				nudph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all;
 				nudph->check = CSUM_MANGLED_0;
 
+				if (skb->len > niph->ihl * 4 + sizeof(struct udphdr) + pos &&
+				        an_count == 0 && ns_count == 0 && ar_count == 1) {
+					ar_pad_len = skb->len - (niph->ihl * 4 + sizeof(struct udphdr) + pos);
+				}
+
+				skb_trim(nskb, niph->ihl * 4 + sizeof(struct udphdr) + pos);
+				niph->tot_len = htons(nskb->len);
+				nudph->len = ntohs(nskb->len - niph->ihl * 4);
+
 				an_p = (unsigned char *)niph + nskb->len;
-				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 2, htons(flags | 0x8080));
-				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6, htons(0));
+				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 2, __constant_htons(0x8180));
+				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6, __constant_htons(0));
 				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 8, __constant_htons(0));
 				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 10, __constant_htons(0));
+
 			}
 			if (nskb == NULL || an_p == NULL) {
 				break;
@@ -5043,12 +5047,15 @@ reply_dns:
 			if (qtype == 0x0001 && ip != 0) {
 				struct iphdr *niph = ip_hdr(nskb);
 				struct udphdr *nudph = nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
-				unsigned short qd = get_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6);
 
-				qd = ntohs(qd) + 1;
-				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6, htons(qd));
+				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6, __constant_htons(1));
 
 				skb_put(nskb, 16);
+				if (ar_pad_len > 0) {
+					skb_put(nskb, ar_pad_len);
+					memmove(an_p + 16, an_p, ar_pad_len);
+					set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 10, __constant_htons(1));
+				}
 				niph->tot_len = htons(nskb->len);
 				nudph->len = ntohs(nskb->len - niph->ihl * 4);
 
@@ -5058,22 +5065,19 @@ reply_dns:
 				set_byte4(an_p + 6, __constant_htonl(128));
 				set_byte2(an_p + 10, __constant_htons(4));
 				set_byte4(an_p + 12, ip);
-
-				an_p += 16;
-
-				ip = 0;
-				if (ip == 0 && ip6 == 0) {
-					break;
-				}
+				break;
 			} else if (qtype == 0x001c && ip6 != 0) {
 				struct iphdr *niph = ip_hdr(nskb);
 				struct udphdr *nudph = nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
-				unsigned short qd = get_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6);
 
-				qd = ntohs(qd) + 1;
-				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6, htons(qd));
+				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6, __constant_htons(1));
 
 				skb_put(nskb, 28);
+				if (ar_pad_len > 0) {
+					skb_put(nskb, ar_pad_len);
+					memmove(an_p + 28, an_p, ar_pad_len);
+					set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 10, __constant_htons(1));
+				}
 				niph->tot_len = htons(nskb->len);
 				nudph->len = ntohs(nskb->len - niph->ihl * 4);
 
@@ -5086,13 +5090,48 @@ reply_dns:
 				set_byte4(an_p + 12 + 4, in6.s6_addr32[1]);
 				set_byte4(an_p + 12 + 8, in6.s6_addr32[2]);
 				set_byte4(an_p + 12 + 12, in6.s6_addr32[3]);
+				break;
+			} else {
+				struct iphdr *niph = ip_hdr(nskb);
+				struct udphdr *nudph = nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
 
-				an_p += 28;
+				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 8, htons(1));
+				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 2, __constant_htons(0x8580));
 
-				ip6 = 0;
-				if (ip == 0 && ip6 == 0) {
-					break;
+				skb_put(nskb, 65);//
+				if (ar_pad_len > 0) {
+					skb_put(nskb, ar_pad_len);
+					memmove(an_p + 65, an_p, ar_pad_len);
+					set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 10, __constant_htons(1));
 				}
+				niph->tot_len = htons(nskb->len);
+				nudph->len = ntohs(nskb->len - niph->ihl * 4);
+
+				set_byte2(an_p, htons(0xc000 | (qname_off + 13)));
+				set_byte2(an_p + 2, __constant_htons(0x0006));
+				set_byte2(an_p + 4, __constant_htons(0x0001));
+				set_byte4(an_p + 6, __constant_htonl(300));
+				set_byte2(an_p + 10, __constant_htons(53));
+				set_byte1(an_p + 12, 5);
+				memcpy(an_p + 13, "ec2ns", 5);
+				set_byte1(an_p + 18, 6);
+				memcpy(an_p + 19, "ptpt52", 6);
+				set_byte1(an_p + 25, 3);
+				memcpy(an_p + 26, "com", 3);
+				set_byte1(an_p + 29, 0);
+				set_byte1(an_p + 30, 3);
+				memcpy(an_p + 31, "dev", 3);
+				set_byte1(an_p + 34, 5);
+				memcpy(an_p + 35, "x-wrt", 5);
+				set_byte1(an_p + 40, 3);
+				memcpy(an_p + 41, "com", 3);
+				set_byte1(an_p + 44, 0);
+				set_byte4(an_p + 45, __constant_htonl(20250605));
+				set_byte4(an_p + 49, __constant_htonl(300));
+				set_byte4(an_p + 53, __constant_htonl(300));
+				set_byte4(an_p + 57, __constant_htonl(1209600));
+				set_byte4(an_p + 61, __constant_htonl(300));
+				break;
 			}
 		}
 
