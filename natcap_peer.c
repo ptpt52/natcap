@@ -301,6 +301,8 @@ int peer_sni_cache_used_nodes(void)
 	return used;
 }
 
+static int peer_dns_server = 0;
+
 static int peer_stop = 1;
 
 static int peer_subtype = 0;
@@ -4941,21 +4943,27 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 
 			NATCAP_DEBUG("(PD)" DEBUG_UDP_FMT ": id=0x%04x, qtype=%d, qclass=%d, qname=%s\n", DEBUG_UDP_ARG(iph,l4), id, qtype, qclass, qname);
 
+			if (qtype != 0x0001 && qtype != 0x001c) {
+				break;
+			}
+
+			if (memcmp(qname, "x-wrt.lan", 9) == 0) {
+				ip = iph->daddr;
+				goto reply_dns;
+			}
+
+			if (peer_dns_server == 0) {
+				break;
+			}
+
 			if (ret != NF_DROP && (strncasecmp(qname + 13, "dns.x-wrt.", 10) == 0 ||
 			                       strncasecmp(qname + 13, "ns.x-wrt.", 9) == 0 ||
 			                       strncasecmp(qname + 13, "xns.x-wrt.", 10) == 0)) {
 				ret = NF_DROP;
 			}
-			if (qtype != 0x0001 && qtype != 0x001c) {
-				break;
-			}
 
 			n = sscanf(qname, "%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
 			if (n != 6) {
-				if (memcmp(qname, "x-wrt.lan", 9) == 0) {
-					ip = iph->daddr;
-					goto reply_dns;
-				}
 				break;
 			}
 			client_mac[0] = a;
@@ -5611,6 +5619,13 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 		         ((c & 0xff) == c) &&
 		         ((d & 0xff) == d)) ) {
 			peer_upstream_auth_ip = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
+			goto done;
+		}
+	} else if (strncmp(data, "peer_dns_server=", 16) == 0) {
+		unsigned int d;
+		n = sscanf(data, "peer_dns_server=%u", &d);
+		if (n == 1) {
+			peer_dns_server = d;
 			goto done;
 		}
 	}
