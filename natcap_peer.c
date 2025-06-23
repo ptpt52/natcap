@@ -5303,6 +5303,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 		             "#    peer_max_pmtu=%u\n"
 		             "#    peer_sni_ban=%u\n"
 		             "#    peer_subtype=%u (auto=0, 1=SYN, 2=SSYN)\n"
+		             "#    peer_dns_server=%u (disabled=0)\n"
 		             "#    peer_upstream_auth_ip=%pI4\n"
 		             "#\n"
 		             "\n",
@@ -5318,6 +5319,7 @@ static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 		             peer_max_pmtu,
 		             peer_sni_ban,
 		             peer_subtype,
+		             peer_dns_server,
 		             &peer_upstream_auth_ip
 		            );
 		natcap_peer_ctl_buffer[n] = 0;
