@@ -4947,7 +4947,7 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 				break;
 			}
 
-			if (memcmp(qname, "x-wrt.lan", 9) == 0) {
+			if (strncasecmp(qname, "x-wrt.lan", 9) == 0) {
 				ip = iph->daddr;
 				goto reply_dns;
 			}
