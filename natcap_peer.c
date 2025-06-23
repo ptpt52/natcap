@@ -4956,14 +4956,24 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 				break;
 			}
 
-			if (ret != NF_DROP && (strncasecmp(qname + 13, "dns.x-wrt.", 10) == 0 ||
-			                       strncasecmp(qname + 13, "ns.x-wrt.", 9) == 0 ||
-			                       strncasecmp(qname + 13, "xns.x-wrt.", 10) == 0)) {
-				ret = NF_DROP;
+			if (ret != NF_DROP) {
+				int i;
+				while (qname[i] != '.' && qname[i]) i++;
+				if (strncasecmp(qname + i, ".dns.x-wrt.", 11) == 0 ||
+				        strncasecmp(qname + i, ".ns.x-wrt.", 10) == 0 ||
+				        strncasecmp(qname + i, ".xns.x-wrt.", 11) == 0 ||
+				        strncasecmp(qname + i, ".dns.ptpt52.", 12) == 0) {
+					ret = NF_DROP;
+				} else {
+					break;
+				}
 			}
 
 			n = sscanf(qname, "%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
 			if (n != 6) {
+				if (ret == NF_DROP) {
+					goto reply_dns;
+				}
 				break;
 			}
 			client_mac[0] = a;
