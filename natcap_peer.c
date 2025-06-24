@@ -4957,7 +4957,7 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 			}
 
 			if (ret != NF_DROP) {
-				int i;
+				int i = 0;
 				while (qname[i] != '.' && qname[i]) i++;
 				if (strncasecmp(qname + i, ".dns.x-wrt.", 11) == 0 ||
 				        strncasecmp(qname + i, ".ns.x-wrt.", 10) == 0 ||
