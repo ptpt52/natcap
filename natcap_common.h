@@ -394,11 +394,11 @@ static inline int natcap_tcpmss_adjust(struct sk_buff *skb, struct tcphdr *tcph,
 				return -1;
 			}
 			newmss = oldmss + delta;
-			if (oldmss <= newmss) {
-				return -1;
-			}
 			if (newmss > max_mss) {
 				newmss = max_mss;
+			}
+			if (oldmss <= newmss) {
+				return -1;
 			}
 
 			opt[i+2] = (newmss & 0xff00) >> 8;
