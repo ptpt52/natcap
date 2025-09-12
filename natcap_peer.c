@@ -520,7 +520,11 @@ static void peer_timer_start(void)
 
 static void peer_timer_exit(void)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
 	del_timer(&peer_timer);
+#else
+	timer_delete(&peer_timer);
+#endif
 }
 
 static inline struct nf_conn *get_peer_user(unsigned int port)
