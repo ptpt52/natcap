@@ -56,9 +56,6 @@ static inline int nf_nat_used_tuple(const struct nf_conntrack_tuple *tuple, cons
 }
 #endif
 
-#define NATFLOW_PATH_MAGIC_MASK 0xffff
-extern atomic_t natflow_path_magic;
-
 enum {
 	CLIENT_MODE = 0,
 	SERVER_MODE = 1,
