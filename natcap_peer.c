@@ -55,13 +55,10 @@ static unsigned int peer_sni_ban = 0;
 
 static struct in6_addr peer_local_ip6_addr;
 
-static atomic_t *pmagic = NULL;
-
 struct peer_cache_node {
 	struct nf_conn *user;
 	struct sk_buff *skb;
 	unsigned long jiffies;
-	unsigned short magic;
 };
 
 DEFINE_SPINLOCK(peer_cache_lock);
@@ -114,14 +111,6 @@ static inline int peer_cache_attach(struct nf_conn *ct, struct sk_buff *skb)
 	peer_cache[peer_cache_next_to_use].jiffies = jiffies;
 	peer_cache[peer_cache_next_to_use].user = ct;
 	peer_cache[peer_cache_next_to_use].skb = skb;
-	if (pmagic) {
-		unsigned short path_magic = ((unsigned short)(NATFLOW_PATH_MAGIC_MASK & atomic_read_acquire(pmagic)));
-		peer_cache[peer_cache_next_to_use].magic = path_magic - 1;
-		smp_mb();
-		if (netif_running(skb->dev) && netif_carrier_ok(skb->dev)) {
-			peer_cache[peer_cache_next_to_use].magic = path_magic;
-		}
-	}
 	ns->p.cache_index = peer_cache_next_to_use + 1;
 	peer_cache_next_to_use = (peer_cache_next_to_use + 1) % MAX_PEER_CACHE;
 	spin_unlock_bh(&peer_cache_lock);
@@ -148,13 +137,6 @@ static inline struct sk_buff *peer_cache_detach(struct nf_conn *ct)
 		if (peer_cache[i].skb != NULL) {
 			skb = peer_cache[i].skb;
 			peer_cache[i].skb = NULL;
-			if (pmagic) {
-				unsigned short path_magic = ((unsigned short)(NATFLOW_PATH_MAGIC_MASK & atomic_read_acquire(pmagic)));
-				if (peer_cache[i].magic != path_magic) {
-					consume_skb(skb);
-					skb = NULL;
-				}
-			}
 		}
 	}
 	spin_unlock_bh(&peer_cache_lock);
@@ -217,7 +199,6 @@ struct peer_sni_cache_node {
 	__be32 src_ip;
 	__be16 src_port;
 	unsigned short add_data_len;
-	unsigned short magic;
 	struct sk_buff *skb;
 };
 
@@ -270,14 +251,6 @@ static inline int peer_sni_cache_attach(__be32 src_ip, __be16 src_port, struct s
 	peer_sni_cache[i][next_to_use].add_data_len = add_data_len;
 	peer_sni_cache[i][next_to_use].skb = skb;
 	peer_sni_cache[i][next_to_use].active_jiffies = (unsigned long)jiffies;
-	if (pmagic) {
-		unsigned short path_magic = ((unsigned short)(NATFLOW_PATH_MAGIC_MASK & atomic_read_acquire(pmagic)));
-		peer_sni_cache[i][next_to_use].magic = path_magic - 1;
-		smp_mb();
-		if (netif_running(skb->dev) && netif_carrier_ok(skb->dev)) {
-			peer_sni_cache[i][next_to_use].magic = path_magic;
-		}
-	}
 
 	return 0;
 }
@@ -297,13 +270,6 @@ static inline struct sk_buff *peer_sni_cache_detach(__be32 src_ip, __be16 src_po
 					skb = peer_sni_cache[i][j].skb;
 					*add_data_len = peer_sni_cache[i][j].add_data_len;
 					peer_sni_cache[i][j].skb = NULL;
-					if (pmagic) {
-						unsigned short path_magic = ((unsigned short)(NATFLOW_PATH_MAGIC_MASK & atomic_read_acquire(pmagic)));
-						if (peer_sni_cache[i][j].magic != path_magic) {
-							consume_skb(skb);
-							skb = NULL;
-						}
-					}
 					break;
 				}
 			}
@@ -5761,7 +5727,6 @@ int natcap_peer_init(void)
 	unsigned int i;
 	int ret = 0;
 
-	pmagic = symbol_get(natflow_path_magic);
 	need_conntrack();
 
 	memset(natcap_pfr, 0, sizeof(natcap_pfr[0]) * MAX_PEER_NUM);
@@ -5783,9 +5748,6 @@ int natcap_peer_init(void)
 	}
 	peer_port_map = vmalloc(sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
 	if (peer_port_map == NULL) {
-		if (pmagic) {
-			symbol_put(natflow_path_magic);
-		}
 		return -ENOMEM;
 	}
 	memset(peer_port_map, 0, sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
@@ -5861,9 +5823,6 @@ nf_register_hooks_failed:
 	peer_timer_exit();
 peer_timer_init_failed:
 	unregister_netdevice_notifier(&peer_netdev_notifier);
-	if (pmagic) {
-		symbol_put(natflow_path_magic);
-	}
 	return ret;
 }
 
@@ -5913,7 +5872,4 @@ void natcap_peer_exit(void)
 	peer_sni_cache_cleanup();
 
 	flush_work(&request_natcapd_restart_work);
-	if (pmagic) {
-		symbol_put(natflow_path_magic);
-	}
 }
