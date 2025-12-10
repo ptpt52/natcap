@@ -1410,6 +1410,10 @@ struct natcap_session *natcap_session_get(struct nf_conn *ct)
 	struct nat_key_t *nk;
 	struct natcap_session *ns = NULL;
 
+	if (!(ct->status & IPS_NATCAP_SESSION)) {
+		return NULL;
+	}
+
 	if (!ct->ext) {
 		return NULL;
 	}
