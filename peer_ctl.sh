@@ -3,7 +3,9 @@
 #ping6 3f99:aabb:ccdd:eeff:: -t1 -s1 -c1 -W1
 send_msg()
 {
-	echo $1 | sed 's/:/ /g;s/-/ /g;' | tr A-F a-f | while read m0 m1 m2 m3 m4 m5; do
+	local input="$1"
+	input=$(printf "%s" "$input" | sed 's/[^[:xdigit:]]//g' | sed 's/../& /g' | sed 's/ $//')
+	echo "$input" | sed 's/:/ /g;s/-/ /g;' | tr A-F a-f | while read m0 m1 m2 m3 m4 m5; do
 		test -n "$m0" && \
 		test -n "$m1" && \
 		test -n "$m2" && \
@@ -17,24 +19,29 @@ send_msg()
 
 send_conn()
 {
+	local input="$1"
+	local addr=${2-255.255.255.255:22}
+	input=$(printf "%s" "$input" | sed 's/[^[:xdigit:]]//g' | sed 's/../& /g' | sed 's/ $//')
 	test -c /dev/natcap_peer_ctl || return
-	echo $1 | sed 's/:/ /g;s/-/ /g;' | tr A-F a-f | while read m0 m1 m2 m3 m4 m5; do
+	echo "$input" | sed 's/:/ /g;s/-/ /g;' | tr A-F a-f | while read m0 m1 m2 m3 m4 m5; do
 		test -n "$m0" && \
 		test -n "$m1" && \
 		test -n "$m2" && \
 		test -n "$m3" && \
 		test -n "$m4" && \
 		test -n "$m5" && {
-			echo "echo KN=255.255.255.255:22 MAC=$m0:$m1:$m2:$m3:$m4:$m5 LP=997 >/dev/natcap_peer_ctl"
-			echo KN=255.255.255.255:22 MAC=$m0:$m1:$m2:$m3:$m4:$m5 LP=997 >/dev/natcap_peer_ctl
+			echo "echo KN=$addr MAC=$m0:$m1:$m2:$m3:$m4:$m5 LP=997 >/dev/natcap_peer_ctl"
+			echo KN=$addr MAC=$m0:$m1:$m2:$m3:$m4:$m5 LP=997 >/dev/natcap_peer_ctl
 		}
 	done
 }
 
 send_ps()
 {
+	local input="$1"
+	input=$(printf "%s" "$input" | sed 's/[^[:xdigit:]]//g' | sed 's/../& /g' | sed 's/ $//')
 	test -c /dev/natcap_peer_ctl || return
-	echo $1 | sed 's/:/ /g;s/-/ /g;' | tr A-F a-f | while read m0 m1 m2 m3 m4 m5; do
+	echo "$input" | sed 's/:/ /g;s/-/ /g;' | tr A-F a-f | while read m0 m1 m2 m3 m4 m5; do
 		test -n "$m0" && \
 		test -n "$m1" && \
 		test -n "$m2" && \
@@ -63,7 +70,7 @@ case $1 in
 		send_msg $2
 	;;
 	conn)
-		send_conn $2
+		send_conn $2 $3
 	;;
 	ps)
 		send_ps $2
