@@ -1336,10 +1336,13 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 
 	nf_ct_nat_ext_add(ct);
 
-	if (!nfct_seqadj(ct) && !nfct_seqadj_ext_add(ct))
+	if (!nfct_seqadj(ct) && !nfct_seqadj_ext_add(ct)) {
+		clear_bit(IPS_NATCAP_SESSION_BIT, &ct->status);
 		return -1;
+	}
 
 	if (!ct->ext) {
+		clear_bit(IPS_NATCAP_SESSION_BIT, &ct->status);
 		return -1;
 	}
 
@@ -1352,7 +1355,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		if (nk->magic == NATCAP_MAGIC && nk->ext_magic == (((unsigned long)ct) & 0xffffffff)) {
 			if (nk->natcap_off) {
 				//natcap exist
-				return 0;
+				NATCAP_WARN(DEBUG_FMT_PREFIX "natcap exist!\n", DEBUG_ARG_PREFIX);
 			}
 			nkoff = static_fixed_ext_off * NATCAP_FACTOR;
 			newoff = ALIGN(nk->len, __ALIGN_64BITS);
@@ -1362,6 +1365,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 	}
 
 	if (nkoff > NATCAP_MAX_OFF) {
+		clear_bit(IPS_NATCAP_SESSION_BIT, &ct->status);
 		NATCAP_ERROR(DEBUG_FMT_PREFIX "realloc ct->ext->len > %u not supported!\n", DEBUG_ARG_PREFIX, NATCAP_MAX_OFF);
 		return -1;
 	}
@@ -1375,6 +1379,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 	new = krealloc(old, alloc_size, gfp);
 #endif
 	if (!new) {
+		clear_bit(IPS_NATCAP_SESSION_BIT, &ct->status);
 		NATCAP_ERROR(DEBUG_FMT_PREFIX "__krealloc size=%u failed!\n", DEBUG_ARG_PREFIX, (unsigned int)alloc_size);
 		return -1;
 	}
