@@ -41,7 +41,7 @@
 unsigned int server_flow_stop = 0;
 unsigned int user_mark_natcap_mask = 0x00000000;
 #define user_mark_natcap_set(mark, at) *(unsigned int *)(at) = ((*(unsigned int *)(at)) & (~user_mark_natcap_mask)) | ((mark) & user_mark_natcap_mask)
-static inline int user_mark_natcap_get(unsigned int *at)
+static inline int user_mark_natcap_get(const unsigned int *at)
 {
 	unsigned int idx;
 	unsigned int val;
