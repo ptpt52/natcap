@@ -4866,7 +4866,7 @@ void cn_domain_clean(void)
 	}
 }
 
-void domain_copy(char *dst, char *from)
+void domain_copy(char *dst, const char *from)
 {
 	int s = 0;
 	int len = strlen(from);
@@ -4881,7 +4881,7 @@ void domain_copy(char *dst, char *from)
 	}
 }
 
-int domain_cmp(char *dst, char *src)
+int domain_cmp(const char *dst, const char *src)
 {
 	int i;
 	int len = strlen(src);
@@ -4919,7 +4919,7 @@ int domain_cmp(char *dst, char *src)
 	return 1;
 }
 
-int cn_domain_insert(char *d)
+int cn_domain_insert(const char *d)
 {
 	int low;
 	int high;
@@ -4982,7 +4982,7 @@ int cn_domain_insert(char *d)
 	return 0;
 }
 
-int domain_match(char *dst, char *src)
+int domain_match(const char *dst, const char *src)
 {
 	int i;
 	int len = strlen(src);
@@ -5026,7 +5026,7 @@ int domain_match(char *dst, char *src)
 	return 1;
 }
 
-int cn_domain_lookup(char *d)
+int cn_domain_lookup(const char *d)
 {
 	int low;
 	int high;
@@ -5056,7 +5056,7 @@ int cn_domain_lookup(char *d)
 	return 0;
 }
 
-int cn_domain_load_from_path(char *path)
+int cn_domain_load_from_path(const char *path)
 {
 	loff_t pos = 0;
 	ssize_t bytes = 0;
@@ -5110,7 +5110,7 @@ int cn_domain_load_from_path(char *path)
 	return 0;
 }
 
-int cn_domain_load_from_raw(char *path)
+int cn_domain_load_from_raw(const char *path)
 {
 	int ret = -1;
 	loff_t pos = 0;
@@ -5168,7 +5168,7 @@ out:
 	return 0;
 }
 
-int cn_domain_dump_path(char *path)
+int cn_domain_dump_path(const char *path)
 {
 	loff_t pos = 0;
 	ssize_t bytes = 0;
