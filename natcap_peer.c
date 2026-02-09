@@ -1377,7 +1377,7 @@ static inline void natcap_auth_user_confirm(const unsigned char *client_mac, int
 	skb_nfct_reset(uskb);
 }
 
-static inline void natcap_auth_reply(const struct net_device *dev, struct sk_buff *oskb, int pt_mode, unsigned char *client_mac, int auth)
+static inline void natcap_auth_reply(const struct net_device *dev, struct sk_buff *oskb, int pt_mode, const unsigned char *client_mac, int auth)
 {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
@@ -1470,7 +1470,7 @@ static inline void natcap_auth_reply(const struct net_device *dev, struct sk_buf
 	dev_queue_xmit(nskb);
 }
 
-static inline void natcap_peer_echo_request(const struct net_device *dev, struct sk_buff *oskb, unsigned char *client_mac)
+static inline void natcap_peer_echo_request(const struct net_device *dev, struct sk_buff *oskb, const unsigned char *client_mac)
 {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
