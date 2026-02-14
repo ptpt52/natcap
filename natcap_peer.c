@@ -2258,16 +2258,16 @@ static unsigned char *tls_sni_search(unsigned char *data, int *data_len, int *ne
 	unsigned int i = 0;
 	unsigned short len;
 
+	if (i + 1 > p_len) return NULL;
 	if (p[i + 0] != 0x16) {//Content Type NOT HandShake
 		return NULL;
 	}
 	i += 1 + 2;
-	if (i >= p_len) return NULL;
+	if (i + 2 > p_len) return NULL;
 	len = ntohs(get_byte2(p + i + 0)); //content_len
 	i += 2;
-	if (i >= p_len) return NULL;
 	if (i + len > p_len) {
-		if (needmore && p[i] == 0x01) //HanShake Type is Client Hello
+		if (needmore && i + 1 > p_len && p[i] == 0x01) //HanShake Type is Client Hello
 			*needmore = 1;
 	}
 
@@ -2276,14 +2276,14 @@ static unsigned char *tls_sni_search(unsigned char *data, int *data_len, int *ne
 	i_data_len -= i;
 	i = 0;
 
+	if (i + 1 > p_len || i + 1 > i_data_len) return NULL;
 	if (p[i + 0] != 0x01) { //HanShake Type NOT Client Hello
 		return NULL;
 	}
 	i += 1;
-	if (i >= p_len || i >= i_data_len) return NULL;
+	if (i + 1 + 2 > p_len || i + 1 + 2 > i_data_len) return NULL;
 	len = (p[i + 0] << 8) + ntohs(get_byte2(p + i + 0 + 1)); //hanshake_len
 	i += 1 + 2;
-	if (i >= p_len || i >= i_data_len) return NULL;
 	if (i + len > p_len) return NULL;
 
 	p = p + i;
@@ -2292,14 +2292,14 @@ static unsigned char *tls_sni_search(unsigned char *data, int *data_len, int *ne
 	i = 0;
 
 	i += 2 + 32;
-	if (i >= p_len || i >= i_data_len) return NULL; //tls_v, random
+	if (i + 1 > p_len || i + 1 > i_data_len) return NULL; //tls_v, random
 	i += 1 + p[i + 0];
-	if (i >= p_len || i >= i_data_len) return NULL; //session id
+	if (i + 2 > p_len || i + 2 > i_data_len) return NULL; //session id
 	i += 2 + ntohs(get_byte2(p + i + 0));
-	if (i >= p_len || i >= i_data_len) return NULL; //Cipher Suites
+	if (i + 1 > p_len || i + 1 > i_data_len) return NULL; //Cipher Suites
 	i += 1 + p[i + 0];
-	if (i >= p_len || i >= i_data_len) return NULL; //Compression Methods
 
+	if (i + 2 > p_len || i + 2 > i_data_len) return NULL; //Compression Methods
 	len = ntohs(get_byte2(p + i + 0)); //ext_len
 	i += 2;
 	if (i + len > p_len) return NULL;
@@ -2310,10 +2310,13 @@ static unsigned char *tls_sni_search(unsigned char *data, int *data_len, int *ne
 	i = 0;
 
 	while (i < p_len && i < i_data_len) {
+		if (i + 2 > p_len || i + 2 > i_data_len) return NULL;
 		if (get_byte2(p + i + 0) != __constant_htons(0)) {
+			if (i + 2 + 2 > p_len || i + 2 + 2 > i_data_len) return NULL;
 			i += 2 + 2 + ntohs(get_byte2(p + i + 0 + 2));
 			continue;
 		}
+		if (i + 2 + 2 > p_len || i + 2 + 2 > i_data_len) return NULL;
 		len = ntohs(get_byte2(p + i + 0 + 2)); //sn_len
 		i = i + 2 + 2;
 		if (i + len > p_len || i + len > i_data_len) return NULL;
@@ -2324,8 +2327,8 @@ static unsigned char *tls_sni_search(unsigned char *data, int *data_len, int *ne
 		i = 0;
 		break;
 	}
-	if (i >= p_len || i >= i_data_len) return NULL;
 
+	if (i + 2 > p_len || i + 2 > i_data_len) return NULL;
 	len = ntohs(get_byte2(p + i + 0)); //snl_len
 	i += 2;
 	if (i + len > p_len || i + len > i_data_len) return NULL;
@@ -2336,10 +2339,13 @@ static unsigned char *tls_sni_search(unsigned char *data, int *data_len, int *ne
 	i = 0;
 
 	while (i < p_len && i < i_data_len) {
+		if (i + 1 > p_len || i + 1 > i_data_len) return NULL;
 		if (p[i + 0] != 0) {
+			if (i + 1 + 2 > p_len || i + 1 + 2 > i_data_len) return NULL;
 			i += 1 + 2 + ntohs(get_byte2(p + i + 0 + 1));
 			continue;
 		}
+		if (i + 1 + 2 > p_len || i + 1 + 2 > i_data_len) return NULL;
 		len = ntohs(get_byte2(p + i + 0 + 1));
 		i += 1 + 2;
 		if (i + len > p_len || i + len > i_data_len) return NULL;
