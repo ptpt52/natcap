@@ -1381,12 +1381,12 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		nk = (struct nat_key_t *)((void *)old + static_fixed_ext_off * NATCAP_FACTOR);
 		if (nk->magic == NATCAP_MAGIC && nk->ext_magic == (((unsigned long)ct) & 0xffffffff)) {
 			if (nk->natcap_off) {
-				//natcap exist
-				NATCAP_WARN(DEBUG_FMT_PREFIX "natcap exist!\n", DEBUG_ARG_PREFIX);
+				NATCAP_WARN(DEBUG_FMT_PREFIX "natcap exist! nk: len=%u natcap_off=%u natflow_off=%u\n",
+				            DEBUG_ARG_PREFIX, nk->len, nk->natcap_off, nk->natflow_off);
+				newoff = nk->natcap_off;
+			} else {
+				newoff = ALIGN(nk->len, __ALIGN_64BITS);
 			}
-			nkoff = ALIGN(static_fixed_ext_off * NATCAP_FACTOR, __ALIGN_64BYTES);
-			newoff = ALIGN(nk->len, __ALIGN_64BITS);
-			//BUG_ON(nk->len < nkoff);
 		} else {
 			nk = NULL;
 		}
