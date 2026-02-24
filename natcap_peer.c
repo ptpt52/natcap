@@ -413,7 +413,7 @@ unsigned int peer_port_map_timeout = NATCAP_PEER_USER_TIMEOUT_DEFAULT;
 #define NATCAP_PEER_CONN_TIMEOUT_DEFAULT 180
 unsigned int peer_conn_timeout = NATCAP_PEER_CONN_TIMEOUT_DEFAULT;
 
-#define PEER_PORT_MAP_FLUSH_STEP 256
+#define PEER_PORT_MAP_FLUSH_STEP 2048
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
 static void peer_timer_flush(unsigned long ignore)
