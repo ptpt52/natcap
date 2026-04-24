@@ -36,6 +36,9 @@
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_nat.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
+#include <net/inet_dscp.h>
+#endif
 #include <linux/inetdevice.h>
 #include "natcap.h"
 
@@ -592,7 +595,11 @@ static inline int nf_unicast_output_route(struct net *net, struct sock *sk, stru
 
 	fl4.daddr = iph->daddr;
 	fl4.saddr = 0;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
+	fl4.flowi4_dscp = inet_dsfield_to_dscp(iph->tos);
+#else
 	fl4.flowi4_tos = RT_TOS(iph->tos);
+#endif
 	fl4.flowi4_oif = sk ? sk->sk_bound_dev_if : 0;
 	fl4.flowi4_mark = skb->mark;
 	fl4.flowi4_flags = flags;
