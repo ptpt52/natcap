@@ -1999,10 +1999,15 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		nskb->dev = (struct net_device *)dev;
 		//back l2 header
 		if (fue->rt_out_magic != rt_out_magic || fue->rt_out.outdev != nskb->dev) {
-			fue->rt_out.l2_head_len = (char *)niph - (char *)neth; //assume l2_head_len <= NF_L2_MAX_LEN
-			memcpy(fue->rt_out.l2_head, (char *)neth, (char *)niph - (char *)neth);
+			if ((char *)niph - (char *)neth <= NF_L2_MAX_LEN) {
+				fue->rt_out.l2_head_len = (char *)niph - (char *)neth; //assume l2_head_len <= NF_L2_MAX_LEN
+				memcpy(fue->rt_out.l2_head, (char *)neth, (char *)niph - (char *)neth);
+			} else {
+				fue->rt_out.l2_head_len = 0;
+			}
 			fue->rt_out.outdev = nskb->dev;
 			fue->rt_out_magic = rt_out_magic;
+
 		}
 		if ((nskb->mark & 0x3f00)) {
 			struct natcap_fastpath_route *pfr;
@@ -2013,8 +2018,12 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 
 				if (pfr->saddr != niph->saddr || pfr->rt_out_magic != rt_out_magic || pfr->rt_out.outdev != nskb->dev) {
 					pfr->saddr = niph->saddr;
-					pfr->rt_out.l2_head_len = (char *)niph - (char *)neth;
-					memcpy(pfr->rt_out.l2_head, (char *)neth, (char *)niph - (char *)neth);
+					if ((char *)niph - (char *)neth <= NF_L2_MAX_LEN) {
+						pfr->rt_out.l2_head_len = (char *)niph - (char *)neth;
+						memcpy(pfr->rt_out.l2_head, (char *)neth, (char *)niph - (char *)neth);
+					} else {
+						pfr->rt_out.l2_head_len = 0;
+					}
 					pfr->rt_out.outdev = nskb->dev;
 					pfr->rt_out_magic = rt_out_magic;
 					pfr->is_dead = 1;
@@ -3381,17 +3390,19 @@ sni_out:
 			}
 
 			if (ue->rt_out_magic != rt_out_magic || ue->rt_out.outdev != skb->dev) {
-				ue->rt_out.l2_head_len = (char *)iph - (char *)eth_hdr(skb);
-				if (ue->rt_out.l2_head_len <= NF_L2_MAX_LEN) {
+				if ((char *)iph - (char *)eth_hdr(skb) <= NF_L2_MAX_LEN) {
+					ue->rt_out.l2_head_len = (char *)iph - (char *)eth_hdr(skb);
 					if (ue->rt_out.l2_head_len >= ETH_HLEN) {
 						memcpy(((struct ethhdr *)ue->rt_out.l2_head)->h_dest, eth_hdr(skb)->h_source, ETH_ALEN);
 						memcpy(((struct ethhdr *)ue->rt_out.l2_head)->h_source, eth_hdr(skb)->h_dest, ETH_ALEN);
 						((struct ethhdr *)ue->rt_out.l2_head)->h_proto = eth_hdr(skb)->h_proto;
 						memcpy(ue->rt_out.l2_head + ETH_HLEN, (char *)eth_hdr(skb) + ETH_HLEN, ue->rt_out.l2_head_len - ETH_HLEN);
 					}
-					ue->rt_out.outdev = skb->dev;
-					ue->rt_out_magic = rt_out_magic;
+				} else {
+					ue->rt_out.l2_head_len = 0;
 				}
+				ue->rt_out.outdev = skb->dev;
+				ue->rt_out_magic = rt_out_magic;
 			}
 
 			if (pt->sni_ban != tcpopt->header.encryption)
@@ -3628,17 +3639,19 @@ sni_skip:
 			}
 
 			if (ue->rt_out_magic != rt_out_magic || ue->rt_out.outdev != skb->dev) {
-				ue->rt_out.l2_head_len = (char *)iph - (char *)eth_hdr(skb);
-				if (ue->rt_out.l2_head_len <= NF_L2_MAX_LEN) {
+				if ((char *)iph - (char *)eth_hdr(skb) <= NF_L2_MAX_LEN) {
+					ue->rt_out.l2_head_len = (char *)iph - (char *)eth_hdr(skb);
 					if (ue->rt_out.l2_head_len >= ETH_HLEN) {
 						memcpy(((struct ethhdr *)ue->rt_out.l2_head)->h_dest, eth_hdr(skb)->h_source, ETH_ALEN);
 						memcpy(((struct ethhdr *)ue->rt_out.l2_head)->h_source, eth_hdr(skb)->h_dest, ETH_ALEN);
 						((struct ethhdr *)ue->rt_out.l2_head)->h_proto = eth_hdr(skb)->h_proto;
 						memcpy(ue->rt_out.l2_head + ETH_HLEN, (char *)eth_hdr(skb) + ETH_HLEN, ue->rt_out.l2_head_len - ETH_HLEN);
 					}
-					ue->rt_out.outdev = skb->dev;
-					ue->rt_out_magic = rt_out_magic;
+				} else {
+					ue->rt_out.l2_head_len = 0;
 				}
+				ue->rt_out.outdev = skb->dev;
+				ue->rt_out_magic = rt_out_magic;
 			}
 
 			if (pt->sni_ban != tcpopt->header.encryption)
