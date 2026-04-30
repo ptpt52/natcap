@@ -112,6 +112,33 @@ const char *const hooknames[] = {
 	[NF_INET_POST_ROUTING] = "POST",
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 22)
+static ip_set_id_t natcap_ip_set_get_byname(struct net *net, const char *name, struct ip_set **set)
+{
+	struct {
+		struct nlattr nla;
+		char value[IPSET_MAXNAMELEN];
+	} attr;
+	size_t nlen = strnlen(name, IPSET_MAXNAMELEN - 1);
+
+	memset(&attr, 0, sizeof(attr));
+	attr.nla.nla_len = NLA_HDRLEN + nlen + 1;
+	memcpy(attr.value, name, nlen);
+
+	return ip_set_get_byname(net, &attr.nla, set);
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+static ip_set_id_t natcap_ip_set_get_byname(struct net *net, const char *name, struct ip_set **set)
+{
+	return ip_set_get_byname(net, name, set);
+}
+#else
+static ip_set_id_t natcap_ip_set_get_byname(const char *name, struct ip_set **set)
+{
+	return ip_set_get_byname(name, set);
+}
+#endif
+
 static unsigned char natcap_map[256] = {
 	152, 151, 106, 224,  13,  90, 137, 200, 178, 138, 212, 156, 238,  54,  44, 237,
 	101,  42,  97,  91, 163, 191, 119, 157, 123, 102, 124, 125, 197,  35,  15,  26,
@@ -659,9 +686,9 @@ int ip_set_test_src_ipport(const struct net_device *in, const struct net_device 
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-	id = ip_set_get_byname(net, ip_set_name, &set);
+	id = natcap_ip_set_get_byname(net, ip_set_name, &set);
 #else
-	id = ip_set_get_byname(ip_set_name, &set);
+	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
@@ -736,9 +763,9 @@ int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-	id = ip_set_get_byname(net, ip_set_name, &set);
+	id = natcap_ip_set_get_byname(net, ip_set_name, &set);
 #else
-	id = ip_set_get_byname(ip_set_name, &set);
+	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
@@ -796,9 +823,9 @@ int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-	id = ip_set_get_byname(net, ip_set_name, &set);
+	id = natcap_ip_set_get_byname(net, ip_set_name, &set);
 #else
-	id = ip_set_get_byname(ip_set_name, &set);
+	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
@@ -856,9 +883,9 @@ int ip_set_test_dst_netport(const struct net_device *in, const struct net_device
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-	id = ip_set_get_byname(net, ip_set_name, &set);
+	id = natcap_ip_set_get_byname(net, ip_set_name, &set);
 #else
-	id = ip_set_get_byname(ip_set_name, &set);
+	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
@@ -916,9 +943,9 @@ int ip_set_add_src_ip(const struct net_device *in, const struct net_device *out,
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-	id = ip_set_get_byname(net, ip_set_name, &set);
+	id = natcap_ip_set_get_byname(net, ip_set_name, &set);
 #else
-	id = ip_set_get_byname(ip_set_name, &set);
+	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
@@ -976,9 +1003,9 @@ int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out,
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-	id = ip_set_get_byname(net, ip_set_name, &set);
+	id = natcap_ip_set_get_byname(net, ip_set_name, &set);
 #else
-	id = ip_set_get_byname(ip_set_name, &set);
+	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
@@ -1036,9 +1063,9 @@ int ip_set_del_src_ip(const struct net_device *in, const struct net_device *out,
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-	id = ip_set_get_byname(net, ip_set_name, &set);
+	id = natcap_ip_set_get_byname(net, ip_set_name, &set);
 #else
-	id = ip_set_get_byname(ip_set_name, &set);
+	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
@@ -1096,9 +1123,9 @@ int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out,
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-	id = ip_set_get_byname(net, ip_set_name, &set);
+	id = natcap_ip_set_get_byname(net, ip_set_name, &set);
 #else
-	id = ip_set_get_byname(ip_set_name, &set);
+	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
@@ -1156,9 +1183,9 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-	id = ip_set_get_byname(net, ip_set_name, &set);
+	id = natcap_ip_set_get_byname(net, ip_set_name, &set);
 #else
-	id = ip_set_get_byname(ip_set_name, &set);
+	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
 		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
