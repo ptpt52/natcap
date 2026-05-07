@@ -10,6 +10,8 @@ ifdef NO_DEBUG
 EXTRA_CFLAGS += -Wno-unused -Os -DNO_DEBUG
 endif
 
+ccflags-y += $(EXTRA_CFLAGS)
+
 PWD ?= $(shell pwd)
 
 ifndef KERNELRELEASE
