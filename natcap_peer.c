@@ -203,22 +203,26 @@ struct peer_sni_cache_node {
 };
 
 #define MAX_PEER_SNI_CACHE_NODE 64
-static struct peer_sni_cache_node peer_sni_cache[NR_CPUS][MAX_PEER_SNI_CACHE_NODE];
+static struct peer_sni_cache_node (*peer_sni_cache)[MAX_PEER_SNI_CACHE_NODE];
+static unsigned int peer_sni_cache_cpu_num;
 
-static inline void peer_sni_cache_init(void)
+static inline int peer_sni_cache_init(void)
 {
-	int i, j;
-	for (i = 0; i < NR_CPUS; i++) {
-		for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
-			peer_sni_cache[i][j].skb = NULL;
-		}
-	}
+	peer_sni_cache_cpu_num = nr_cpu_ids;
+	peer_sni_cache = kcalloc(peer_sni_cache_cpu_num, sizeof(*peer_sni_cache), GFP_KERNEL);
+	if (peer_sni_cache == NULL)
+		return -ENOMEM;
+
+	return 0;
 }
 
 static inline void peer_sni_cache_cleanup(void)
 {
 	int i, j;
-	for (i = 0; i < NR_CPUS; i++) {
+	if (peer_sni_cache == NULL)
+		return;
+
+	for (i = 0; i < peer_sni_cache_cpu_num; i++) {
 		for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
 			if (peer_sni_cache[i][j].skb != NULL) {
 				consume_skb(peer_sni_cache[i][j].skb);
@@ -226,6 +230,10 @@ static inline void peer_sni_cache_cleanup(void)
 			}
 		}
 	}
+
+	kfree(peer_sni_cache);
+	peer_sni_cache = NULL;
+	peer_sni_cache_cpu_num = 0;
 }
 
 static inline int peer_sni_cache_attach(__be32 src_ip, __be16 src_port, struct sk_buff *skb, unsigned short add_data_len)
@@ -233,6 +241,9 @@ static inline int peer_sni_cache_attach(__be32 src_ip, __be16 src_port, struct s
 	int i = smp_processor_id();
 	int j;
 	int next_to_use = MAX_PEER_SNI_CACHE_NODE;
+	if (peer_sni_cache == NULL || i >= peer_sni_cache_cpu_num)
+		return -ENOMEM;
+
 	for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
 		if (peer_sni_cache[i][j].src_ip == src_ip) {
 			if (peer_sni_cache[i][j].src_port == src_port) {
@@ -260,6 +271,9 @@ static inline struct sk_buff *peer_sni_cache_detach(__be32 src_ip, __be16 src_po
 	int i = smp_processor_id();
 	int j = 0;
 	struct sk_buff *skb = NULL;
+	if (peer_sni_cache == NULL || i >= peer_sni_cache_cpu_num)
+		return NULL;
+
 	for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
 		if (peer_sni_cache[i][j].skb != NULL) {
 			if (time_after(jiffies, peer_sni_cache[i][j].active_jiffies + PEER_CACHE_TIMEOUT * HZ)) {
@@ -291,7 +305,10 @@ int peer_sni_cache_used_nodes(void)
 {
 	int used = 0;
 	int i, j = 0;
-	for (i = 0; i < NR_CPUS; i++) {
+	if (peer_sni_cache == NULL)
+		return 0;
+
+	for (i = 0; i < peer_sni_cache_cpu_num; i++) {
 		for (j = 0; j < MAX_PEER_SNI_CACHE_NODE; j++) {
 			if (peer_sni_cache[i][j].skb != NULL) {
 				used++;
@@ -5759,7 +5776,9 @@ int natcap_peer_init(void)
 	memset(peer_pub_ip, 0, sizeof(peer_pub_ip));
 	memset(peer_pub_active, 0, sizeof(peer_pub_active));
 
-	peer_sni_cache_init();
+	ret = peer_sni_cache_init();
+	if (ret != 0)
+		return ret;
 	peer_cache_init();
 	memset(peer_server, 0, sizeof(peer_server));
 	for (i = 0; i < MAX_PEER_SERVER; i++) {
@@ -5767,7 +5786,8 @@ int natcap_peer_init(void)
 	}
 	peer_port_map = vmalloc(sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
 	if (peer_port_map == NULL) {
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto peer_port_map_alloc_failed;
 	}
 	memset(peer_port_map, 0, sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
 
@@ -5842,6 +5862,8 @@ nf_register_hooks_failed:
 	peer_timer_exit();
 peer_timer_init_failed:
 	unregister_netdevice_notifier(&peer_netdev_notifier);
+peer_port_map_alloc_failed:
+	peer_sni_cache_cleanup();
 	return ret;
 }
 
