@@ -1419,23 +1419,17 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 	if (static_fixed_ext_off * NATCAP_FACTOR <= NATCAP_MAX_OFF) {
 		nk = (struct nat_key_t *)((void *)old + static_fixed_ext_off * NATCAP_FACTOR);
 		if (nk->magic == NATCAP_MAGIC && nk->ext_magic == (((unsigned long)ct) & 0xffffffff)) {
-			if (nk->natcap_off) {
-				if (nk->natflow_off && (ct->status & IPS_NATFLOW_SESSION)) {
-					NATCAP_DEBUG(DEBUG_FMT_PREFIX "reuse natcap key: len=%u natcap_off=%u natflow_off=%u\n",
-					              DEBUG_ARG_PREFIX, nk->len, nk->natcap_off, nk->natflow_off);
-					newoff = nk->natcap_off;
-				} else {
-					/*
-					 * The session status bit is authoritative for natcap.
-					 * If it was clear but a natcap key (or a natflow key
-					 * without natflow being active) is still in the private ct
-					 * extension tail, this is most likely stale allocator data
-					 * from a recycled conntrack/ext object.
-					 */
-					nk = NULL;
-				}
-			} else {
+			if (nk->natflow_off && (ct->status & IPS_NATFLOW_SESSION)) {
+				NATCAP_DEBUG(DEBUG_FMT_PREFIX "append natcap key after natflow: len=%u natcap_off=%u natflow_off=%u\n",
+				             DEBUG_ARG_PREFIX, nk->len, nk->natcap_off, nk->natflow_off);
 				newoff = ALIGN(nk->len, __ALIGN_64BITS);
+			} else {
+				/*
+				 * natcap just claimed IPS_NATCAP_SESSION_BIT above. Any
+				 * existing natcap_off before this point is stale unless
+				 * natflow has an active session owning the shared layout.
+				 */
+				nk = NULL;
 			}
 		} else {
 			nk = NULL;
