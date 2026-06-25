@@ -364,6 +364,9 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 #define IPS_NATCAP_SESSION_BIT 30
 #define IPS_NATCAP_SESSION (1 << IPS_NATCAP_SESSION_BIT)
 
+#define IPS_NATFLOW_SESSION_BIT 29
+#define IPS_NATFLOW_SESSION (1 << IPS_NATFLOW_SESSION_BIT)
+
 /* @linux/netfilter/nf_conntrack_common.h */
 /* ct->status use bits:[31-24] for ecap status */
 
