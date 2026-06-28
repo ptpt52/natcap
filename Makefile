@@ -53,7 +53,7 @@ C_cniplist.set: cniplist.set local.set sub.set ipops.lua
 ipset: cniplist.set C_cniplist.set cniplist6.set getflix.set hkiplist.orig.set
 
 ip.merge.txt:
-	wget -4 https://raw.githubusercontent.com/lionsoul2014/ip2region/v2.11.2/data/ip.merge.txt -O ip.merge.txt.tmp
+	wget -4 https://raw.githubusercontent.com/lionsoul2014/ip2region/refs/heads/master/data/ipv4_source.txt -O ip.merge.txt.tmp
 	@mv ip.merge.txt.tmp ip.merge.txt
 
 ipops.lua:
