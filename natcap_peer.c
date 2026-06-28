@@ -454,7 +454,7 @@ static void peer_timer_flush(struct timer_list *ignore)
 			if (after(jiffies, ue->last_active + peer_port_map_timeout * HZ)) {
 				set_byte4(client_mac, get_byte4((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip));
 				set_byte2(client_mac + 4, get_byte2((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all));
-				NATCAP_INFO(DEBUG_FMT_PREFIX "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] timeout drop\n", DEBUG_ARG_PREFIX,
+				NATCAP_INFO("C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] timeout drop\n",
 				            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 				            &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 				           );
@@ -475,7 +475,7 @@ static void peer_timer_flush(struct timer_list *ignore)
 			if (user != NULL) {
 				struct fakeuser_expect *fue = peer_fakeuser_expect(user);
 				if (after(jiffies, fue->last_active + peer_conn_timeout * HZ)) {
-					NATCAP_INFO(DEBUG_FMT_PREFIX "conn[%u:%u] @N[[%pI4:%u] [AS %ds] timeout drop\n", DEBUG_ARG_PREFIX,
+					NATCAP_INFO("conn[%u:%u] @N[[%pI4:%u] [AS %ds] timeout drop\n",
 					            ntohs(peer_fakeuser_sport(user)), ntohs(peer_fakeuser_dport(user)),
 					            &ps->ip, ntohs(ps->map_port), fue->last_active != 0 ?(uintmindiff(fue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 					           );
@@ -505,7 +505,7 @@ static inline void peer_port_map_kill(unsigned short idx)
 		struct user_expect *ue = peer_user_expect(user);
 		set_byte4(client_mac, get_byte4((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip));
 		set_byte2(client_mac + 4, get_byte2((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all));
-		NATCAP_INFO(DEBUG_FMT_PREFIX "C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] killed\n", DEBUG_ARG_PREFIX,
+		NATCAP_INFO("C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] killed\n",
 		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		            &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 		           );
@@ -657,8 +657,8 @@ static struct peer_server_node *peer_server_node_in(__be32 ip, unsigned short co
 		spin_lock_bh(&ps->lock);
 init_out:
 		if (ps->ip != 0) {
-			NATCAP_WARN(DEBUG_FMT_PREFIX "drop the old server %pI4 map_port=%u replace new=%pI4\n",
-			            DEBUG_ARG_PREFIX, &ps->ip, ntohs(ps->map_port), &ip);
+			NATCAP_WARN("drop the old server %pI4 map_port=%u replace new=%pI4\n",
+			            &ps->ip, ntohs(ps->map_port), &ip);
 		}
 		for (i = 0; i < MAX_PEER_CONN; i++) {
 			if (ps->port_map[i] != NULL) {
@@ -1422,7 +1422,7 @@ static inline void natcap_auth_reply(const struct net_device *dev, struct sk_buf
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return;
 	}
 	nskb->tail += offset;
@@ -1503,7 +1503,7 @@ static inline void natcap_peer_echo_request(const struct net_device *dev, struct
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return;
 	}
 	nskb->tail += offset;
@@ -1567,7 +1567,7 @@ static inline void natcap_peer_echo_reply(const struct net_device *dev, struct s
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return;
 	}
 	nskb->tail += offset;
@@ -1652,7 +1652,7 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return;
 	}
 	nskb->tail += offset;
@@ -1759,7 +1759,7 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 				ntcph->seq = htonl(ntohl(ntcph->seq) + 1);
 				ntcph->syn = 0;
 			} else {
-				NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+				NATCAP_ERROR("alloc_skb fail\n");
 			}
 		}
 	}
@@ -1890,7 +1890,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		nf_ct_put(user);
 		spin_unlock_bh(&ps->lock);
 		return NULL;
@@ -2051,7 +2051,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 
 		nf_ct_put(user);
 		spin_unlock_bh(&ps->lock);
-		NATCAP_INFO(DEBUG_FMT_PREFIX DEBUG_FMT_TCP ": %s\n", DEBUG_ARG_PREFIX, DEBUG_ARG_TCP(niph,ntcph),
+		NATCAP_INFO(DEBUG_FMT_TCP ": %s\n", DEBUG_ARG_TCP(niph,ntcph),
 		            ntcph->syn ? "sent ping(syn) SYN out" : "sent ping(ack) ACK out");
 		dev_queue_xmit(nskb);
 		return NULL;
@@ -2062,7 +2062,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		nskb->dev = fue->rt_out.outdev;
 		nf_ct_put(user);
 		spin_unlock_bh(&ps->lock);
-		NATCAP_INFO(DEBUG_FMT_PREFIX DEBUG_FMT_TCP ": %s\n", DEBUG_ARG_PREFIX, DEBUG_ARG_TCP(niph,ntcph),
+		NATCAP_INFO(DEBUG_FMT_TCP ": %s\n", DEBUG_ARG_TCP(niph,ntcph),
 		            ntcph->syn ? "sent ping(syn) SYN out" : "sent ping(ack) ACK out");
 		dev_queue_xmit(nskb);
 		return NULL;
@@ -2097,7 +2097,7 @@ static inline struct sk_buff *peer_sni_to_syn(struct sk_buff *oskb, unsigned sho
 	offset += skb_tailroom(oskb);
 
 	if (add_len > 0 && skb_tailroom(oskb) < add_len && pskb_expand_head(oskb, 0, add_len, GFP_ATOMIC)) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head() fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("pskb_expand_head() fail\n");
 		return NULL;
 	}
 	oskb->tail += offset;
@@ -2158,7 +2158,7 @@ static inline int peer_sni_send_synack(const struct net_device *dev, struct sk_b
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return -1;
 	}
 	nskb->tail += offset;
@@ -2228,7 +2228,7 @@ static inline int peer_sni_send_ack(const struct net_device *dev, struct sk_buff
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return -1;
 	}
 	nskb->tail += offset;
@@ -2407,7 +2407,7 @@ static inline void sni_ack_pass_back(struct sk_buff *oskb, struct sk_buff *cache
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return;
 	}
 	nskb->tail += offset - header_len;
@@ -2513,7 +2513,7 @@ static inline void sni_cache_skb_pass_back(struct sk_buff *oskb, struct sk_buff 
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return;
 	}
 	nskb->tail += offset - header_len;
@@ -4807,7 +4807,7 @@ static unsigned int natcap_peer_push_out_hook(void *priv,
 		if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 			consume_skb(skb);
 			skb = nskb;
-			NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
+			NATCAP_ERROR("pskb_expand_head failed\n");
 			continue;
 		}
 

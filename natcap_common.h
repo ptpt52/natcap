@@ -150,41 +150,41 @@ extern char htp_confusion_host[64];
 
 #define NATCAP_println(fmt, ...) \
 	do { \
-		printk(KERN_DEFAULT "{" MODULE_NAME "}:%s(): " pr_fmt(fmt) "\n", __FUNCTION__, ##__VA_ARGS__); \
+		printk(KERN_DEFAULT "{" MODULE_NAME "}:%s():%d: " pr_fmt(fmt) "\n", __FUNCTION__, __LINE__, ##__VA_ARGS__); \
 	} while (0)
 
 #define NATCAP_FIXME(fmt, ...) \
 	do { \
 		if (IS_NATCAP_FIXME()) { \
-			printk(KERN_ALERT "fixme: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_ALERT "fixme:{" MODULE_NAME "}:%s():%d: " pr_fmt(fmt), __FUNCTION__, __LINE__, ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_DEBUG(fmt, ...) \
 	do { \
 		if (IS_NATCAP_DEBUG()) { \
-			printk(KERN_DEBUG "debug: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_DEBUG "debug:{" MODULE_NAME "}:%s():%d: " pr_fmt(fmt), __FUNCTION__, __LINE__, ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_INFO(fmt, ...) \
 	do { \
 		if (IS_NATCAP_INFO()) { \
-			printk(KERN_DEFAULT "info: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_DEFAULT "info:{" MODULE_NAME "}:%s():%d: " pr_fmt(fmt), __FUNCTION__, __LINE__, ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_WARN(fmt, ...) \
 	do { \
 		if (IS_NATCAP_WARN()) { \
-			printk(KERN_WARNING "warning: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_WARNING "warning:{" MODULE_NAME "}:%s():%d: " pr_fmt(fmt), __FUNCTION__, __LINE__, ##__VA_ARGS__); \
 		} \
 	} while (0)
 
 #define NATCAP_ERROR(fmt, ...) \
 	do { \
 		if (IS_NATCAP_ERROR()) { \
-			printk(KERN_ERR "error: " pr_fmt(fmt), ##__VA_ARGS__); \
+			printk(KERN_ERR "error:{" MODULE_NAME "}:%s():%d: " pr_fmt(fmt), __FUNCTION__, __LINE__, ##__VA_ARGS__); \
 		} \
 	} while (0)
 
@@ -201,53 +201,53 @@ extern char htp_confusion_host[64];
 #define NATCAP_ERROR(fmt, ...)
 #endif
 
+#define IPH(i) ((struct iphdr *)(i))
+#define TCPH(t) ((struct tcphdr *)(t))
+#define UDPH(u) ((struct udphdr *)(u))
+#define ICMPH(m) ((struct icmphdr *)(m))
+
 #define IP_TCPUDP_FMT	"%pI4:%u->%pI4:%u"
-#define IP_TCPUDP_ARG(i,t)	&(i)->saddr, ntohs(((struct tcphdr *)(t))->source), &(i)->daddr, ntohs(((struct tcphdr *)(t))->dest)
+#define IP_TCP_ARG(i,t)	&IPH(i)->saddr, ntohs(TCPH(t)->source), &IPH(i)->daddr, ntohs(TCPH(t)->dest)
+#define IP_UDP_ARG(i,u)	&IPH(i)->saddr, ntohs(UDPH(u)->source), &IPH(i)->daddr, ntohs(UDPH(u)->dest)
+
 #define TCP_ST_FMT	"%c%c%c%c%c%c%c%c|S=%u|A=%u|"
 #define TCP_ST_ARG(t) \
-	((struct tcphdr *)(t))->cwr ? 'C' : '.', \
-	((struct tcphdr *)(t))->ece ? 'E' : '.', \
-	((struct tcphdr *)(t))->urg ? 'U' : '.', \
-	((struct tcphdr *)(t))->ack ? 'A' : '.', \
-	((struct tcphdr *)(t))->psh ? 'P' : '.', \
-	((struct tcphdr *)(t))->rst ? 'R' : '.', \
-	((struct tcphdr *)(t))->syn ? 'S' : '.', \
-	((struct tcphdr *)(t))->fin ? 'F' : '.', \
-	ntohl(((struct tcphdr *)(t))->seq), \
-	ntohl(((struct tcphdr *)(t))->ack_seq)
+	TCPH(t)->cwr ? 'C' : '.', \
+	TCPH(t)->ece ? 'E' : '.', \
+	TCPH(t)->urg ? 'U' : '.', \
+	TCPH(t)->ack ? 'A' : '.', \
+	TCPH(t)->psh ? 'P' : '.', \
+	TCPH(t)->rst ? 'R' : '.', \
+	TCPH(t)->syn ? 'S' : '.', \
+	TCPH(t)->fin ? 'F' : '.', \
+	ntohl(TCPH(t)->seq), \
+	ntohl(TCPH(t)->ack_seq)
 
 #define UDP_ST_FMT "UL:%u,UC:%04x"
-#define UDP_ST_ARG(u) ntohs(((struct udphdr *)(u))->len), ntohs(((struct udphdr *)(u))->check)
+#define UDP_ST_ARG(u) ntohs(UDPH(u)->len), ntohs(UDPH(u)->check)
 #define ICMP_ST_FMT "T:%u,C:%u,ID:%u:SEQ:%u"
-#define ICMP_ST_ARG(m) ((struct icmphdr *)(m))->type, ((struct icmphdr *)(m))->code, ntohs(((struct icmphdr *)(m))->un.echo.id), ntohs(((struct icmphdr *)(m))->un.echo.sequence)
-
-#define DEBUG_FMT_PREFIX "(%s:%u)"
-#define DEBUG_ARG_PREFIX __FUNCTION__, __LINE__
+#define ICMP_ST_ARG(m) ICMPH(m)->type, ICMPH(m)->code, ntohs(ICMPH(m)->un.echo.id), ntohs(ICMPH(m)->un.echo.sequence)
 
 #define DEBUG_FMT_TCP "[" IP_TCPUDP_FMT "|ID:%04X,IL:%u|" TCP_ST_FMT "]"
-#define DEBUG_ARG_TCP(i, t) IP_TCPUDP_ARG(i,t), ntohs(((struct iphdr *)(i))->id), ntohs(((struct iphdr *)(i))->tot_len), TCP_ST_ARG(t)
+#define DEBUG_ARG_TCP(i, t) IP_TCP_ARG(i,t), ntohs(IPH(i)->id), ntohs(IPH(i)->tot_len), TCP_ST_ARG(t)
 
 #define DEBUG_FMT_UDP "[" IP_TCPUDP_FMT "|ID:%04X,IL:%u|" UDP_ST_FMT "]"
-#define DEBUG_ARG_UDP(i, u) IP_TCPUDP_ARG(i,u), ntohs((i)->id), ntohs((i)->tot_len), UDP_ST_ARG(u)
+#define DEBUG_ARG_UDP(i, u) IP_UDP_ARG(i,u), ntohs(IPH(i)->id), ntohs(IPH(i)->tot_len), UDP_ST_ARG(u)
 
 #define DEBUG_FMT_ICMP "[%pI4->%pI4|ID:%04X,IL:%u|" ICMP_ST_FMT "]"
-#define DEBUG_ARG_ICMP(i, m) &(i)->saddr, &(i)->daddr, ntohs((i)->id), ntohs((i)->tot_len), ICMP_ST_ARG(m)
+#define DEBUG_ARG_ICMP(i, m) &IPH(i)->saddr, &IPH(i)->daddr, ntohs(IPH(i)->id), ntohs(IPH(i)->tot_len), ICMP_ST_ARG(m)
 
-#define DEBUG_TCP_FMT "[%s]" DEBUG_FMT_PREFIX DEBUG_FMT_TCP
-#define DEBUG_TCP_ARG(i, t) hooknames[hooknum], DEBUG_ARG_PREFIX, DEBUG_ARG_TCP(i, t)
+#define DEBUG_TCP_FMT "[%s]" DEBUG_FMT_TCP
+#define DEBUG_TCP_ARG(i, t) hooknames[hooknum], DEBUG_ARG_TCP(i, t)
 
-#define DEBUG_UDP_FMT "[%s]" DEBUG_FMT_PREFIX DEBUG_FMT_UDP
-#define DEBUG_UDP_ARG(i, u) hooknames[hooknum], DEBUG_ARG_PREFIX, DEBUG_ARG_UDP(i, u)
+#define DEBUG_UDP_FMT "[%s]" DEBUG_FMT_UDP
+#define DEBUG_UDP_ARG(i, u) hooknames[hooknum], DEBUG_ARG_UDP(i, u)
 
-#define DEBUG_ICMP_FMT "[%s]" DEBUG_FMT_PREFIX DEBUG_FMT_ICMP
-#define DEBUG_ICMP_ARG(i, m) hooknames[hooknum], DEBUG_ARG_PREFIX, DEBUG_ARG_ICMP(i, m)
+#define DEBUG_ICMP_FMT "[%s]" DEBUG_FMT_ICMP
+#define DEBUG_ICMP_ARG(i, m) hooknames[hooknum], DEBUG_ARG_ICMP(i, m)
 
 #define TUPLE_FMT "%pI4:%u-%c-%c-%c"
 #define TUPLE_ARG(t) &((struct tuple *)(t))->ip, ntohs(((struct tuple *)(t))->port), ((struct tuple *)(t))->encryption ? 'e' : 'o', ((struct tuple *)(t))->tcp_encode == TCP_ENCODE ? 'T' : 'U', ((struct tuple *)(t))->udp_encode == UDP_ENCODE ? 'U' : 'T'
-
-#define TCPH(t) ((struct tcphdr *)(t))
-#define UDPH(u) ((struct udphdr *)(u))
-#define ICMPH(i) ((struct icmphdr *)(i))
 
 extern void natcap_data_encode(unsigned char *buf, int len);
 extern void natcap_data_decode(unsigned char *buf, int len);
@@ -824,7 +824,7 @@ static inline struct sk_buff *natcap_peer_ctrl_alloc(struct sk_buff *oskb, int d
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return NULL;
 	}
 	nskb->tail += offset;
