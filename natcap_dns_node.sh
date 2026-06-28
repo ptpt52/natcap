@@ -1,14 +1,11 @@
 #!/bin/sh
 
 echo dns_server_node_clean
-cat $0 | grep -o '\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\).*\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)' | \
-while read ip ip2; do
+sed -n '/^exit 0$/,$p' "$0" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | \
+while read ip; do
 	nslookup -timeout=1 www.google.com $ip 2>&1 >/dev/null && echo dns_server_node_add=$ip
 done
-cat $0 | grep -o '\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\).*\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)\.\([0-9]\{1,3\}\)' | \
-while read ip1 ip; do
-	nslookup -timeout=1 www.google.com $ip 2>&1 >/dev/null && echo dns_server_node_add=$ip
-done
+
 
 exit 0
 

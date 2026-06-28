@@ -21,7 +21,7 @@ ipset destroy cniplist
 ipset destroy gfwlist0
 
 echo 'create cniplist hash:net family inet hashsize 4096 maxelem 65536' >/tmp/cniplist.set
-cat cniplist.set | sed 's/^/add cniplist /' >>/tmp/cniplist.set
+sed 's/^/add cniplist /' cniplist.set >>/tmp/cniplist.set
 ipset restore -f /tmp/cniplist.set
 rm -f /tmp/cniplist.set
 
