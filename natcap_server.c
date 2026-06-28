@@ -214,7 +214,7 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return;
 	}
 	nskb->tail += offset;
@@ -287,7 +287,7 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return;
 	}
 	nskb->tail += offset;
@@ -388,7 +388,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return;
 	}
 	nskb->tail += offset;
@@ -490,7 +490,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return;
 	}
 	nskb->tail += offset;
@@ -714,7 +714,7 @@ static inline void natcap_confusion_tcp_reply_ack(const struct net_device *dev, 
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return;
 	}
 	nskb->tail += offset;
@@ -1559,7 +1559,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 				consume_skb(skb);
 				skb = nskb;
-				NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
+				NATCAP_ERROR("pskb_expand_head failed\n");
 				continue;
 			}
 
@@ -1955,7 +1955,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					ns->ping.stage = 1;
 					skb = skb_copy(skb, GFP_ATOMIC);
 					if (skb == NULL) {
-						NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+						NATCAP_ERROR("alloc_skb fail\n");
 						return NF_ACCEPT;
 					}
 					iph = ip_hdr(skb);
@@ -2056,7 +2056,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					}
 
 					if (skb_tailroom(skb) < 16 && pskb_expand_head(skb, 0, 16, GFP_ATOMIC)) {
-						NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
+						NATCAP_ERROR("pskb_expand_head failed\n");
 						consume_skb(skb);
 						return NF_STOLEN;
 					}

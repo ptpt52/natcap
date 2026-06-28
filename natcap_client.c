@@ -635,7 +635,7 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return -1;
 	}
 	nskb->tail += offset;
@@ -1711,7 +1711,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					ns->ping.stage = 1;
 					skb = skb_copy(skb, GFP_ATOMIC);
 					if (skb == NULL) {
-						NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+						NATCAP_ERROR("alloc_skb fail\n");
 						return NF_ACCEPT;
 					}
 					iph = ip_hdr(skb);
@@ -1812,7 +1812,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					}
 
 					if (skb_tailroom(skb) < 16 && pskb_expand_head(skb, 0, 16, GFP_ATOMIC)) {
-						NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
+						NATCAP_ERROR("pskb_expand_head failed\n");
 						consume_skb(skb);
 						return NF_STOLEN;
 					}
@@ -2948,7 +2948,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 			skb2 = skb_copy(skb, GFP_ATOMIC);
 			if (skb2 == NULL) {
-				NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+				NATCAP_ERROR("alloc_skb fail\n");
 				return NF_DROP;
 			}
 			iph = ip_hdr(skb2);
@@ -3022,7 +3022,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			offset += skb_tailroom(skb);
 			skb_htp = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 			if (!skb_htp) {
-				NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+				NATCAP_ERROR("alloc_skb fail\n");
 				if (skb2) {
 					consume_skb(skb2);
 				}
@@ -3124,7 +3124,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 				consume_skb(skb);
 				skb = nskb;
-				NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
+				NATCAP_ERROR("pskb_expand_head failed\n");
 				continue;
 			}
 			iph = ip_hdr(skb);
@@ -3349,7 +3349,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				offset += skb_tailroom(skb);
 				nskb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 				if (!nskb) {
-					NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+					NATCAP_ERROR("alloc_skb fail\n");
 					return NF_ACCEPT;
 				}
 				nskb->tail += offset;
@@ -3423,7 +3423,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				unsigned short uflag = NATCAP_UDP_TYPE2;
 
 				if (skb_tailroom(skb) < off && pskb_expand_head(skb, 0, off, GFP_ATOMIC)) {
-					NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
+					NATCAP_ERROR("pskb_expand_head failed\n");
 					return NF_ACCEPT;
 				}
 				iph = ip_hdr(skb);
@@ -3585,7 +3585,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 	skb = skb_copy(skb_orig, GFP_ATOMIC);
 	if (skb == NULL) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("alloc_skb fail\n");
 		return NF_ACCEPT;
 	}
 	skb_nfct_reset(skb);
@@ -3913,7 +3913,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 			skb2 = skb_copy(skb, GFP_ATOMIC);
 			if (skb2 == NULL) {
-				NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+				NATCAP_ERROR("alloc_skb fail\n");
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				consume_skb(skb);
 				return NF_ACCEPT;
@@ -3993,7 +3993,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			offset += skb_tailroom(skb);
 			skb_htp = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 			if (!skb_htp) {
-				NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+				NATCAP_ERROR("alloc_skb fail\n");
 				if (skb2) {
 					consume_skb(skb2);
 				}
@@ -4075,7 +4075,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 				consume_skb(skb);
 				skb = nskb;
-				NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
+				NATCAP_ERROR("pskb_expand_head failed\n");
 				continue;
 			}
 			iph = ip_hdr(skb);
@@ -4129,7 +4129,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				offset += skb_tailroom(skb);
 				nskb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 				if (!nskb) {
-					NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+					NATCAP_ERROR("alloc_skb fail\n");
 					consume_skb(skb);
 					return NF_ACCEPT;
 				}
@@ -4184,7 +4184,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				unsigned short uflag = NATCAP_UDP_TYPE2;
 
 				if (skb_tailroom(skb) < off && pskb_expand_head(skb, 0, off, GFP_ATOMIC)) {
-					NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
+					NATCAP_ERROR("pskb_expand_head failed\n");
 					consume_skb(skb);
 					return NF_ACCEPT;
 				}

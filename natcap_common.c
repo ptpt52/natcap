@@ -1369,7 +1369,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 
 	if (test_and_set_bit(IPS_NATCAP_SESSION_BIT, &ct->status)) {
 		/* someone else is already running in this progress */
-		NATCAP_INFO(DEBUG_FMT_PREFIX "someone else is already running in this progress!\n", DEBUG_ARG_PREFIX);
+		NATCAP_INFO("someone else is already running in this progress!\n");
 		return -1;
 	}
 
@@ -1399,7 +1399,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 #endif
 	if (!new) {
 		clear_bit(IPS_NATCAP_SESSION_BIT, &ct->status);
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "__krealloc size=%u failed!\n", DEBUG_ARG_PREFIX, (unsigned int)alloc_size);
+		NATCAP_ERROR("__krealloc size=%u failed!\n", (unsigned int)alloc_size);
 		return -1;
 	}
 
@@ -1420,8 +1420,8 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 		nk = (struct nat_key_t *)((void *)old + static_fixed_ext_off * NATCAP_FACTOR);
 		if (nk->magic == NATCAP_MAGIC && nk->ext_magic == (((unsigned long)ct) & 0xffffffff)) {
 			if (nk->natflow_off && (ct->status & IPS_NATFLOW_SESSION)) {
-				NATCAP_DEBUG(DEBUG_FMT_PREFIX "append natcap key after natflow: len=%u natcap_off=%u natflow_off=%u\n",
-				             DEBUG_ARG_PREFIX, nk->len, nk->natcap_off, nk->natflow_off);
+				NATCAP_DEBUG("append natcap key after natflow: len=%u natcap_off=%u natflow_off=%u\n",
+				             nk->len, nk->natcap_off, nk->natflow_off);
 				newoff = ALIGN(nk->len, __ALIGN_64BITS);
 			} else {
 				/*
@@ -1438,7 +1438,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 
 	if (nkoff > NATCAP_MAX_OFF) {
 		clear_bit(IPS_NATCAP_SESSION_BIT, &ct->status);
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "realloc ct->ext->len > %u not supported!\n", DEBUG_ARG_PREFIX, NATCAP_MAX_OFF);
+		NATCAP_ERROR("realloc ct->ext->len > %u not supported!\n", NATCAP_MAX_OFF);
 		return -1;
 	}
 
@@ -1452,7 +1452,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 #endif
 	if (!new) {
 		clear_bit(IPS_NATCAP_SESSION_BIT, &ct->status);
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "__krealloc size=%u failed!\n", DEBUG_ARG_PREFIX, (unsigned int)alloc_size);
+		NATCAP_ERROR("__krealloc size=%u failed!\n", (unsigned int)alloc_size);
 		return -1;
 	}
 	memset((void *)new + newoff, 0, newlen - newoff);
@@ -1562,16 +1562,16 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	iph = ip_hdr(skb);
 
 	if (!ns) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "ns is NULL\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("ns is NULL\n");
 		return -EINVAL;
 	}
 
 	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "skb_make_writable failed\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("skb_make_writable failed\n");
 		return -ENOMEM;
 	}
 	if (skb_tailroom(skb) < sizeof(struct tcphdr) - sizeof(struct udphdr) && pskb_expand_head(skb, 0, sizeof(struct tcphdr) - sizeof(struct udphdr), GFP_ATOMIC)) {
-		NATCAP_ERROR(DEBUG_FMT_PREFIX "pskb_expand_head failed\n", DEBUG_ARG_PREFIX);
+		NATCAP_ERROR("pskb_expand_head failed\n");
 		return -ENOMEM;
 	}
 	iph = ip_hdr(skb);
@@ -1640,7 +1640,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 			offset += skb_tailroom(skb);
 			*ping_skb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 			if (!(*ping_skb)) {
-				NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+				NATCAP_ERROR("alloc_skb fail\n");
 				return 0;
 			}
 			(*ping_skb)->tail += offset;
@@ -1694,7 +1694,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(*ping_skb);
 
-			NATCAP_WARN(DEBUG_FMT_PREFIX "ping: timeout new syn %pI4:%u->%pI4:%u tuple[%pI4:%u->%pI4:%u]\n", DEBUG_ARG_PREFIX,
+			NATCAP_WARN("ping: timeout new syn %pI4:%u->%pI4:%u tuple[%pI4:%u->%pI4:%u]\n",
 			            &iph->saddr, ntohs(TCPH(l4)->source), &iph->daddr, ntohs(TCPH(l4)->dest),
 			            &ns->ping.remote_saddr, ntohs(ns->ping.remote_source), &ns->ping.remote_daddr, ntohs(ns->ping.remote_dest));
 
@@ -1726,7 +1726,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 		ns->ping.stage = 1;
 		*ping_skb = skb_copy(skb, GFP_ATOMIC);
 		if ((*ping_skb) == NULL) {
-			NATCAP_ERROR(DEBUG_FMT_PREFIX "alloc_skb fail\n", DEBUG_ARG_PREFIX);
+			NATCAP_ERROR("alloc_skb fail\n");
 			return 0;
 		}
 
@@ -1739,7 +1739,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 
 		skb_rcsum_tcpudp(*ping_skb);
 
-		NATCAP_INFO(DEBUG_FMT_PREFIX "ping: send %pI4:%u->%pI4:%u\n", DEBUG_ARG_PREFIX,
+		NATCAP_INFO("ping: send %pI4:%u->%pI4:%u\n",
 		            &iph->saddr, ntohs(TCPH(l4)->source), &iph->daddr, ntohs(TCPH(l4)->dest));
 
 	}
