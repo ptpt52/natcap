@@ -39,7 +39,7 @@ clean: modules_clean
 
 cniplist.set: cniplist.orig.set local.set sub.set ipops.lua qq.com.set
 	lua ipgroup_merge.lua cniplist.orig.set local.set >cniplist.set.tmp
-	cat qq.com.set | sed 's/\(.*\)/\1\/32/' >qq.com.set.overlay
+	sed 's/\(.*\)/\1\/32/' qq.com.set >qq.com.set.overlay
 	lua ipgroup_merge.lua cniplist.set.tmp qq.com.set.overlay >cniplist.set.tmp.1
 	lua ipgroup_sub.lua cniplist.set.tmp.1 sub.set >cniplist.set
 	@rm -f cniplist.set.tmp cniplist.set.tmp.1 qq.com.set.overlay
@@ -53,7 +53,7 @@ C_cniplist.set: cniplist.set local.set sub.set ipops.lua
 ipset: cniplist.set C_cniplist.set cniplist6.set getflix.set hkiplist.orig.set
 
 ip.merge.txt:
-	wget -4 https://github.com/lionsoul2014/ip2region/raw/master/data/ip.merge.txt -O ip.merge.txt.tmp
+	wget -4 https://raw.githubusercontent.com/lionsoul2014/ip2region/v2.11.2/data/ip.merge.txt -O ip.merge.txt.tmp
 	@mv ip.merge.txt.tmp ip.merge.txt
 
 ipops.lua:
@@ -70,26 +70,26 @@ china_ip_list.txt:
 
 cniplist.orig.set: cnip2cidr.lua ipops.lua ip.merge.txt apnic.txt china_ip_list.txt geoip.txt.out.cn geoip.txt.out.cn1
 	lua cnip2cidr.lua >cniplist.orig.set.1
-	cat apnic.txt | grep CN | grep ipv4 | cut -d\| -f4,5 >cniplist.txt.tmp
+	awk -F\| '$$2=="CN" && $$3=="ipv4" {print $$4"|"$$5}' apnic.txt >cniplist.txt.tmp
 	lua apnic.lua cniplist.txt.tmp >cniplist.orig.set.2
 	@rm -f cniplist.txt.tmp
 	cat cniplist.orig.set.1 cniplist.orig.set.2 china_ip_list.txt | sort -n >cniplist.orig.set.tmp
-	cat geoip.txt.out.cn | cut -d= -f1 | sort -n >>cniplist.orig.set.tmp
-	cat geoip.txt.out.cn1 | cut -d= -f1 | sort -n >>cniplist.orig.set.tmp
+	awk -F= '{print $$1}' geoip.txt.out.cn | sort -n >>cniplist.orig.set.tmp
+	awk -F= '{print $$1}' geoip.txt.out.cn1 | sort -n >>cniplist.orig.set.tmp
 	lua ipgroup_merge.lua cniplist.orig.set.tmp >cniplist.orig.set
 	lua hkip2cidr.lua >cniplist.orig.set.cn2
-	lua ipops.lua netStrings_sub_netStrings "$$(echo `cat cniplist.orig.set` | sed 's/ /,/g')" "$$(echo `cat cniplist.orig.set.cn2` | sed 's/ /,/g')" >cniplist.orig.set.tmp
-	cat cniplist.orig.set.tmp | sed 's/,/\n/g' >cniplist.orig.set
-	@rm -f cniplist.orig.set.1 cniplist.orig.set.2 cniplist.orig.set.tmp cniplist.orig.set.cn2
+	lua ipgroup_sub.lua cniplist.orig.set cniplist.orig.set.cn2 >cniplist.orig.set.tmp
+	@mv cniplist.orig.set.tmp cniplist.orig.set
+	@rm -f cniplist.orig.set.1 cniplist.orig.set.2 cniplist.orig.set.cn2
 
 hkiplist.orig.set: apnic.txt ipops.lua
-	cat apnic.txt | grep HK | grep ipv4 | cut -d\| -f4,5 >hkiplist.txt.tmp
+	awk -F\| '$$2=="HK" && $$3=="ipv4" {print $$4"|"$$5}' apnic.txt >hkiplist.txt.tmp
 	lua apnic.lua hkiplist.txt.tmp >hkiplist.orig.set.tmp
 	@rm -f hkiplist.txt.tmp
 	@mv hkiplist.orig.set.tmp hkiplist.orig.set
 
 cniplist6.orig.set: apnic.txt
-	cat apnic.txt | grep ipv6 | grep CN | cut -d\| -f4,5 | sed 's,|,/,' >cniplist6.orig.set.tmp
+	awk -F\| '$$2=="CN" && $$3=="ipv6" {print $$4"/"$$5}' apnic.txt >cniplist6.orig.set.tmp
 	@mv cniplist6.orig.set.tmp cniplist6.orig.set
 
 cniplist6.set: cniplist6.orig.set local6.set

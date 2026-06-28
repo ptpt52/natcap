@@ -3,17 +3,8 @@ modprobe nf_nat
 modprobe  nf_conntrack
 insmod ./natcap.ko
 wget -4 https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf -O accelerated-domains.china.conf && \
-cat accelerated-domains.china.conf | cut -d\/ -f2 >accelerated-domains.china.raw.txt && {
-	cp accelerated-domains.china.raw.txt accelerated-domains.china.raw.txt.tmp && \
-	cat accelerated-domains.china.raw.txt.tmp \
-		| grep -v alibaba \
-		| grep -v rustdesk.com \
-		| grep -v linkedin.com \
-		| grep -v bing.com \
-		| grep -v microsoft.com \
-		| grep -v "^cn$" \
-	> accelerated-domains.china.raw.txt
-	rm -f accelerated-domains.china.raw.txt.tmp
+awk -F/ '$2 !~ /alibaba|rustdesk\\.com|linkedin\\.com|bing\\.com|microsoft\\.com|^cn$/ {print $2}' accelerated-domains.china.conf > accelerated-domains.china.raw.txt && {
+
 	echo cn_domain_clean >/dev/natcap_ctl
 	echo cn_domain_path=$(pwd)/accelerated-domains.china.raw.txt >/dev/natcap_ctl
 	echo cn_domain_dump=$(pwd)/accelerated-domains.china.raw.build >/dev/natcap_ctl
