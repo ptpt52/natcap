@@ -703,7 +703,7 @@ int ip_set_test_src_ipport(const struct net_device *in, const struct net_device 
 	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("IP set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -780,7 +780,7 @@ int ip_set_test_src_ip(const struct net_device *in, const struct net_device *out
 	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("IP set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -840,7 +840,7 @@ int ip_set_test_dst_ip(const struct net_device *in, const struct net_device *out
 	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("IP set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -900,7 +900,7 @@ int ip_set_test_dst_netport(const struct net_device *in, const struct net_device
 	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("IP set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -960,7 +960,7 @@ int ip_set_add_src_ip(const struct net_device *in, const struct net_device *out,
 	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("IP set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -1020,7 +1020,7 @@ int ip_set_add_dst_ip(const struct net_device *in, const struct net_device *out,
 	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("IP set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -1080,7 +1080,7 @@ int ip_set_del_src_ip(const struct net_device *in, const struct net_device *out,
 	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("IP set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -1140,7 +1140,7 @@ int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out,
 	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("IP set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -1200,7 +1200,7 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 	id = natcap_ip_set_get_byname(ip_set_name, &set);
 #endif
 	if (id == IPSET_INVALID_ID) {
-		NATCAP_DEBUG("ip_set '%s' not found\n", ip_set_name);
+		NATCAP_DEBUG("IP set '%s' not found\n", ip_set_name);
 		return 0;
 	}
 
@@ -1369,7 +1369,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 
 	if (test_and_set_bit(IPS_NATCAP_SESSION_BIT, &ct->status)) {
 		/* someone else is already running in this progress */
-		NATCAP_INFO("someone else is already running in this progress!\n");
+		NATCAP_INFO("Another process is already running this operation!\n");
 		return -1;
 	}
 
@@ -1399,7 +1399,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 #endif
 	if (!new) {
 		clear_bit(IPS_NATCAP_SESSION_BIT, &ct->status);
-		NATCAP_ERROR("__krealloc size=%u failed!\n", (unsigned int)alloc_size);
+		NATCAP_ERROR("Failed to krealloc (size=%u)\n", (unsigned int)alloc_size);
 		return -1;
 	}
 
@@ -1452,7 +1452,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 #endif
 	if (!new) {
 		clear_bit(IPS_NATCAP_SESSION_BIT, &ct->status);
-		NATCAP_ERROR("__krealloc size=%u failed!\n", (unsigned int)alloc_size);
+		NATCAP_ERROR("Failed to krealloc (size=%u)\n", (unsigned int)alloc_size);
 		return -1;
 	}
 	memset((void *)new + newoff, 0, newlen - newoff);
@@ -1562,16 +1562,16 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	iph = ip_hdr(skb);
 
 	if (!ns) {
-		NATCAP_ERROR("ns is NULL\n");
+		NATCAP_ERROR("NATCAP session is NULL\n");
 		return -EINVAL;
 	}
 
 	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
-		NATCAP_ERROR("skb_make_writable failed\n");
+		NATCAP_ERROR("Failed to make skb writable\n");
 		return -ENOMEM;
 	}
 	if (skb_tailroom(skb) < sizeof(struct tcphdr) - sizeof(struct udphdr) && pskb_expand_head(skb, 0, sizeof(struct tcphdr) - sizeof(struct udphdr), GFP_ATOMIC)) {
-		NATCAP_ERROR("pskb_expand_head failed\n");
+		NATCAP_ERROR("Failed to expand skb head\n");
 		return -ENOMEM;
 	}
 	iph = ip_hdr(skb);
@@ -1640,7 +1640,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 			offset += skb_tailroom(skb);
 			*ping_skb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 			if (!(*ping_skb)) {
-				NATCAP_ERROR("alloc_skb fail\n");
+				NATCAP_ERROR("Failed to allocate skb\n");
 				return 0;
 			}
 			(*ping_skb)->tail += offset;
@@ -1694,7 +1694,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(*ping_skb);
 
-			NATCAP_WARN("ping: timeout new syn %pI4:%u->%pI4:%u tuple[%pI4:%u->%pI4:%u]\n",
+			NATCAP_WARN("ping: Timeout on new SYN %pI4:%u->%pI4:%u tuple[%pI4:%u->%pI4:%u]\n",
 			            &iph->saddr, ntohs(TCPH(l4)->source), &iph->daddr, ntohs(TCPH(l4)->dest),
 			            &ns->ping.remote_saddr, ntohs(ns->ping.remote_source), &ns->ping.remote_daddr, ntohs(ns->ping.remote_dest));
 
@@ -1726,7 +1726,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 		ns->ping.stage = 1;
 		*ping_skb = skb_copy(skb, GFP_ATOMIC);
 		if ((*ping_skb) == NULL) {
-			NATCAP_ERROR("alloc_skb fail\n");
+			NATCAP_ERROR("Failed to allocate skb\n");
 			return 0;
 		}
 
@@ -1890,7 +1890,7 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	//alloc natcap_session
 	ns = natcap_session_in(ct);
 	if (!ns) {
-		NATCAP_DEBUG("(CCI)" DEBUG_UDP_FMT ": natcap_session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+		NATCAP_DEBUG("(CCI)" DEBUG_UDP_FMT ": NATCAP session_in failed\n", DEBUG_UDP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
 	if ((NS_NATCAP_CONE & ns->n.status)) {
@@ -2297,7 +2297,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 			NATCAP_INFO("(CCS)" DEBUG_UDP_FMT ": SNAT to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &ip, ntohs(port));
 			ret = natcap_snat_setup(ct, ip, port);
 			if (ret != NF_ACCEPT) {
-				NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": natcap_snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": NATCAP snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
 			}
 			short_set_bit(NS_NATCAP_CONESNAT_BIT, &ns->n.status);
 
@@ -2349,7 +2349,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 						NATCAP_INFO("(CCS)" DEBUG_UDP_FMT ": SNAT to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &css.wan_ip, ntohs(css.wan_port));
 						ret = natcap_snat_setup(ct, css.wan_ip, css.wan_port);
 						if (ret != NF_ACCEPT) {
-							NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": natcap_snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
+							NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": NATCAP snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
 						}
 
 #if defined(CONE_NAT_CHECK_USED_HOOK)

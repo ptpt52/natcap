@@ -151,7 +151,7 @@ static unsigned int natcap_knock_dnat_hook(void *priv,
 
 	if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
 		if (!TCPH(l4)->syn || TCPH(l4)->ack) {
-			NATCAP_INFO("(KD)" DEBUG_TCP_FMT ": first packet in but not syn, bypass\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_INFO("(KD)" DEBUG_TCP_FMT ": First packet in is not SYN, bypassing\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
@@ -162,7 +162,7 @@ static unsigned int natcap_knock_dnat_hook(void *priv,
 		}
 	}
 
-	NATCAP_DEBUG("(KD)" DEBUG_TCP_FMT ": after encode\n", DEBUG_TCP_ARG(iph,l4));
+	NATCAP_DEBUG("(KD)" DEBUG_TCP_FMT ": Encode completed\n", DEBUG_TCP_ARG(iph,l4));
 
 	return NF_ACCEPT;
 }
@@ -244,7 +244,7 @@ static unsigned int natcap_knock_post_out_hook(void *priv,
 		return NF_DROP;
 	}
 
-	NATCAP_DEBUG("(KPO)" DEBUG_TCP_FMT ": after encode\n", DEBUG_TCP_ARG(iph,l4));
+	NATCAP_DEBUG("(KPO)" DEBUG_TCP_FMT ": Encode completed\n", DEBUG_TCP_ARG(iph,l4));
 
 	return NF_ACCEPT;
 }
