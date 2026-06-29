@@ -61,7 +61,7 @@ unsigned long long flow_total_rx_bytes = 0;
 
 unsigned int debug = 0;
 module_param(debug, int, 0);
-MODULE_PARM_DESC(debug, "Debug level (0=none,1=error,2=warn,4=info,8=debug,16=fixme,...,31=all) default=0");
+MODULE_PARM_DESC(debug, "Debug level (0=none,1=error,2=warn,4=info,8=debug,16=fixme,32=debug_ratelimited,...,63=all) default=0");
 
 unsigned int mode = MIXING_MODE;
 module_param(mode, int, 0);

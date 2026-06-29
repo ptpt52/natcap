@@ -28,6 +28,7 @@
 #include <linux/udp.h>
 #include <linux/icmp.h>
 #include <linux/netfilter.h>
+#include <linux/printk.h>
 #include <net/ip.h>
 #include <net/tcp.h>
 #include <net/udp.h>
@@ -147,9 +148,12 @@ extern char htp_confusion_host[64];
 #define NATCAP_LOG_INFO  0x04u
 #define NATCAP_LOG_DEBUG 0x08u
 #define NATCAP_LOG_FIXME 0x10u
+#define NATCAP_LOG_DEBUG_LIMITED 0x20u
 
 #define IS_NATCAP_FIXME() (debug & NATCAP_LOG_FIXME)
 #define IS_NATCAP_DEBUG() (debug & NATCAP_LOG_DEBUG)
+#define IS_NATCAP_DEBUG_LIMITED() (debug & NATCAP_LOG_DEBUG_LIMITED)
+#define IS_NATCAP_DEBUG_ANY() (debug & (NATCAP_LOG_DEBUG | NATCAP_LOG_DEBUG_LIMITED))
 #define IS_NATCAP_INFO() (debug & NATCAP_LOG_INFO)
 #define IS_NATCAP_WARN() (debug & NATCAP_LOG_WARN)
 #define IS_NATCAP_ERROR() (debug & NATCAP_LOG_ERROR)
@@ -166,6 +170,13 @@ extern char htp_confusion_host[64];
 		} \
 	} while (0)
 
+#define NATCAP_LOG_RATELIMITED_IF(enabled, level, tag, fmt, ...) \
+	do { \
+		if (enabled) { \
+			printk_ratelimited(level tag NATCAP_LOG_PREFIX pr_fmt(fmt), __func__, __LINE__, ##__VA_ARGS__); \
+		} \
+	} while (0)
+
 #define NATCAP_println(fmt, ...) \
 	do { \
 		NATCAP_LOG_EMIT(KERN_DEFAULT, fmt "\n", ##__VA_ARGS__); \
@@ -175,7 +186,13 @@ extern char htp_confusion_host[64];
 	NATCAP_LOG_IF(IS_NATCAP_FIXME(), KERN_ALERT, "fixme:", fmt, ##__VA_ARGS__)
 
 #define NATCAP_DEBUG(fmt, ...) \
-	NATCAP_LOG_IF(IS_NATCAP_DEBUG(), KERN_DEBUG, "debug:", fmt, ##__VA_ARGS__)
+	do { \
+		if (IS_NATCAP_DEBUG()) { \
+			NATCAP_LOG_EMIT(KERN_DEBUG, "debug:" fmt, ##__VA_ARGS__); \
+		} else { \
+			NATCAP_LOG_RATELIMITED_IF(IS_NATCAP_DEBUG_LIMITED(), KERN_DEBUG, "debug:", fmt, ##__VA_ARGS__); \
+		} \
+	} while (0)
 
 #define NATCAP_INFO(fmt, ...) \
 	NATCAP_LOG_IF(IS_NATCAP_INFO(), KERN_DEFAULT, "info:", fmt, ##__VA_ARGS__)

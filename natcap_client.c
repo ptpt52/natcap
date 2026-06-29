@@ -4605,7 +4605,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					break;
 				}
 
-				if (IS_NATCAP_DEBUG()) {
+				if (IS_NATCAP_DEBUG_ANY()) {
 					int qname_len;
 					char *qname = kmalloc(2048, GFP_ATOMIC);
 
@@ -4663,7 +4663,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					break;
 				}
 
-				if (IS_NATCAP_DEBUG()) {
+				if (IS_NATCAP_DEBUG_ANY()) {
 					int name_len;
 					char *name = kmalloc(2048, GFP_ATOMIC);
 
@@ -4828,7 +4828,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				case 5: //CNAME
 				case 15: //MX
 				case 16: //TXT
-					if (IS_NATCAP_DEBUG()) {
+					if (IS_NATCAP_DEBUG_ANY()) {
 						int name_len;
 						char *name = kmalloc(2048, GFP_ATOMIC);
 
