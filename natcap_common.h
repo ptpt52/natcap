@@ -142,51 +142,49 @@ extern char htp_confusion_host[64];
 		"Accept-Language: zh-CN,en-US;q=0.8,en;q=0.6,zh;q=0.4\r\n" \
 		"\r\n"
 
-#define IS_NATCAP_FIXME() (debug & 0x10)
-#define IS_NATCAP_DEBUG() (debug & 0x8)
-#define IS_NATCAP_INFO() (debug & 0x4)
-#define IS_NATCAP_WARN() (debug & 0x2)
-#define IS_NATCAP_ERROR() (debug & 0x1)
+#define NATCAP_LOG_ERROR 0x01u
+#define NATCAP_LOG_WARN  0x02u
+#define NATCAP_LOG_INFO  0x04u
+#define NATCAP_LOG_DEBUG 0x08u
+#define NATCAP_LOG_FIXME 0x10u
+
+#define IS_NATCAP_FIXME() (debug & NATCAP_LOG_FIXME)
+#define IS_NATCAP_DEBUG() (debug & NATCAP_LOG_DEBUG)
+#define IS_NATCAP_INFO() (debug & NATCAP_LOG_INFO)
+#define IS_NATCAP_WARN() (debug & NATCAP_LOG_WARN)
+#define IS_NATCAP_ERROR() (debug & NATCAP_LOG_ERROR)
+
+#define NATCAP_LOG_PREFIX "{" MODULE_NAME "}:%s():%d: "
+
+#define NATCAP_LOG_EMIT(level, fmt, ...) \
+	printk(level NATCAP_LOG_PREFIX pr_fmt(fmt), __func__, __LINE__, ##__VA_ARGS__)
+
+#define NATCAP_LOG_IF(enabled, level, tag, fmt, ...) \
+	do { \
+		if (enabled) { \
+			printk(level tag NATCAP_LOG_PREFIX pr_fmt(fmt), __func__, __LINE__, ##__VA_ARGS__); \
+		} \
+	} while (0)
 
 #define NATCAP_println(fmt, ...) \
 	do { \
-		printk(KERN_DEFAULT "{" MODULE_NAME "}:%s():%d: " pr_fmt(fmt) "\n", __FUNCTION__, __LINE__, ##__VA_ARGS__); \
+		NATCAP_LOG_EMIT(KERN_DEFAULT, fmt "\n", ##__VA_ARGS__); \
 	} while (0)
 
 #define NATCAP_FIXME(fmt, ...) \
-	do { \
-		if (IS_NATCAP_FIXME()) { \
-			printk(KERN_ALERT "fixme:{" MODULE_NAME "}:%s():%d: " pr_fmt(fmt), __FUNCTION__, __LINE__, ##__VA_ARGS__); \
-		} \
-	} while (0)
+	NATCAP_LOG_IF(IS_NATCAP_FIXME(), KERN_ALERT, "fixme:", fmt, ##__VA_ARGS__)
 
 #define NATCAP_DEBUG(fmt, ...) \
-	do { \
-		if (IS_NATCAP_DEBUG()) { \
-			printk(KERN_DEBUG "debug:{" MODULE_NAME "}:%s():%d: " pr_fmt(fmt), __FUNCTION__, __LINE__, ##__VA_ARGS__); \
-		} \
-	} while (0)
+	NATCAP_LOG_IF(IS_NATCAP_DEBUG(), KERN_DEBUG, "debug:", fmt, ##__VA_ARGS__)
 
 #define NATCAP_INFO(fmt, ...) \
-	do { \
-		if (IS_NATCAP_INFO()) { \
-			printk(KERN_DEFAULT "info:{" MODULE_NAME "}:%s():%d: " pr_fmt(fmt), __FUNCTION__, __LINE__, ##__VA_ARGS__); \
-		} \
-	} while (0)
+	NATCAP_LOG_IF(IS_NATCAP_INFO(), KERN_DEFAULT, "info:", fmt, ##__VA_ARGS__)
 
 #define NATCAP_WARN(fmt, ...) \
-	do { \
-		if (IS_NATCAP_WARN()) { \
-			printk(KERN_WARNING "warning:{" MODULE_NAME "}:%s():%d: " pr_fmt(fmt), __FUNCTION__, __LINE__, ##__VA_ARGS__); \
-		} \
-	} while (0)
+	NATCAP_LOG_IF(IS_NATCAP_WARN(), KERN_WARNING, "warning:", fmt, ##__VA_ARGS__)
 
 #define NATCAP_ERROR(fmt, ...) \
-	do { \
-		if (IS_NATCAP_ERROR()) { \
-			printk(KERN_ERR "error:{" MODULE_NAME "}:%s():%d: " pr_fmt(fmt), __FUNCTION__, __LINE__, ##__VA_ARGS__); \
-		} \
-	} while (0)
+	NATCAP_LOG_IF(IS_NATCAP_ERROR(), KERN_ERR, "error:", fmt, ##__VA_ARGS__)
 
 #ifdef NO_DEBUG
 #undef NATCAP_FIXME
@@ -194,11 +192,11 @@ extern char htp_confusion_host[64];
 #undef NATCAP_INFO
 #undef NATCAP_WARN
 #undef NATCAP_ERROR
-#define NATCAP_FIXME(fmt, ...)
-#define NATCAP_DEBUG(fmt, ...)
-#define NATCAP_INFO(fmt, ...)
-#define NATCAP_WARN(fmt, ...)
-#define NATCAP_ERROR(fmt, ...)
+#define NATCAP_FIXME(fmt, ...) do { } while (0)
+#define NATCAP_DEBUG(fmt, ...) do { } while (0)
+#define NATCAP_INFO(fmt, ...) do { } while (0)
+#define NATCAP_WARN(fmt, ...) do { } while (0)
+#define NATCAP_ERROR(fmt, ...) do { } while (0)
 #endif
 
 #define IPH(i) ((struct iphdr *)(i))
