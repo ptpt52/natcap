@@ -188,7 +188,7 @@ extern char htp_confusion_host[64];
 #define NATCAP_DEBUG(fmt, ...) \
 	do { \
 		if (IS_NATCAP_DEBUG()) { \
-			NATCAP_LOG_EMIT(KERN_DEBUG, "debug:" fmt, ##__VA_ARGS__); \
+			NATCAP_LOG_IF(1, KERN_DEBUG, "debug:", fmt, ##__VA_ARGS__); \
 		} else { \
 			NATCAP_LOG_RATELIMITED_IF(IS_NATCAP_DEBUG_LIMITED(), KERN_DEBUG, "debug:", fmt, ##__VA_ARGS__); \
 		} \
