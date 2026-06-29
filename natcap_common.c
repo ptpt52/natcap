@@ -1349,9 +1349,9 @@ void natcap_probe_ct_ext(void)
 		i = ALIGN(ct.ext->len, __ALIGN_64BYTES);
 		kfree(ct.ext);
 		static_fixed_ext_off = i / NATCAP_FACTOR;
-		NATCAP_println("probe static_fixed_ext_off = %u\n", static_fixed_ext_off);
+		NATCAP_println("probe static_fixed_ext_off = %u", static_fixed_ext_off);
 	} else {
-		NATCAP_println("default static_fixed_ext_off = %u\n", static_fixed_ext_off);
+		NATCAP_println("default static_fixed_ext_off = %u", static_fixed_ext_off);
 	}
 }
 
