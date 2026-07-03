@@ -2282,7 +2282,7 @@ static unsigned char *tls_sni_search(unsigned char *data, int *data_len, int *ne
 	int p_len = *data_len;
 	int i_data_len = p_len;
 	unsigned int i = 0;
-	unsigned short len;
+	unsigned int len;
 
 	if (i + 1 > p_len) return NULL;
 	if (p[i + 0] != 0x16) {//Content Type NOT HandShake
@@ -2293,8 +2293,13 @@ static unsigned char *tls_sni_search(unsigned char *data, int *data_len, int *ne
 	len = ntohs(get_byte2(p + i + 0)); //content_len
 	i += 2;
 	if (i + len > p_len) {
-		if (needmore && i + 1 > p_len && p[i] == 0x01) //HanShake Type is Client Hello
-			*needmore = 1;
+		if (needmore) {
+			if ( i + 1 <= p_len && p[i] == 0x01) { //HanShake Type is Client Hello
+				*needmore = 1;
+			} else if (i + 1 > p_len) {
+				*needmore = 1;
+			}
+		}
 	}
 
 	p = p + i;
@@ -2308,7 +2313,7 @@ static unsigned char *tls_sni_search(unsigned char *data, int *data_len, int *ne
 	}
 	i += 1;
 	if (i + 1 + 2 > p_len || i + 1 + 2 > i_data_len) return NULL;
-	len = (p[i + 0] << 8) + ntohs(get_byte2(p + i + 0 + 1)); //hanshake_len
+	len = (p[i + 0] << 16) + ntohs(get_byte2(p + i + 0 + 1)); //hanshake_len
 	i += 1 + 2;
 	if (i + len > p_len) return NULL;
 
