@@ -2592,7 +2592,7 @@ static void request_natcapd_restart_work_func(struct work_struct *work)
 	};
 
 	int ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
-	printk(KERN_INFO "natcapd start %d\n", ret);
+	NATCAP_INFO("natcapd start %d\n", ret);
 }
 
 
@@ -5753,7 +5753,7 @@ static int peer_netdev_event(struct notifier_block *this, unsigned long event, v
 
 	rt_out_magic += 1;
 
-	NATCAP_WARN("catch unregister event for dev=%s\n", dev ? dev->name : "(null)");
+	NATCAP_WARN("caught event NETDEV_UNREGISTER for dev=%s\n", dev ? dev->name : "(null)");
 
 	return NOTIFY_DONE;
 }
