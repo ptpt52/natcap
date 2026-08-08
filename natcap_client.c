@@ -2851,8 +2851,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		        (TCPH(l4)->dest == __constant_htons(80) || TCPH(l4)->dest == __constant_htons(8080))) {
 			int data_len;
 			unsigned char *data;
-			data = skb->data + (iph->ihl << 2) + (TCPH(l4)->doff << 2);
-			data_len = ntohs(iph->tot_len) - ((iph->ihl << 2) + (TCPH(l4)->doff << 2));
+			data = skb->data + (iph->ihl * 4) + (TCPH(l4)->doff * 4);
+			data_len = ntohs(iph->tot_len) - ((iph->ihl * 4) + (TCPH(l4)->doff * 4));
 			if (data_len > 0) {
 				int i = 0;
 				if (strncasecmp(data, WECHAT_C_POST, strlen(WECHAT_C_POST)) == 0) {
@@ -4946,7 +4946,7 @@ int cn_domain_insert(const char *d)
 		memcpy(tmp, cn_domain, (cn_domain_size - 128 * 1024 / CN_DOMAIN_SIZE) * CN_DOMAIN_SIZE);
 		vfree(cn_domain);
 		cn_domain = tmp;
-		printk("cn_domain_insert cn_domain_size=%d mem=%d\n", cn_domain_size, cn_domain_size * CN_DOMAIN_SIZE);
+		NATCAP_INFO("cn_domain_insert cn_domain_size=%d mem=%d\n", cn_domain_size, cn_domain_size * CN_DOMAIN_SIZE);
 	}
 	if (cn_domain_count == 0) {
 		domain_copy(cn_domain + cn_domain_count * CN_DOMAIN_SIZE, d);
@@ -5072,7 +5072,7 @@ int cn_domain_load_from_path(const char *path)
 
 	filp = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
-		printk("unable to open cn_domain file: %s\n", path);
+		NATCAP_ERROR("unable to open cn_domain file: %s\n", path);
 		return -1;
 	}
 
@@ -5092,7 +5092,7 @@ int cn_domain_load_from_path(const char *path)
 					if (err) {
 						return err;
 					}
-					if (strlen(buf + s) > CN_DOMAIN_SIZE) printk("cn_domain_insert %d(%s)\n", count, buf + s);
+					if (strlen(buf + s) > CN_DOMAIN_SIZE) NATCAP_WARN("cn_domain_insert %d(%s)\n", count, buf + s);
 					count++;
 					s = i + 1;
 					i++;
@@ -5106,7 +5106,7 @@ int cn_domain_load_from_path(const char *path)
 	}
 	kfree(buf);
 	filp_close(filp, NULL);
-	printk("cn_domain_load_from_path %d records loaded\n", count);
+	NATCAP_INFO("cn_domain_load_from_path %d records loaded\n", count);
 	return 0;
 }
 
@@ -5125,7 +5125,7 @@ int cn_domain_load_from_raw(const char *path)
 
 	filp = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
-		printk("unable to open cn_domain raw: %s\n", path);
+		NATCAP_ERROR("unable to open cn_domain raw: %s\n", path);
 		return -1;
 	}
 
@@ -5160,7 +5160,7 @@ int cn_domain_load_from_raw(const char *path)
 	cn_domain_size = cn_domain_tmp_size;
 	cn_domain_count = nbytes / CN_DOMAIN_SIZE;
 
-	printk("cn_domain_load_from_raw size:%d count:%d bytes:%d\n", cn_domain_size, cn_domain_count, nbytes);
+	NATCAP_INFO("cn_domain_load_from_raw size:%d count:%d bytes:%d\n", cn_domain_size, cn_domain_count, nbytes);
 
 out:
 	kfree(buf);
@@ -5180,7 +5180,7 @@ int cn_domain_dump_path(const char *path)
 
 	filp = filp_open(path, O_RDWR | O_CREAT | O_LARGEFILE | O_DSYNC, 0);
 	if (IS_ERR(filp)) {
-		printk("unable to open cn_domain dump: %s\n", path);
+		NATCAP_ERROR("unable to open cn_domain dump: %s\n", path);
 		return -1;
 	}
 
@@ -5189,7 +5189,7 @@ int cn_domain_dump_path(const char *path)
 #else
 	bytes = kernel_write(filp, cn_domain + pos, cn_domain_count * CN_DOMAIN_SIZE - pos, pos);
 #endif
-	printk("cn_domain dump: write %d\n", (int)bytes);
+	NATCAP_INFO("cn_domain dump: write %d\n", (int)bytes);
 
 	filp_close(filp, NULL);
 

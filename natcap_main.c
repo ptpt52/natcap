@@ -744,7 +744,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			tmp[127] = 0;
 			if (n == 1) {
 				n = cn_domain_lookup(tmp);
-				printk("cn_domain_lookup (%s) ret = %d\n", tmp, n);
+				NATCAP_println("cn_domain_lookup (%s) ret = %d", tmp, n);
 				goto done;
 			}
 		}
