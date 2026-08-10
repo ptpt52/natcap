@@ -1942,8 +1942,9 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 				ns->ping.lock = 2;
 
 			if (!master->master) {
-				nf_conntrack_get(&ct->ct_general);
-				master->master = ct;
+				if (likely(REFCOUNT_inc_not_zero(&ct->ct_general.use))) {
+					master->master = ct;
+				}
 			}
 			if (dir == 1) {
 				//on client side, try send ping
@@ -2228,8 +2229,9 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						return NF_STOLEN;
 					}
 
-					nf_conntrack_get(&ct->ct_general);
-					master->master = ct;
+					if (likely(REFCOUNT_inc_not_zero(&ct->ct_general.use))) {
+						master->master = ct;
+					}
 
 					ns = natcap_session_in(ct);
 					if (ns == NULL) {
@@ -2422,9 +2424,12 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 		/* safe to set IPS_NATCAP_CFM here, this master only run in this hook */
 		if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
-			nf_conntrack_get(&ct->ct_general);
-			master->master = ct;
-			ns->peer.jiffies = jiffies; //set peer.jiffies once init
+			if (likely(REFCOUNT_inc_not_zero(&ct->ct_general.use))) {
+				master->master = ct;
+				ns->peer.jiffies = jiffies; //set peer.jiffies once init
+			} else {
+				clear_bit(IPS_NATCAP_CFM_BIT, &master->status);
+			}
 		}
 		return NF_ACCEPT;
 
@@ -2584,10 +2589,13 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						break;
 					}
 					if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
-						ct->mark |= i;
-						nf_conntrack_get(&master->master->ct_general);
-						ct->master = master->master;
-						ct = ct->master;
+						if (likely(master->master && REFCOUNT_inc_not_zero(&master->master->ct_general.use))) {
+							ct->mark |= i;
+							ct->master = master->master;
+							ct = ct->master;
+						} else {
+							clear_bit(IPS_NATCAP_CFM_BIT, &ct->status);
+						}
 					}
 
 					NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": BIND=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n", DEBUG_UDP_ARG(iph,l4), i,
@@ -2658,10 +2666,13 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 						break;
 					}
 					if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
-						ct->mark |= i;
-						nf_conntrack_get(&master->master->ct_general);
-						ct->master = master->master;
-						ct = ct->master;
+						if (likely(master->master && REFCOUNT_inc_not_zero(&master->master->ct_general.use))) {
+							ct->mark |= i;
+							ct->master = master->master;
+							ct = ct->master;
+						} else {
+							clear_bit(IPS_NATCAP_CFM_BIT, &ct->status);
+						}
 					}
 
 					NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": BIND=%u: ct[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] outdev=%s\n", DEBUG_UDP_ARG(iph,l4), i,
@@ -2759,9 +2770,12 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					}
 
 					if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
-						nf_conntrack_get(&ct->ct_general);
-						master->master = ct;
-						master->mark |= i;
+						if (likely(REFCOUNT_inc_not_zero(&ct->ct_general.use))) {
+							master->master = ct;
+							master->mark |= i;
+						} else {
+							clear_bit(IPS_NATCAP_CFM_BIT, &master->status);
+						}
 					}
 					nf_ct_put(ct);
 				}

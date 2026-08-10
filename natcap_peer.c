@@ -107,7 +107,10 @@ static inline int peer_cache_attach(struct nf_conn *ct, struct sk_buff *skb)
 		spin_unlock_bh(&peer_cache_lock);
 		return -ENOSPC;
 	}
-	nf_conntrack_get(&ct->ct_general);
+	if (!REFCOUNT_inc_not_zero(&ct->ct_general.use)) {
+		spin_unlock_bh(&peer_cache_lock);
+		return -EINVAL;
+	}
 	peer_cache[peer_cache_next_to_use].jiffies = jiffies;
 	peer_cache[peer_cache_next_to_use].user = ct;
 	peer_cache[peer_cache_next_to_use].skb = skb;
@@ -552,8 +555,12 @@ static inline struct nf_conn *get_peer_user(unsigned int port)
 
 	spin_lock_bh(&peer_port_map_lock);
 	user = peer_port_map[port];
-	if (user) {
-		nf_conntrack_get(&user->ct_general);
+	if (user && !nf_ct_is_dying(user)) {
+		if (!REFCOUNT_inc_not_zero(&user->ct_general.use)) {
+			user = NULL;
+		}
+	} else {
+		user = NULL;
 	}
 	spin_unlock_bh(&peer_port_map_lock);
 	return user;
@@ -582,10 +589,13 @@ static __be16 alloc_peer_port(struct nf_conn *user, const unsigned char *mac)
 			spin_lock_bh(&peer_port_map_lock);
 			//re-check-in-lock
 			if (peer_port_map[port] == NULL) {
-				peer_port_map[port] = user;
-				nf_conntrack_get(&user->ct_general);
+				if (likely(!nf_ct_is_dying(user) && REFCOUNT_inc_not_zero(&user->ct_general.use))) {
+					peer_port_map[port] = user;
+					spin_unlock_bh(&peer_port_map_lock);
+					return htons(port);
+				}
 				spin_unlock_bh(&peer_port_map_lock);
-				return htons(port);
+				return 0;
 			}
 			spin_unlock_bh(&peer_port_map_lock);
 		}
@@ -596,10 +606,13 @@ static __be16 alloc_peer_port(struct nf_conn *user, const unsigned char *mac)
 			spin_lock_bh(&peer_port_map_lock);
 			//re-check-in-lock
 			if (peer_port_map[port] == NULL) {
-				peer_port_map[port] = user;
-				nf_conntrack_get(&user->ct_general);
+				if (likely(!nf_ct_is_dying(user) && REFCOUNT_inc_not_zero(&user->ct_general.use))) {
+					peer_port_map[port] = user;
+					spin_unlock_bh(&peer_port_map_lock);
+					return htons(port);
+				}
 				spin_unlock_bh(&peer_port_map_lock);
-				return htons(port);
+				return 0;
 			}
 			spin_unlock_bh(&peer_port_map_lock);
 		}
@@ -797,8 +810,10 @@ static struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be
 		return NULL;
 	}
 	user = nf_ct_get(uskb, &ctinfo);
-
-	nf_conntrack_get(&user->ct_general);
+	if (!user || nf_ct_is_dying(user) || !REFCOUNT_inc_not_zero(&user->ct_general.use)) {
+		skb_nfct_reset(uskb);
+		return NULL;
+	}
 	skb_nfct_reset(uskb);
 	natcap_user_timeout_touch(user, peer_conn_timeout);
 
@@ -1015,7 +1030,10 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 		*ppt = pt;
 	}
 
-	nf_conntrack_get(&user->ct_general);
+	if (!user || nf_ct_is_dying(user) || !REFCOUNT_inc_not_zero(&user->ct_general.use)) {
+		skb_nfct_reset(uskb);
+		return NULL;
+	}
 	skb_nfct_reset(uskb);
 
 	return user;
@@ -1044,11 +1062,10 @@ static void natcap_auth_request_upstream(const unsigned char *client_mac, __be32
 	spin_lock_bh(&ps->lock);
 
 	user = ps->port_map[0];
-	if (user == NULL) {
+	if (user == NULL || nf_ct_is_dying(user) || !REFCOUNT_inc_not_zero(&user->ct_general.use)) {
 		spin_unlock_bh(&ps->lock);
 		return;
 	}
-	nf_conntrack_get(&user->ct_general);
 
 	fue = peer_fakeuser_expect(user);
 	if (fue->pmi != 0 || fue->state != FUE_STATE_CONNECTED || fue->rt_out_magic != rt_out_magic) {
@@ -1847,7 +1864,9 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 	}
 
 	if (user != NULL) {
-		nf_conntrack_get(&user->ct_general);
+		if (!REFCOUNT_inc_not_zero(&user->ct_general.use)) {
+			user = NULL;
+		}
 	} else {
 		__be16 sport = htons(get_random_u32() % (65536 - 1024) + 1024);
 		__be16 dport = htons(get_random_u32() % (65536 - 1024) + 1024);
@@ -1861,8 +1880,12 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		user->mark = oskb->mark;
 	}
 	if (ps->port_map[pmi] == NULL) {
-		nf_conntrack_get(&user->ct_general);
-		ps->port_map[pmi] = user;
+		if (likely(REFCOUNT_inc_not_zero(&user->ct_general.use))) {
+			ps->port_map[pmi] = user;
+		} else {
+			spin_unlock_bh(&ps->lock);
+			return NULL;
+		}
 	}
 	fue = peer_fakeuser_expect(user);
 	if (fue->pmi != pmi) {
