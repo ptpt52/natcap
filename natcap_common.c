@@ -1618,8 +1618,9 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	}
 	natcap_clone_timeout(ct2, ct);
 	if (!nf_ct_is_confirmed(ct2) && !ct2->master) {
-		nf_conntrack_get(&ct->ct_general);
-		ct2->master = ct;
+		if (likely(REFCOUNT_inc_not_zero(&ct->ct_general.use))) {
+			ct2->master = ct;
+		}
 	}
 	ret = nf_conntrack_confirm(skb);
 	if (ret != NF_ACCEPT) {
@@ -1708,8 +1709,9 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 			}
 			natcap_clone_timeout(ct2, ct);
 			if (!nf_ct_is_confirmed(ct2) && !ct2->master) {
-				nf_conntrack_get(&ct->ct_general);
-				ct2->master = ct;
+				if (likely(REFCOUNT_inc_not_zero(&ct->ct_general.use))) {
+					ct2->master = ct;
+				}
 			}
 			ret = nf_conntrack_confirm(*ping_skb);
 			if (ret != NF_ACCEPT) {

@@ -43,6 +43,14 @@
 #include <linux/inetdevice.h>
 #include "natcap.h"
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#define REFCOUNT_inc_not_zero refcount_inc_not_zero
+#define REFCOUNT_read refcount_read
+#else
+#define REFCOUNT_inc_not_zero atomic_inc_not_zero
+#define REFCOUNT_read atomic_read
+#endif
+
 #if defined(CONFIG_NF_CONNTRACK_MARK)
 #else
 #error "Please enable CONFIG_NF_CONNTRACK_MARK in kernel config"
