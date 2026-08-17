@@ -1891,6 +1891,12 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		}
 		user->mark = oskb->mark;
 	}
+	fue = peer_fakeuser_expect(user);
+	if (fue->pmi != pmi) {
+		nf_ct_put(user);
+		spin_unlock_bh(&ps->lock);
+		return NULL;
+	}
 	if (ps->port_map[pmi] == NULL) {
 		if (likely(REFCOUNT_inc_not_zero(&user->ct_general.use))) {
 			ps->port_map[pmi] = user;
@@ -1898,12 +1904,6 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 			spin_unlock_bh(&ps->lock);
 			return NULL;
 		}
-	}
-	fue = peer_fakeuser_expect(user);
-	if (fue->pmi != pmi) {
-		nf_ct_put(user);
-		spin_unlock_bh(&ps->lock);
-		return NULL;
 	}
 
 	if (fue->state == FUE_STATE_CONNECTED) {
@@ -3319,11 +3319,11 @@ sni_out:
 					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(synack) SYNACK, sending ping(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
 					natcap_peer_ping_send(skb, in, ps, pmi, fue->mss);
 				}
-				nf_ct_put(user);
 
 				if (tcpopt->header.opcode == TCPOPT_PEER_V2) {
 					if (skb->len >= iph->ihl * 4 + TCPH(l4)->doff * 4 + sizeof(peer_pub_ip)) {
 						if (!pskb_may_pull(skb, skb->len)) {
+							nf_ct_put(user);
 							return NF_DROP;
 						}
 						iph = ip_hdr(skb);
@@ -3374,6 +3374,7 @@ sni_out:
 					offset += skb_tailroom(skb);
 					if (add_len > 0 && pskb_expand_head(skb, 0, add_len, GFP_ATOMIC)) {
 						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": pskb_expand_head failed add_len=%u\n", DEBUG_TCP_ARG(iph,l4), add_len);
+						nf_ct_put(user);
 						return NF_DROP;
 					}
 					skb->tail += offset;
@@ -3405,6 +3406,7 @@ sni_out:
 					xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
 				} while (0);
 			}
+			nf_ct_put(user);
 		} else { /* XXX no expect found, bypass */ }
 		return NF_ACCEPT;
 
