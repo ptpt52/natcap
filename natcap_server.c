@@ -463,7 +463,7 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	dev_queue_xmit(nskb);
 }
 
-static inline void natcap_auth_reply_payload(const char *payload, int payload_len, struct sk_buff *oskb, const struct net_device *dev, struct nf_conn *ct)
+static inline void natcap_auth_reply_fmt(int max_payload_len, struct sk_buff *oskb, const struct net_device *dev, struct nf_conn *ct, const char *fmt, ...)
 {
 	struct sk_buff *nskb;
 	struct ethhdr *neth, *oeth;
@@ -474,6 +474,8 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	int header_len = 0;
 	u8 protocol = IPPROTO_TCP;
 	char *data;
+	va_list args;
+	int payload_len;
 
 	oeth = (struct ethhdr *)skb_mac_header(oskb);
 	oiph = ip_hdr(oskb);
@@ -485,7 +487,7 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 		protocol = IPPROTO_UDP;
 	}
 
-	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len + header_len - (skb_headlen(oskb) + skb_tailroom(oskb));
+	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + max_payload_len + header_len - (skb_headlen(oskb) + skb_tailroom(oskb));
 	add_len = offset < 0 ? 0 : offset;
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
@@ -493,8 +495,16 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 		NATCAP_ERROR("Failed to allocate skb\n");
 		return;
 	}
-	nskb->tail += offset;
-	nskb->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len;
+	if (offset <= 0) {
+		if (pskb_trim(nskb, nskb->len + offset)) {
+			NATCAP_ERROR("failed to trim pskb: len=%d, offset=%d\n", nskb->len, offset);
+			consume_skb(nskb);
+			return;
+		}
+	} else {
+		nskb->len += offset;
+		nskb->tail += offset;
+	}
 
 	neth = eth_hdr(nskb);
 	niph = ip_hdr(nskb);
@@ -520,7 +530,24 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 	ntcph->source = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port;
 	ntcph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.tcp.port;
 	data = (char *)ntcph + sizeof(struct tcphdr);
-	memcpy(data, payload, payload_len);
+
+	va_start(args, fmt);
+	payload_len = vsnprintf(data, max_payload_len, fmt, args);
+	va_end(args);
+	if (payload_len < 0 || payload_len >= max_payload_len) {
+		NATCAP_ERROR("failed to format auth reply: payload_len=%d, max_payload_len=%d\n",
+		             payload_len, max_payload_len);
+		consume_skb(nskb);
+		return;
+	}
+
+	if (payload_len < max_payload_len) {
+		int diff = max_payload_len - payload_len;
+		nskb->len -= diff;
+		nskb->tail -= diff;
+	}
+	niph->tot_len = htons(nskb->len);
+
 	ntcph->seq = otcph->ack_seq;
 	ntcph->ack_seq = htonl(ntohl(otcph->seq) + ntohs(oiph->tot_len) - oiph->ihl * 4 - otcph->doff * 4);
 	tcp_flag_word(ntcph) = TCP_FLAG_PSH | TCP_FLAG_ACK | TCP_FLAG_FIN;
@@ -573,6 +600,14 @@ static inline void natcap_auth_reply_payload(const char *payload, int payload_le
 
 char *auth_http_redirect_url = NULL;
 
+#define HTTP_302_BODY_FMT \
+	"<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\r\n" \
+	"<TITLE>302 Moved</TITLE></HEAD><BODY>\r\n" \
+	"<H1>302 Moved</H1>\r\n" \
+	"The document has moved\r\n" \
+	"<A HREF=\"%s\">here</A>.\r\n" \
+	"</BODY></HTML>\r\n"
+
 static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_buff *skb, struct nf_conn *ct)
 {
 	const char *http_header_fmt = ""
@@ -582,39 +617,19 @@ static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_
 	                              "Content-Type: text/html; charset=UTF-8\r\n"
 	                              "Location: %s\r\n"
 	                              "Content-Length: %u\r\n"
-	                              "\r\n";
-	const char *http_data_fmt = ""
-	                            "<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\r\n"
-	                            "<TITLE>302 Moved</TITLE></HEAD><BODY>\r\n"
-	                            "<H1>302 Moved</H1>\r\n"
-	                            "The document has moved\r\n"
-	                            "<A HREF=\"%s\">here</A>.\r\n"
-	                            "</BODY></HTML>\r\n";
+	                              "\r\n"
+	                              HTTP_302_BODY_FMT;
 	int n = 0;
-	struct {
-		char location[128];
-		char data[384];
-		char header[384];
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
-		char payload[];
-#else
-		char payload[0];
-#endif
-	} *http = kmalloc(2048, GFP_ATOMIC);
-	if (!http)
-		return;
+	char location[128];
 
 	if (auth_http_redirect_url) {
-		snprintf(http->location, sizeof(http->location), "%s", auth_http_redirect_url);
+		snprintf(location, sizeof(location), "%s", auth_http_redirect_url);
 	} else {
-		snprintf(http->location, sizeof(http->location), "http://router-sh.ptpt52.com/index.html?_t=%lu", jiffies);
+		snprintf(location, sizeof(location), "http://router-sh.ptpt52.com/index.html?_t=%lu", jiffies);
 	}
-	n = snprintf(http->data, sizeof(http->data), http_data_fmt, http->location);
-	snprintf(http->header, sizeof(http->header), http_header_fmt, http->location, n);
-	n = sprintf(http->payload, "%s%s", http->header, http->data);
+	n = snprintf(NULL, 0, HTTP_302_BODY_FMT, location);
 
-	natcap_auth_reply_payload(http->payload, n, skb, dev, ct);
-	kfree(http);
+	natcap_auth_reply_fmt(1024, skb, dev, ct, http_header_fmt, location, n, location);
 }
 
 static inline int natcap_auth_tcp_to_rst(struct sk_buff *skb)
