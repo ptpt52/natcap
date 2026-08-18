@@ -853,12 +853,14 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			goto done;
 		}
 	} else if (strncmp(data, "natmap_clean", 12) == 0) {
+		__be32 *old_dip;
 		natmap_start = 0;
 		natmap_end = 0;
+		old_dip = natmap_dip;
+		natmap_dip = NULL;
 		synchronize_rcu();
-		if (natmap_dip) {
-			vfree(natmap_dip);
-			natmap_dip = NULL;
+		if (old_dip) {
+			vfree(old_dip);
 		}
 		goto done;
 	} else if (strncmp(data, "natmap_start=", 13) == 0) {
