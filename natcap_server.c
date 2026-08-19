@@ -126,6 +126,9 @@ static inline int natcap_auth(const struct net_device *in,
 		}
 		if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
 			struct sk_buff *uskb = uskb_of_this_cpu();
+			if (!uskb) {
+				return E_NATCAP_AUTH_FAIL;
+			}
 			memcpy(eth_hdr(uskb)->h_source, tcpopt->all.data.mac_addr, ETH_ALEN);
 			ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
 			if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
@@ -154,6 +157,9 @@ static inline int natcap_auth(const struct net_device *in,
 		}
 		if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
 			struct sk_buff *uskb = uskb_of_this_cpu();
+			if (!uskb) {
+				return E_NATCAP_AUTH_FAIL;
+			}
 			memcpy(eth_hdr(uskb)->h_source, tcpopt->user.data.mac_addr, ETH_ALEN);
 			ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
 			if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
@@ -1281,10 +1287,14 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 					if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
 						struct sk_buff *uskb = uskb_of_this_cpu();
-						memcpy(eth_hdr(uskb)->h_source, client_mac, ETH_ALEN);
-						ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
-						if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
-							ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
+						if (!uskb) {
+							ret = 0;
+						} else {
+							memcpy(eth_hdr(uskb)->h_source, client_mac, ETH_ALEN);
+							ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
+							if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP))
+								ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
+						}
 						if (ret <= 0) {
 							ret = natcap_auth_request(client_mac, iph->saddr);
 						}
@@ -1833,6 +1843,13 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 				unsigned int i, idx;
 				unsigned int off = get_random_u32();
 				struct sk_buff *uskb = uskb_of_this_cpu();
+				if (!uskb) {
+					set_bit(IPS_NATCAP_PRE_BIT, &master->status);
+					set_bit(IPS_NATCAP_BYPASS_BIT, &master->status);
+					set_bit(IPS_NATCAP_SERVER_BIT, &master->status);
+					xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+					return NF_ACCEPT;
+				}
 				for (i = 0; i < PEER_PUB_NUM; i++) {
 					idx = (i + off) % PEER_PUB_NUM;
 					ip = peer_pub_ip[idx];

@@ -2570,11 +2570,18 @@ struct sk_buff *uskb_of_this_cpu(void)
 	struct sk_buff **ptr = this_cpu_ptr(&peer_user_uskbs);
 	if (!*ptr) {
 		struct ethhdr *eth;
-		*ptr = __alloc_skb(PEER_USKB_SIZE + sizeof(struct ethhdr), GFP_ATOMIC, 0, numa_node_id());
-		skb_reset_mac_header(*ptr);
-		skb_put(*ptr, sizeof(struct ethhdr));
-		skb_pull(*ptr, sizeof(struct ethhdr));
-		eth = eth_hdr(*ptr);
+		struct sk_buff *skb;
+
+		skb = __alloc_skb(PEER_USKB_SIZE + sizeof(struct ethhdr), GFP_ATOMIC, 0, numa_node_id());
+		if (!skb) {
+			return NULL;
+		}
+
+		*ptr = skb;
+		skb_reset_mac_header(skb);
+		skb_put(skb, sizeof(struct ethhdr));
+		skb_pull(skb, sizeof(struct ethhdr));
+		eth = eth_hdr(skb);
 		memset(eth, 0, sizeof(*eth));
 		eth->h_proto = __constant_htons(ETH_P_IP);
 	}
