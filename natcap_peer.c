@@ -49,6 +49,13 @@
 #include "natcap_client.h"
 #include "natcap_knock.h"
 
+#ifndef READ_ONCE
+#define READ_ONCE(x) ACCESS_ONCE(x)
+#endif
+#ifndef WRITE_ONCE
+#define WRITE_ONCE(x, val) do { ACCESS_ONCE(x) = (val); } while (0)
+#endif
+
 static unsigned int peer_open_portmap = 0;
 static unsigned int peer_mode = 0;
 static unsigned int peer_max_pmtu = 1420;
@@ -493,7 +500,7 @@ static void peer_timer_flush(struct timer_list *ignore)
 
 	peer_cache_cleaner();
 
-	if (peer_stop) {
+	if (READ_ONCE(peer_stop)) {
 		return;
 	}
 	mod_timer(&peer_timer, jiffies + HZ / 2);
@@ -542,9 +549,9 @@ static void peer_timer_start(void)
 static void peer_timer_exit(void)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 15, 0)
-	del_timer(&peer_timer);
+	del_timer_sync(&peer_timer);
 #else
-	timer_delete(&peer_timer);
+	timer_delete_sync(&peer_timer);
 #endif
 }
 
@@ -2688,7 +2695,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 	struct natcap_TCPOPT *tcpopt;
 	unsigned int pt_mode = 0;
 
-	if (peer_stop)
+	if (READ_ONCE(peer_stop))
 		return NF_ACCEPT;
 
 	if (in)
@@ -3901,7 +3908,7 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 	struct nf_conntrack_tuple_hash *h;
 	struct net *net = &init_net;
 
-	if (peer_stop)
+	if (READ_ONCE(peer_stop))
 		return NF_ACCEPT;
 
 	if (!pskb_may_pull(skb, sizeof(struct ipv6hdr))) {
@@ -4150,7 +4157,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	void *l4;
 	unsigned int iph_len;
 
-	if (peer_stop)
+	if (READ_ONCE(peer_stop))
 		return NF_ACCEPT;
 
 	if (!pskb_may_pull(skb, sizeof(struct iphdr))) {
@@ -4264,7 +4271,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 	unsigned int port;
 	int is_knock = 0;
 
-	if (peer_stop)
+	if (READ_ONCE(peer_stop))
 		return NF_ACCEPT;
 
 	if (in)
@@ -4608,7 +4615,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 	struct natcap_session *ns;
 	struct tuple server;
 
-	if (peer_stop)
+	if (READ_ONCE(peer_stop))
 		return NF_ACCEPT;
 
 	if (in)
@@ -4830,7 +4837,7 @@ static unsigned int natcap_peer_push_out_hook(void *priv,
 	void *l4;
 	struct natcap_session *ns;
 
-	if (peer_stop)
+	if (READ_ONCE(peer_stop))
 		return NF_ACCEPT;
 
 	if (in)
@@ -4976,7 +4983,7 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 	struct iphdr *iph;
 	void *l4;
 
-	if (peer_stop)
+	if (READ_ONCE(peer_stop))
 		return NF_ACCEPT;
 
 	if (in)
@@ -5825,7 +5832,7 @@ static int peer_netdev_event(struct notifier_block *this, unsigned long event, v
 	struct nf_conn *user;
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 
-	if (peer_stop)
+	if (READ_ONCE(peer_stop))
 		return NOTIFY_DONE;
 
 	if (event != NETDEV_UNREGISTER)
@@ -5948,7 +5955,7 @@ int natcap_peer_init(void)
 		goto device_create_failed;
 	}
 
-	peer_stop = 0;
+	WRITE_ONCE(peer_stop, 0);
 	peer_timer_start();
 
 	return 0;
@@ -5989,7 +5996,8 @@ void natcap_peer_exit(void)
 	unsigned int i;
 	dev_t devno;
 
-	peer_stop = 1;
+	WRITE_ONCE(peer_stop, 1);
+	peer_timer_exit();
 	synchronize_rcu();
 
 	devno = MKDEV(natcap_peer_major, natcap_peer_minor);
@@ -5999,8 +6007,6 @@ void natcap_peer_exit(void)
 	unregister_chrdev_region(devno, number_of_devices);
 
 	nf_unregister_hooks(peer_hooks, ARRAY_SIZE(peer_hooks));
-
-	peer_timer_exit();
 
 	unregister_netdevice_notifier(&peer_netdev_notifier);
 
