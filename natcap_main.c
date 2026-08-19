@@ -37,6 +37,7 @@
 #include <linux/socket.h>
 #include <linux/string.h>
 #include <linux/syscalls.h>
+#include <linux/mutex.h>
 #include <linux/tcp.h>
 #include <linux/uaccess.h>
 #include <linux/unistd.h>
@@ -62,6 +63,71 @@ static struct cdev natcap_cdev;
 const char *natcap_dev_name = "natcap_ctl";
 static struct class *natcap_class;
 static struct device *natcap_dev;
+static DEFINE_MUTEX(natmap_dip_lock);
+
+static int natmap_dip_update_range(unsigned int first, unsigned int last, __be32 dip)
+{
+	int err;
+	__be32 *old_dip;
+	__be32 *new_dip = NULL;
+	unsigned int p;
+
+	mutex_lock(&natmap_dip_lock);
+	old_dip = rcu_dereference(natmap_dip);
+
+	new_dip = vmalloc(sizeof(*new_dip) * 65536);
+	if (!new_dip) {
+		err = -ENOMEM;
+		goto out_unlock;
+	}
+
+	if (old_dip) {
+		memcpy(new_dip, old_dip, sizeof(*new_dip) * 65536);
+	} else {
+		memset(new_dip, 0, sizeof(*new_dip) * 65536);
+	}
+
+	for (p = first;;) {
+		new_dip[p] = dip;
+		if (p == last) {
+			break;
+		}
+		p = (p + 1) & 0xffff;
+	}
+
+	rcu_assign_pointer(natmap_dip, new_dip);
+	err = 0;
+
+out_unlock:
+	mutex_unlock(&natmap_dip_lock);
+	if (err != 0) {
+		if (new_dip) {
+			vfree(new_dip);
+		}
+		return err;
+	}
+
+	if (old_dip) {
+		synchronize_rcu();
+		vfree(old_dip);
+	}
+	return 0;
+}
+
+static void natmap_dip_cleanup(void)
+{
+	__be32 *old_dip;
+
+	mutex_lock(&natmap_dip_lock);
+	old_dip = rcu_dereference(natmap_dip);
+	rcu_assign_pointer(natmap_dip, NULL);
+	mutex_unlock(&natmap_dip_lock);
+
+	if (old_dip) {
+		synchronize_rcu();
+		vfree(old_dip);
+	}
+}
 
 static void *natcap_start(struct seq_file *m, loff_t *pos)
 {
@@ -838,15 +904,10 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		         ((b & 0xff) == b) &&
 		         ((c & 0xff) == c) &&
 		         ((d & 0xff) == d)) ) {
-			if (!natmap_dip) {
-				natmap_dip = vmalloc(sizeof(__be32) * 65536);
-				if (!natmap_dip) {
-					return -ENOMEM;
-				}
-				memset(natmap_dip, 0, sizeof(__be32) * 65536);
+			err = natmap_dip_update_range(port, port, htonl((a<<24)|(b<<16)|(c<<8)|(d<<0)));
+			if (err == 0) {
+				goto done;
 			}
-			natmap_dip[port] = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
-			goto done;
 		}
 		n = sscanf(data, "natmap_add=%u-%u-%u.%u.%u.%u", &port, &port1, &a, &b, &c, &d);
 		if ( (n == 6) && ((port & 0xffff) == port) && ((port1 & 0xffff) == port1) && port <= port1 &&
@@ -854,28 +915,15 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 		         ((b & 0xff) == b) &&
 		         ((c & 0xff) == c) &&
 		         ((d & 0xff) == d)) ) {
-			if (!natmap_dip) {
-				natmap_dip = vmalloc(sizeof(__be32) * 65536);
-				if (!natmap_dip) {
-					return -ENOMEM;
-				}
-				memset(natmap_dip, 0, sizeof(__be32) * 65536);
+			err = natmap_dip_update_range(port, port1, htonl((a<<24)|(b<<16)|(c<<8)|(d<<0)));
+			if (err == 0) {
+				goto done;
 			}
-			natmap_dip[port1] = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
-			for (; port < port1; port = ((port + 1) & 0xffff))
-				natmap_dip[port] = htonl((a<<24)|(b<<16)|(c<<8)|(d<<0));
-			goto done;
 		}
 	} else if (strncmp(data, "natmap_clean", 12) == 0) {
-		__be32 *old_dip;
 		natmap_start = 0;
 		natmap_end = 0;
-		old_dip = natmap_dip;
-		natmap_dip = NULL;
-		synchronize_rcu();
-		if (old_dip) {
-			vfree(old_dip);
-		}
+		natmap_dip_cleanup();
 		goto done;
 	} else if (strncmp(data, "natmap_start=", 13) == 0) {
 		unsigned int port;
