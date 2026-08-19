@@ -4579,6 +4579,9 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		unsigned int ip = 0;
 		unsigned short id = 0;
 		struct natcap_session *ns = NULL;
+		unsigned int iph_len;
+		unsigned int ip_len;
+		unsigned int udp_len;
 
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
 			return NF_DROP;
@@ -4685,11 +4688,29 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
-		if (!pskb_may_pull(skb, skb->len)) {
+		iph = ip_hdr(skb);
+		if (iph->ihl < 5) {
+			return NF_ACCEPT;
+		}
+		iph_len = iph->ihl * 4;
+		if (!pskb_may_pull(skb, iph_len + sizeof(struct udphdr))) {
 			return NF_ACCEPT;
 		}
 		iph = ip_hdr(skb);
-		l4 = (void *)iph + iph->ihl * 4;
+		l4 = (void *)iph + iph_len;
+		ip_len = ntohs(iph->tot_len);
+		udp_len = ntohs(UDPH(l4)->len);
+		if (ip_len < iph_len + sizeof(struct udphdr) ||
+		        ip_len > skb->len ||
+		        udp_len < sizeof(struct udphdr) + 12 ||
+		        udp_len > ip_len - iph_len) {
+			return NF_ACCEPT;
+		}
+		if (!pskb_may_pull(skb, iph_len + udp_len)) {
+			return NF_ACCEPT;
+		}
+		iph = ip_hdr(skb);
+		l4 = (void *)iph + iph_len;
 
 		do {
 			int i, pos;
@@ -4702,7 +4723,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			int is_cn_domain = 0;
 
 			unsigned char *p = (unsigned char *)UDPH(l4) + sizeof(struct udphdr);
-			int len = skb->len - iph->ihl * 4 - sizeof(struct udphdr);
+			int len = udp_len - sizeof(struct udphdr);
 
 			id = ntohs(get_byte2(p + 0));
 			flags = ntohs(get_byte2(p + 2));
