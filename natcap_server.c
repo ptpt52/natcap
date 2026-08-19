@@ -470,7 +470,7 @@ static inline void natcap_auth_reply_fmt(int max_payload_len, struct sk_buff *os
 	struct iphdr *niph, *oiph;
 	struct tcphdr *otcph, *ntcph;
 	struct natcap_session *ns;
-	int offset, add_len;
+	int target_len, add_len;
 	int header_len = 0;
 	u8 protocol = IPPROTO_TCP;
 	char *data;
@@ -487,23 +487,24 @@ static inline void natcap_auth_reply_fmt(int max_payload_len, struct sk_buff *os
 		protocol = IPPROTO_UDP;
 	}
 
-	offset = sizeof(struct iphdr) + sizeof(struct tcphdr) + max_payload_len + header_len - (skb_headlen(oskb) + skb_tailroom(oskb));
-	add_len = offset < 0 ? 0 : offset;
-	offset += skb_tailroom(oskb);
+	target_len = sizeof(struct iphdr) + sizeof(struct tcphdr) + max_payload_len;
+	if (oskb->len + skb_tailroom(oskb) < target_len + header_len)
+		add_len = target_len + header_len - oskb->len - skb_tailroom(oskb);
+	else
+		add_len = 0;
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
 		NATCAP_ERROR("Failed to allocate skb\n");
 		return;
 	}
-	if (offset <= 0) {
-		if (pskb_trim(nskb, nskb->len + offset)) {
-			NATCAP_ERROR("failed to trim pskb: len=%d, offset=%d\n", nskb->len, offset);
+	if (nskb->len > target_len) {
+		if (pskb_trim(nskb, target_len)) {
+			NATCAP_ERROR("failed to trim pskb: len=%d, target_len=%d\n", nskb->len, target_len);
 			consume_skb(nskb);
 			return;
 		}
-	} else {
-		nskb->len += offset;
-		nskb->tail += offset;
+	} else if (nskb->len < target_len) {
+		skb_put(nskb, target_len - nskb->len);
 	}
 
 	neth = eth_hdr(nskb);
@@ -541,12 +542,10 @@ static inline void natcap_auth_reply_fmt(int max_payload_len, struct sk_buff *os
 		return;
 	}
 
-	{
-		int diff = max_payload_len - payload_len;
-
-		/* Keep the reserved TCP-over-UDP header out of the packet length. */
-		nskb->len -= diff + header_len;
-		nskb->tail -= diff;
+	if (pskb_trim(nskb, sizeof(struct iphdr) + sizeof(struct tcphdr) + payload_len)) {
+		NATCAP_ERROR("failed to trim formatted auth reply: payload_len=%d\n", payload_len);
+		consume_skb(nskb);
+		return;
 	}
 	niph->tot_len = htons(nskb->len);
 
@@ -583,11 +582,11 @@ static inline void natcap_auth_reply_fmt(int max_payload_len, struct sk_buff *os
 		int offlen;
 		offlen = skb_tail_pointer(nskb) - (unsigned char *)UDPH(ntcph) - 4;
 		BUG_ON(offlen < 0);
+		skb_put(nskb, header_len);
 		memmove((void *)UDPH(ntcph) + 4 + 8, (void *)UDPH(ntcph) + 4, offlen);
-		niph->tot_len = htons(ntohs(niph->tot_len) + 8);
+		niph->tot_len = htons(nskb->len);
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
 		UDPH(ntcph)->check = CSUM_MANGLED_0;
-		nskb->len += 8;
 		set_byte4((void *)UDPH(ntcph) + 8, ns->peer.ver == 1 ? __constant_htonl(NATCAP_7_MAGIC) : __constant_htonl(NATCAP_F_MAGIC));
 		niph->protocol = IPPROTO_UDP;
 		skb_rcsum_tcpudp(nskb);
