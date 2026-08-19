@@ -100,15 +100,27 @@ static unsigned int natcap_knock_dnat_hook(void *priv,
 	struct iphdr *iph;
 	void *l4;
 	struct tuple server;
+	unsigned int ip_len;
 
 	if (disabled)
 		return NF_ACCEPT;
 
+	if (!pskb_may_pull(skb, sizeof(struct iphdr))) {
+		return NF_ACCEPT;
+	}
 	iph = ip_hdr(skb);
+	ip_len = ntohs(iph->tot_len);
+	if (iph->ihl < 5 || ip_len < iph->ihl * 4 + sizeof(struct tcphdr) || ip_len > skb->len) {
+		return NF_ACCEPT;
+	}
+	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+		return NF_ACCEPT;
+	}
+	iph = ip_hdr(skb);
+	l4 = (void *)iph + iph->ihl * 4;
 	if (iph->protocol != IPPROTO_TCP) {
 		return NF_ACCEPT;
 	}
-	l4 = (void *)iph + iph->ihl * 4;
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
@@ -206,15 +218,27 @@ static unsigned int natcap_knock_post_out_hook(void *priv,
 	struct iphdr *iph;
 	void *l4;
 	struct natcap_TCPOPT tcpopt = { };
+	unsigned int ip_len;
 
 	if (disabled)
 		return NF_ACCEPT;
 
+	if (!pskb_may_pull(skb, sizeof(struct iphdr))) {
+		return NF_ACCEPT;
+	}
 	iph = ip_hdr(skb);
+	ip_len = ntohs(iph->tot_len);
+	if (iph->ihl < 5 || ip_len < iph->ihl * 4 + sizeof(struct tcphdr) || ip_len > skb->len) {
+		return NF_ACCEPT;
+	}
+	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+		return NF_ACCEPT;
+	}
+	iph = ip_hdr(skb);
+	l4 = (void *)iph + iph->ihl * 4;
 	if (iph->protocol != IPPROTO_TCP) {
 		return NF_ACCEPT;
 	}
-	l4 = (void *)iph + iph->ihl * 4;
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (NULL == ct) {
