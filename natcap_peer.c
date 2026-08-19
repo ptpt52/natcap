@@ -39,6 +39,7 @@
 #include <linux/timer.h>
 #include <linux/version.h>
 #include <linux/vmalloc.h>
+#include <net/ipv6.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_helper.h>
 #include <net/netfilter/nf_conntrack_acct.h>
@@ -3892,7 +3893,10 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 #endif
 	struct ipv6hdr *ipv6h;
 	struct icmp6hdr *icmp6h;
+	unsigned int ipv6_payload_len;
 	unsigned char client_mac[ETH_ALEN];
+	int ipv6_l4_offset;
+	u8 nexthdr;
 	struct nf_conntrack_tuple tuple;
 	struct nf_conntrack_tuple_hash *h;
 	struct net *net = &init_net;
@@ -3900,9 +3904,24 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 	if (peer_stop)
 		return NF_ACCEPT;
 
+	if (!pskb_may_pull(skb, sizeof(struct ipv6hdr))) {
+		return NF_ACCEPT;
+	}
 	ipv6h = ipv6_hdr(skb);
-	if (ipv6h->nexthdr != NEXTHDR_ICMP ||
-	        (ipv6h->daddr.s6_addr[0] != 0x3f || ipv6h->daddr.s6_addr[1] != 0x99)) {
+	ipv6_payload_len = ntohs(ipv6h->payload_len);
+	if (ipv6_payload_len < sizeof(struct icmp6hdr) || ipv6_payload_len > skb->len - sizeof(struct ipv6hdr)) {
+		return NF_ACCEPT;
+	}
+	nexthdr = ipv6h->nexthdr;
+	ipv6_l4_offset = ipv6_skip_exthdr(skb, sizeof(*ipv6h), &nexthdr, NULL);
+	if (ipv6_l4_offset < 0 || nexthdr != NEXTHDR_ICMP ||
+	        (ipv6_l4_offset + (int)sizeof(struct icmp6hdr) > (int)ipv6_payload_len + (int)sizeof(*ipv6h)) ||
+	        !pskb_may_pull(skb, ipv6_l4_offset + sizeof(struct icmp6hdr))) {
+		return NF_ACCEPT;
+	}
+	icmp6h = (struct icmp6hdr *)((char *)ipv6h + ipv6_l4_offset);
+
+	if (ipv6h->daddr.s6_addr[0] != 0x3f || ipv6h->daddr.s6_addr[1] != 0x99) {
 		return NF_ACCEPT;
 	}
 
@@ -4072,7 +4091,6 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 			skb_push(nskb, (char *)ip_hdr(nskb) - (char *)eth_hdr(nskb));
 			dev_queue_xmit(nskb);
 
-			icmp6h = (struct icmp6hdr *)((char *)ipv6h + sizeof(struct ipv6hdr));
 			//printk("%pI6->%pI6\n", &ipv6h->saddr, &ipv6h->daddr);
 			//TODO ack icmp6 reply back
 
