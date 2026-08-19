@@ -65,6 +65,11 @@ static inline char *cn_domain_entries(struct cn_domain_db *db)
 	return db ? db->entries : NULL;
 }
 
+static inline const char *cn_domain_entries_const(const struct cn_domain_db *db)
+{
+	return db ? db->entries : NULL;
+}
+
 static int cn_domain_insert_entry(char *cn, int *count, int size, const char *d)
 {
 	int low;
@@ -5065,7 +5070,7 @@ static int cn_domain_clone_db(const struct cn_domain_db *old_db, int new_size, s
 	memset(db, 0, sizeof(*db) + new_size * CN_DOMAIN_SIZE);
 	if (old_db) {
 		if (old_db->count > 0) {
-			memcpy(cn_domain_entries(db), cn_domain_entries(old_db), old_db->count * CN_DOMAIN_SIZE);
+			memcpy(cn_domain_entries(db), cn_domain_entries_const(old_db), old_db->count * CN_DOMAIN_SIZE);
 		}
 		db->size = new_size;
 		db->count = old_db->count;
