@@ -547,19 +547,21 @@ static void __natcap_server_info_select(enum server_group_t x, const struct net_
 		unsigned int i, idx;
 		unsigned int off = get_random_u32();
 		struct sk_buff *uskb = uskb_of_this_cpu();
-		for (i = 0; i < PEER_PUB_NUM; i++) {
-			idx = (i + off) % PEER_PUB_NUM;
-			dst_ip = peer_pub_ip[idx];
-			ip_hdr(uskb)->daddr = dst_ip;
-			if (dst_ip != 0 && dst_ip != ip &&
-			        IP_SET_test_dst_ip(state, in, out, uskb, "ignorelist") <= 0) {
-				dst_port = htons(get_random_u32() % (65536 - 1024) + 1024);
-				dst->ip = dst_ip;
-				dst->port = dst_port;
-				dst->encryption = !!(natcap_server_use_peer & 0x2);
-				dst->tcp_encode = (natcap_server_use_peer & 0x4) ? UDP_ENCODE : TCP_ENCODE;
-				dst->udp_encode = (natcap_server_use_peer & 0x8) ? UDP_ENCODE : TCP_ENCODE;
-				return;
+		if (uskb) {
+			for (i = 0; i < PEER_PUB_NUM; i++) {
+				idx = (i + off) % PEER_PUB_NUM;
+				dst_ip = peer_pub_ip[idx];
+				ip_hdr(uskb)->daddr = dst_ip;
+				if (dst_ip != 0 && dst_ip != ip &&
+				        IP_SET_test_dst_ip(state, in, out, uskb, "ignorelist") <= 0) {
+					dst_port = htons(get_random_u32() % (65536 - 1024) + 1024);
+					dst->ip = dst_ip;
+					dst->port = dst_port;
+					dst->encryption = !!(natcap_server_use_peer & 0x2);
+					dst->tcp_encode = (natcap_server_use_peer & 0x4) ? UDP_ENCODE : TCP_ENCODE;
+					dst->udp_encode = (natcap_server_use_peer & 0x8) ? UDP_ENCODE : TCP_ENCODE;
+					return;
+				}
 			}
 		}
 	}
@@ -1618,6 +1620,13 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				unsigned int i, idx;
 				unsigned int off = get_random_u32();
 				struct sk_buff *uskb = uskb_of_this_cpu();
+				if (!uskb) {
+					set_bit(IPS_NATCAP_PRE_BIT, &master->status);
+					set_bit(IPS_NATCAP_BYPASS_BIT, &master->status);
+					set_bit(IPS_NATCAP_SERVER_BIT, &master->status);
+					xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+					return NF_ACCEPT;
+				}
 				for (i = 0; i < PEER_PUB_NUM; i++) {
 					idx = (i + off) % PEER_PUB_NUM;
 					ip = peer_pub_ip[idx];

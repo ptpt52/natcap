@@ -3030,6 +3030,9 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			if (peer_sni_auth) {
 				int ret;
 				struct sk_buff *uskb = uskb_of_this_cpu();
+				if (!uskb) {
+					return NF_DROP;
+				}
 				memcpy(eth_hdr(uskb)->h_source, client_mac, ETH_ALEN);
 				ret = IP_SET_test_src_mac(state, in, out, uskb, "snilist");
 				if (ret <= 0) {
@@ -3552,13 +3555,17 @@ syn_out:
 
 			if ((auth_enabled & NATCAP_AUTH_MATCH_MAC)) {
 				struct sk_buff *uskb = uskb_of_this_cpu();
-				memcpy(eth_hdr(uskb)->h_source, client_mac, ETH_ALEN);
-				ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
-				if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP)) {
-					__be32 old_ip = iph->saddr;
-					iph->saddr = client_ip;
-					ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
-					iph->saddr = old_ip;
+				if (!uskb) {
+					ret = 0;
+				} else {
+					memcpy(eth_hdr(uskb)->h_source, client_mac, ETH_ALEN);
+					ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
+					if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP)) {
+						__be32 old_ip = iph->saddr;
+						iph->saddr = client_ip;
+						ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
+						iph->saddr = old_ip;
+					}
 				}
 			}
 			if (ret > 0) {
