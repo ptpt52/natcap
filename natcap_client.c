@@ -49,9 +49,71 @@
 #include "natcap_peer.h"
 
 #define CN_DOMAIN_SIZE 32
-static char *cn_domain = NULL;
-static int cn_domain_size = 0;
-static int cn_domain_count = 0;
+#define CN_DOMAIN_CHUNK (128 * 1024 / CN_DOMAIN_SIZE)
+
+struct cn_domain_db {
+	int size;
+	int count;
+	char entries[];
+};
+
+static struct cn_domain_db __rcu *cn_domain;
+static DEFINE_MUTEX(cn_domain_lock);
+
+static inline char *cn_domain_entries(struct cn_domain_db *db)
+{
+	return db ? db->entries : NULL;
+}
+
+static int cn_domain_insert_entry(char *cn, int *count, int size, const char *d)
+{
+	int low;
+	int high;
+	int mid = 0;
+	int res = 0;
+
+	if (*count == 0) {
+		domain_copy(cn + *count * CN_DOMAIN_SIZE, d);
+		*count = 1;
+		return 0;
+	}
+
+	low = 0;
+	high = *count - 1;
+	while (low <= high) {
+		mid = (low + high) / 2;
+		res = domain_cmp(cn + mid * CN_DOMAIN_SIZE, d);
+		if (res == 0) {
+			return 0;
+		}
+		if (res < 0) {
+			low = mid + 1;
+		} else {
+			high = mid - 1;
+		}
+	}
+
+	if (*count + 1 > size) {
+		return -ENOMEM;
+	}
+
+	if (res < 0) {
+		memmove(cn + mid * CN_DOMAIN_SIZE + CN_DOMAIN_SIZE + CN_DOMAIN_SIZE,
+
+		        cn + mid * CN_DOMAIN_SIZE + CN_DOMAIN_SIZE,
+		        (*count - mid - 1) * CN_DOMAIN_SIZE);
+		domain_copy(cn + (mid + 1) * CN_DOMAIN_SIZE, d);
+		(*count)++;
+	} else {
+		memmove(cn + mid * CN_DOMAIN_SIZE + CN_DOMAIN_SIZE,
+		        cn + mid * CN_DOMAIN_SIZE,
+		        (*count - mid) * CN_DOMAIN_SIZE);
+		domain_copy(cn + mid * CN_DOMAIN_SIZE, d);
+		(*count)++;
+	}
+
+	return 0;
+}
 
 unsigned int server_index_natcap_mask = 0x00000000;
 #define server_index_natcap_set(index, at) *(unsigned int *)(at) = ((*(unsigned int *)(at)) & (~server_index_natcap_mask)) | ((index) & server_index_natcap_mask)
