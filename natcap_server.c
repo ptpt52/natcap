@@ -1158,7 +1158,12 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				return NF_ACCEPT;
 			}
 			if ((tcpopt.header.type & NATCAP_TCPOPT_CONFUSION)) {
-				__be32 offset = get_byte4((const void *)&tcpopt + tcpopt.header.opsize - sizeof(unsigned int));
+				if (tcpopt.header.opsize < sizeof(struct natcap_TCPOPT_header) + sizeof(__be32)) {
+					NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": invalid confusion option size=%u\n", DEBUG_TCP_ARG(iph,l4), tcpopt.header.opsize);
+					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+					return NF_ACCEPT;
+				}
+				__be32 offset = get_byte4((const void *)&tcpopt + tcpopt.header.opsize - sizeof(__be32));
 				ns->n.tcp_seq_offset = ntohl(offset);
 				short_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->n.status);
 			}
