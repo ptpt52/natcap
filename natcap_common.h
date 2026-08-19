@@ -111,8 +111,6 @@ void cone_nat_cleanup(void);
 void cone_nat_drop(__be32 iip, __be16 iport, __be32 eip, __be16 eport);
 void cone_nat_read_session(unsigned int idx, struct cone_nat_session *dst);
 void cone_snat_read_session(unsigned int idx, struct cone_snat_session *dst);
-void cone_nat_write_lock(void);
-void cone_nat_write_unlock(void);
 void cone_nat_write_session(unsigned int idx, const struct cone_nat_session *src);
 void cone_snat_write_session(unsigned int idx, const struct cone_snat_session *src);
 
