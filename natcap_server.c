@@ -541,9 +541,11 @@ static inline void natcap_auth_reply_fmt(int max_payload_len, struct sk_buff *os
 		return;
 	}
 
-	if (payload_len < max_payload_len) {
+	{
 		int diff = max_payload_len - payload_len;
-		nskb->len -= diff;
+
+		/* Keep the reserved TCP-over-UDP header out of the packet length. */
+		nskb->len -= diff + header_len;
 		nskb->tail -= diff;
 	}
 	niph->tot_len = htons(nskb->len);
