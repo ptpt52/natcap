@@ -5891,8 +5891,13 @@ int natcap_peer_init(void)
 		goto peer_port_map_alloc_failed;
 	}
 	memset(peer_port_map, 0, sizeof(struct nf_conn *) * MAX_PEER_PORT_MAP);
+	INIT_WORK(&request_natcapd_restart_work, request_natcapd_restart_work_func);
 
-	register_netdevice_notifier(&peer_netdev_notifier);
+	ret = register_netdevice_notifier(&peer_netdev_notifier);
+	if (ret != 0) {
+		NATCAP_println("register_netdevice_notifier failed! ret=%d", ret);
+		goto register_netdevice_notifier_failed;
+	}
 
 	ret = peer_timer_init();
 	if (ret != 0)
@@ -5946,8 +5951,6 @@ int natcap_peer_init(void)
 	peer_stop = 0;
 	peer_timer_start();
 
-	INIT_WORK(&request_natcapd_restart_work, request_natcapd_restart_work_func);
-
 	return 0;
 
 	//device_destroy(natcap_peer_class, devno);
@@ -5963,6 +5966,19 @@ nf_register_hooks_failed:
 	peer_timer_exit();
 peer_timer_init_failed:
 	unregister_netdevice_notifier(&peer_netdev_notifier);
+register_netdevice_notifier_failed:
+	if (peer_port_map != NULL) {
+		spin_lock_bh(&peer_port_map_lock);
+		for (i = 0; i < MAX_PEER_PORT_MAP; i++) {
+			if (peer_port_map[i] != NULL) {
+				nf_ct_put(peer_port_map[i]);
+				peer_port_map[i] = NULL;
+			}
+		}
+		spin_unlock_bh(&peer_port_map_lock);
+		vfree(peer_port_map);
+		peer_port_map = NULL;
+	}
 peer_port_map_alloc_failed:
 	peer_sni_cache_cleanup();
 	return ret;
