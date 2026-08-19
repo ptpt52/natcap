@@ -1485,7 +1485,10 @@ static inline void natcap_auth_reply(const struct net_device *dev, struct sk_buf
 	ntcph->dest = otcph->source;
 	if (protocol == IPPROTO_UDP) {
 		int offlen = skb_tail_pointer(nskb) - (unsigned char *)UDPH(ntcph) - 4 - 8;
-		BUG_ON(offlen < 0);
+		if (offlen < 0) {
+			consume_skb(nskb);
+			return;
+		}
 		memmove((void *)UDPH(ntcph) + 4 + 8, (void *)UDPH(ntcph) + 4, offlen);
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
 		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_C_MAGIC));
@@ -1726,7 +1729,10 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 	ntcph->dest = otcph->source;
 	if (protocol == IPPROTO_UDP) {
 		int offlen = skb_tail_pointer(nskb) - (unsigned char *)UDPH(ntcph) - 4 - 8;
-		BUG_ON(offlen < 0);
+		if (offlen < 0) {
+			consume_skb(nskb);
+			return;
+		}
 		memmove((void *)UDPH(ntcph) + 4 + 8, (void *)UDPH(ntcph) + 4, offlen);
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
 		set_byte4((void *)UDPH(ntcph) + 8, __constant_htonl(NATCAP_C_MAGIC));
@@ -2507,7 +2513,10 @@ static inline void sni_ack_pass_back(struct sk_buff *oskb, struct sk_buff *cache
 	if (protocol == IPPROTO_UDP) {
 		int offlen;
 		offlen = skb_tail_pointer(nskb) - (unsigned char *)UDPH(ntcph) - 4;
-		BUG_ON(offlen < 0);
+		if (offlen < 0) {
+			consume_skb(nskb);
+			return;
+		}
 		memmove((void *)UDPH(ntcph) + 4 + 8, (void *)UDPH(ntcph) + 4, offlen);
 		niph->tot_len = htons(ntohs(niph->tot_len) + 8);
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
@@ -2596,7 +2605,10 @@ static inline void sni_cache_skb_pass_back(struct sk_buff *oskb, struct sk_buff 
 	if (protocol == IPPROTO_UDP) {
 		int offlen;
 		offlen = skb_tail_pointer(nskb) - (unsigned char *)UDPH(ntcph) - 4;
-		BUG_ON(offlen < 0);
+		if (offlen < 0) {
+			consume_skb(nskb);
+			return;
+		}
 		memmove((void *)UDPH(ntcph) + 4 + 8, (void *)UDPH(ntcph) + 4, offlen);
 		niph->tot_len = htons(ntohs(niph->tot_len) + 8);
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
@@ -2842,7 +2854,8 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 
 			offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4 - 8;
-			BUG_ON(offlen < 0);
+			if (offlen < 0)
+				return NF_DROP;
 			memmove((void *)UDPH(l4) + 4, (void *)UDPH(l4) + 4 + 8, offlen);
 			iph->tot_len = htons(ntohs(iph->tot_len) - 8);
 			skb->len -= 8;
@@ -4610,7 +4623,8 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			l4 = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 			offlen = skb_tail_pointer(skb) - (unsigned char *)l4 - sizeof(struct tcphdr);
-			BUG_ON(offlen < 0);
+			if (offlen < 0)
+				return NF_ACCEPT;
 			memmove((void *)l4 + sizeof(struct tcphdr) + add_len, (void *)l4 + sizeof(struct tcphdr), offlen);
 
 			skb->len += add_len;
@@ -4676,7 +4690,8 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			l4 = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 			offlen = skb_tail_pointer(skb) - (unsigned char *)l4 - sizeof(struct tcphdr);
-			BUG_ON(offlen < 0);
+			if (offlen < 0)
+				return NF_DROP;
 			memmove((void *)l4 + sizeof(struct tcphdr) + add_len, (void *)l4 + sizeof(struct tcphdr), offlen);
 
 			skb->len += add_len;
@@ -4859,7 +4874,11 @@ static unsigned int natcap_peer_push_out_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4;
-		BUG_ON(offlen < 0);
+		if (offlen < 0) {
+			consume_skb(skb);
+			skb = nskb;
+			continue;
+		}
 		memmove((void *)UDPH(l4) + 4 + 8, (void *)UDPH(l4) + 4, offlen);
 		iph->tot_len = htons(ntohs(iph->tot_len) + 8);
 		UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);

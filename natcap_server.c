@@ -344,7 +344,10 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	if (protocol == IPPROTO_UDP) {
 		int offlen;
 		offlen = skb_tail_pointer(nskb) - (unsigned char *)UDPH(ntcph) - 4;
-		BUG_ON(offlen < 0);
+		if (offlen < 0) {
+			consume_skb(nskb);
+			return;
+		}
 		memmove((void *)UDPH(ntcph) + 4 + 8, (void *)UDPH(ntcph) + 4, offlen);
 		niph->tot_len = htons(ntohs(niph->tot_len) + 8);
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
@@ -445,7 +448,10 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	if (protocol == IPPROTO_UDP) {
 		int offlen;
 		offlen = skb_tail_pointer(nskb) - (unsigned char *)UDPH(ntcph) - 4;
-		BUG_ON(offlen < 0);
+		if (offlen < 0) {
+			consume_skb(nskb);
+			return;
+		}
 		memmove((void *)UDPH(ntcph) + 4 + 8, (void *)UDPH(ntcph) + 4, offlen);
 		niph->tot_len = htons(ntohs(niph->tot_len) + 8);
 		UDPH(ntcph)->len = htons(ntohs(niph->tot_len) - niph->ihl * 4);
@@ -581,7 +587,10 @@ static inline void natcap_auth_reply_fmt(int max_payload_len, struct sk_buff *os
 	if (protocol == IPPROTO_UDP) {
 		int offlen;
 		offlen = skb_tail_pointer(nskb) - (unsigned char *)UDPH(ntcph) - 4;
-		BUG_ON(offlen < 0);
+		if (offlen < 0) {
+			consume_skb(nskb);
+			return;
+		}
 		skb_put(nskb, header_len);
 		memmove((void *)UDPH(ntcph) + 4 + 8, (void *)UDPH(ntcph) + 4, offlen);
 		niph->tot_len = htons(nskb->len);
@@ -1320,7 +1329,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 					int offlen;
 
 					offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct udphdr) - off;
-					BUG_ON(offlen < 0);
+					if (offlen < 0)
+						return NF_DROP;
 					memmove((void *)UDPH(l4) + sizeof(struct udphdr), (void *)UDPH(l4) + sizeof(struct udphdr) + off, offlen);
 					iph->tot_len = htons(ntohs(iph->tot_len) - off);
 					UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
@@ -1583,7 +1593,11 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 
 			offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4;
-			BUG_ON(offlen < 0);
+			if (offlen < 0) {
+				consume_skb(skb);
+				skb = nskb;
+				continue;
+			}
 			memmove((void *)UDPH(l4) + 4 + 8, (void *)UDPH(l4) + 4, offlen);
 			iph->tot_len = htons(ntohs(iph->tot_len) + 8);
 			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
@@ -2410,7 +2424,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		skb_nfct_reset(skb);
 
 		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4 - 8;
-		BUG_ON(offlen < 0);
+		if (offlen < 0)
+			return NF_DROP;
 		memmove((void *)UDPH(l4) + 4, (void *)UDPH(l4) + 4 + 8, offlen);
 		iph->tot_len = htons(ntohs(iph->tot_len) - 8);
 		skb->len -= 8;
@@ -3007,7 +3022,8 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		//UDPH(l4)->check = CSUM_MANGLED_0;
 
 		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4 - 8;
-		BUG_ON(offlen < 0);
+		if (offlen < 0)
+			return NF_DROP;
 		memmove((void *)UDPH(l4) + 4, (void *)UDPH(l4) + 4 + 8, offlen);
 		iph->tot_len = htons(ntohs(iph->tot_len) - 8);
 		skb->len -= 8;

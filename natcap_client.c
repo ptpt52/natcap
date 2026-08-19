@@ -2150,7 +2150,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		skb_nfct_reset(skb);
 
 		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4 - 8;
-		BUG_ON(offlen < 0);
+		if (offlen < 0)
+			return NF_DROP;
 		memmove((void *)UDPH(l4) + 4, (void *)UDPH(l4) + 4 + 8, offlen);
 		iph->tot_len = htons(ntohs(iph->tot_len) - 8);
 		skb->len -= 8;
@@ -2733,7 +2734,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		//UDPH(l4)->check = CSUM_MANGLED_0;
 
 		offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4 - 8;
-		BUG_ON(offlen < 0);
+		if (offlen < 0)
+			return NF_DROP;
 		memmove((void *)UDPH(l4) + 4, (void *)UDPH(l4) + 4 + 8, offlen);
 		iph->tot_len = htons(ntohs(iph->tot_len) - 8);
 		skb->len -= 8;
@@ -3153,7 +3155,11 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 
 			offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4;
-			BUG_ON(offlen < 0);
+			if (offlen < 0) {
+				consume_skb(skb);
+				skb = nskb;
+				continue;
+			}
 			memmove((void *)UDPH(l4) + 4 + 8, (void *)UDPH(l4) + 4, offlen);
 			iph->tot_len = htons(ntohs(iph->tot_len) + 8);
 			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
@@ -3452,7 +3458,8 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				l4 = (void *)iph + iph->ihl * 4;
 
 				offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct udphdr);
-				BUG_ON(offlen < 0);
+				if (offlen < 0)
+					return NF_DROP;
 				memmove((void *)UDPH(l4) + sizeof(struct udphdr) + off, (void *)UDPH(l4) + sizeof(struct udphdr), offlen);
 				iph->tot_len = htons(ntohs(iph->tot_len) + off);
 				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
@@ -4105,7 +4112,11 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 
 			offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - 4;
-			BUG_ON(offlen < 0);
+			if (offlen < 0) {
+				consume_skb(skb);
+				skb = nskb;
+				continue;
+			}
 			memmove((void *)UDPH(l4) + 4 + 8, (void *)UDPH(l4) + 4, offlen);
 			iph->tot_len = htons(ntohs(iph->tot_len) + 8);
 			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
@@ -4215,7 +4226,10 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				l4 = (void *)iph + iph->ihl * 4;
 
 				offlen = skb_tail_pointer(skb) - (unsigned char *)UDPH(l4) - sizeof(struct udphdr);
-				BUG_ON(offlen < 0);
+				if (offlen < 0) {
+					consume_skb(skb);
+					return NF_ACCEPT;
+				}
 				memmove((void *)UDPH(l4) + sizeof(struct udphdr) + off, (void *)UDPH(l4) + sizeof(struct udphdr), offlen);
 				iph->tot_len = htons(ntohs(iph->tot_len) + off);
 				UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);

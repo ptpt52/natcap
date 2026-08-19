@@ -614,7 +614,8 @@ int natcap_tcp_encode(struct nf_conn *ct, struct sk_buff *skb, const struct natc
 	tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
 	offlen = skb_tail_pointer(skb) - (unsigned char *)tcph - sizeof(struct tcphdr);
-	BUG_ON(offlen < 0);
+	if (offlen < 0)
+		return -EINVAL;
 	memmove((void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize, (void *)tcph + sizeof(struct tcphdr), offlen);
 	memcpy((void *)tcph + sizeof(struct tcphdr), (void *)tcpopt, tcpopt->header.opsize);
 
@@ -669,7 +670,8 @@ int natcap_tcp_decode(struct nf_conn *ct, struct sk_buff *skb, struct natcap_TCP
 	}
 
 	offlen = skb_tail_pointer(skb) - (unsigned char *)((void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize);
-	BUG_ON(offlen < 0);
+	if (offlen < 0)
+		return -EINVAL;
 	memmove((void *)tcph + sizeof(struct tcphdr), (void *)tcph + sizeof(struct tcphdr) + tcpopt->header.opsize, offlen);
 
 	tcph->doff = (tcph->doff * 4 - tcpopt->header.opsize) / 4;
@@ -2107,7 +2109,8 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 
 			offlen = skb_tail_pointer(skb) - ((unsigned char *)UDPH(l4) + sizeof(struct udphdr));
-			BUG_ON(offlen < 0);
+			if (offlen < 0)
+				return NF_DROP;
 			memmove((void *)UDPH(l4) + sizeof(struct udphdr) + 8, (void *)UDPH(l4) + sizeof(struct udphdr), offlen);
 			iph->tot_len = htons(ntohs(iph->tot_len) + 8);
 			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
@@ -2325,7 +2328,8 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 			ip = get_byte4((void *)UDPH(l4) + sizeof(struct udphdr) + 4);
 
 			offlen = skb_tail_pointer(skb) - ((unsigned char *)UDPH(l4) + sizeof(struct udphdr) + 8);
-			BUG_ON(offlen < 0);
+			if (offlen < 0)
+				return NF_DROP;
 			memmove((void *)UDPH(l4) + sizeof(struct udphdr), (void *)UDPH(l4) + sizeof(struct udphdr) + 8, offlen);
 			iph->tot_len = htons(ntohs(iph->tot_len) - 8);
 			UDPH(l4)->len = htons(ntohs(iph->tot_len) - iph->ihl * 4);
