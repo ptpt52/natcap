@@ -692,30 +692,26 @@ static inline int natcap_auth_tcp_to_rst(struct sk_buff *skb)
 
 static inline unsigned int natcap_try_http_redirect(struct iphdr *iph, struct sk_buff *skb, struct nf_conn *ct, const struct net_device *in)
 {
-	void *l4;
+	struct tcphdr *tcph;
 	unsigned char *data;
-	int data_len;
+	unsigned int data_len;
+	unsigned int payload_offset;
 	struct natcap_session *ns = natcap_session_get(ct);
 
 	if (!in) {
 		return NF_ACCEPT;
 	}
 
-	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct tcphdr))) {
+	if (!natcap_tcp_payload_get(skb, &iph, &tcph, &data, &data_len)) {
+		return NF_ACCEPT;
+	}
+	payload_offset = data - skb->data;
+	if (!skb_make_writable(skb, payload_offset + min(data_len, 5U))) {
 		return NF_DROP;
 	}
-	iph = ip_hdr(skb);
-	l4 = (void *)iph + iph->ihl * 4;
-	if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4)->doff * 4)) {
-		return NF_DROP;
-	}
-	iph = ip_hdr(skb);
-	l4 = (void *)iph + iph->ihl * 4;
-
-	data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
-	data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
-	if ((data_len > 4 && strncasecmp(data, "GET ", 4) == 0) ||
-	        (data_len > 5 && strncasecmp(data, "POST ", 5) == 0)) {
+	data = skb->data + payload_offset;
+	if ((data_len >= 4 && strncasecmp(data, "GET ", 4) == 0) ||
+	        (data_len >= 5 && strncasecmp(data, "POST ", 5) == 0)) {
 		short_set_bit(NS_NATCAP_DROP_BIT, &ns->n.status);
 		natcap_auth_http_302(in, skb, ct);
 		natcap_auth_tcp_to_rst(skb);

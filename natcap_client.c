@@ -2954,34 +2954,47 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		//	User-Agent: MicroMessenger Client
 #define WECHAT_C_POST "POST /mmtls"
 #define WECHAT_C_UA "User-Agent: MicroMessenger Client"
+#define WECHAT_C_POST_LEN (sizeof(WECHAT_C_POST) - 1)
+#define WECHAT_C_UA_LEN (sizeof(WECHAT_C_UA) - 1)
 		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL &&
 		        iph->protocol == IPPROTO_TCP &&
-		        !(IPS_NATCAP & ct->status) &&
-		        (TCPH(l4)->dest == __constant_htons(80) || TCPH(l4)->dest == __constant_htons(8080))) {
-			int data_len;
+		        !(IPS_NATCAP & ct->status)) {
+			struct tcphdr *tcph;
+			unsigned int data_len;
 			unsigned char *data;
-			data = skb->data + (iph->ihl * 4) + (TCPH(l4)->doff * 4);
-			data_len = ntohs(iph->tot_len) - ((iph->ihl * 4) + (TCPH(l4)->doff * 4));
-			if (data_len > 0) {
-				int i = 0;
-				if (strncasecmp(data, WECHAT_C_POST, strlen(WECHAT_C_POST)) == 0) {
-					i += 11;
-					while (i < data_len) {
-						while (i < data_len && data[i] != '\n') i++;
-						i++;
-						if (i + strlen(WECHAT_C_UA) < data_len && strncasecmp(data + i, WECHAT_C_UA, strlen(WECHAT_C_UA)) == 0) {
-							ip_hdr(skb)->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
-							IP_SET_add_dst_ip(state, in, out, skb, "wechat_iplist");
-							NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": add to wechat_iplist\n", DEBUG_TCP_ARG(iph,l4));
-							ip_hdr(skb)->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
+
+			if (!natcap_tcp_header_get(skb, &iph, &tcph)) {
+				return NF_ACCEPT;
+			}
+			l4 = tcph;
+			if (tcph->dest == __constant_htons(80) || tcph->dest == __constant_htons(8080)) {
+				if (!natcap_tcp_payload_get(skb, &iph, &tcph, &data, &data_len)) {
+					return NF_ACCEPT;
+				}
+				l4 = tcph;
+				if (data_len > 0) {
+					unsigned int i = 0;
+					if (data_len >= WECHAT_C_POST_LEN &&
+					        strncasecmp(data, WECHAT_C_POST, WECHAT_C_POST_LEN) == 0) {
+						i = WECHAT_C_POST_LEN;
+						while (i < data_len) {
+							while (i < data_len && data[i] != '\n') i++;
+							if (i < data_len) i++;
+							if (data_len - i >= WECHAT_C_UA_LEN &&
+							        strncasecmp(data + i, WECHAT_C_UA, WECHAT_C_UA_LEN) == 0) {
+								ip_hdr(skb)->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+								IP_SET_add_dst_ip(state, in, out, skb, "wechat_iplist");
+								NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": add to wechat_iplist\n", DEBUG_TCP_ARG(iph,l4));
+								ip_hdr(skb)->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
+							}
 						}
 					}
+					set_bit(IPS_NATCAP_BIT, &ct->status);
+					clear_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
+				} else if (tcph->syn && !tcph->ack &&
+				           !(IPS_SEEN_REPLY & ct->status)) {
+					if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 				}
-				set_bit(IPS_NATCAP_BIT, &ct->status);
-				clear_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
-			} else if (TCPH(l4)->syn && !TCPH(l4)->ack &&
-			           !(IPS_SEEN_REPLY & ct->status)) {
-				if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 			}
 		}
 
