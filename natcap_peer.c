@@ -630,6 +630,8 @@ static struct peer_server_node *peer_server_node_in(__be32 ip, unsigned short co
 
 	if (conn <= 0)
 		conn = 1;
+	else if (conn > MAX_PEER_CONN)
+		conn = MAX_PEER_CONN;
 	if (ip == 0)
 		return NULL;
 
