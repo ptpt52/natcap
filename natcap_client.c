@@ -26,12 +26,14 @@
 #include <linux/init.h>
 #include <linux/ip.h>
 #include <linux/kernel.h>
+#include <linux/mutex.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/inetdevice.h>
 #include <linux/netfilter.h>
 #include <linux/skbuff.h>
+#include <linux/rcupdate.h>
 #include <linux/string.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
@@ -4893,13 +4895,84 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 	return NF_ACCEPT;
 }
 
+static int cn_domain_lookup_locked(const struct cn_domain_db *db, const char *d)
+{
+	int low;
+	int high;
+	int mid;
+	int res;
+	int count;
+	const char *entries;
+
+	if (db == NULL) {
+		return 0;
+	}
+
+	count = db->count;
+	if (count <= 0) {
+		return 0;
+	}
+
+	entries = cn_domain_entries((struct cn_domain_db *)db);
+	if (entries == NULL) {
+		return 0;
+	}
+
+	low = 0;
+	high = count - 1;
+	while (low <= high) {
+		mid = (low + high) / 2;
+		res = domain_match(entries + mid * CN_DOMAIN_SIZE, d);
+		if (res == 0) {
+			return 1;
+		}
+		if (res < 0) {
+			low = mid + 1;
+		} else {
+			high = mid - 1;
+		}
+	}
+
+	return 0;
+}
+
+static int cn_domain_clone_db(const struct cn_domain_db *old_db, int new_size, struct cn_domain_db **out)
+{
+	struct cn_domain_db *db;
+
+	db = vmalloc(sizeof(*db) + new_size * CN_DOMAIN_SIZE);
+	if (db == NULL) {
+		return -ENOMEM;
+	}
+
+	memset(db, 0, sizeof(*db) + new_size * CN_DOMAIN_SIZE);
+	if (old_db) {
+		if (old_db->count > 0) {
+			memcpy(cn_domain_entries(db), cn_domain_entries(old_db), old_db->count * CN_DOMAIN_SIZE);
+		}
+		db->size = new_size;
+		db->count = old_db->count;
+	} else {
+		db->size = new_size;
+		db->count = 0;
+	}
+
+	*out = db;
+	return 0;
+}
+
 void cn_domain_clean(void)
 {
-	if (cn_domain) {
-		vfree(cn_domain);
-		cn_domain = NULL;
-		cn_domain_size = 0;
-		cn_domain_count = 0;
+	struct cn_domain_db *db;
+
+	mutex_lock(&cn_domain_lock);
+	db = rcu_dereference(cn_domain);
+	rcu_assign_pointer(cn_domain, NULL);
+	mutex_unlock(&cn_domain_lock);
+
+	if (db) {
+		synchronize_rcu();
+		vfree(db);
 	}
 }
 
@@ -4958,62 +5031,58 @@ int domain_cmp(const char *dst, const char *src)
 
 int cn_domain_insert(const char *d)
 {
-	int low;
-	int high;
-	int mid = 0;
-	int res = 0;
+	struct cn_domain_db *old_db;
+	struct cn_domain_db *new_db;
+	char *entries;
+	int new_size;
+	int count;
+	int err;
 
-	if (cn_domain == NULL) {
-		cn_domain_count = 0;
-		cn_domain_size = 128 * 1024 / CN_DOMAIN_SIZE;
-		cn_domain = vmalloc(CN_DOMAIN_SIZE * cn_domain_size);
-		if (cn_domain == NULL) {
-			return -ENOMEM;
-		}
-		memset(cn_domain, 0, CN_DOMAIN_SIZE * cn_domain_size);
-	}
-	if (cn_domain_count + 1 > cn_domain_size) {
-		char *tmp;
-		cn_domain_size = cn_domain_size + 128 * 1024 / CN_DOMAIN_SIZE;
-		tmp = vmalloc(CN_DOMAIN_SIZE * cn_domain_size);
-		if (tmp == NULL) {
-			return -ENOMEM;
-		}
-		memset(tmp, 0, CN_DOMAIN_SIZE * cn_domain_size);
-		memcpy(tmp, cn_domain, (cn_domain_size - 128 * 1024 / CN_DOMAIN_SIZE) * CN_DOMAIN_SIZE);
-		vfree(cn_domain);
-		cn_domain = tmp;
-		NATCAP_INFO("cn_domain_insert cn_domain_size=%d mem=%d\n", cn_domain_size, cn_domain_size * CN_DOMAIN_SIZE);
-	}
-	if (cn_domain_count == 0) {
-		domain_copy(cn_domain + cn_domain_count * CN_DOMAIN_SIZE, d);
-		cn_domain_count++;
+	mutex_lock(&cn_domain_lock);
+	old_db = rcu_dereference(cn_domain);
+	if (cn_domain_lookup_locked(old_db, d)) {
+		mutex_unlock(&cn_domain_lock);
 		return 0;
 	}
 
-	low = 0;
-	high = cn_domain_count - 1;
-	while (low <= high) {
-		mid = (low + high) / 2;
-		res = domain_cmp(cn_domain + mid * CN_DOMAIN_SIZE, d);
-		if (res == 0) {
-			return 0;
-		}
-		if (res < 0) {
-			low = mid + 1;
-		} else {
-			high = mid - 1;
-		}
+	if (old_db) {
+		new_size = old_db->size;
+	} else {
+		new_size = CN_DOMAIN_CHUNK;
 	}
 
-	if (res < 0) {
-		memmove(cn_domain + mid * CN_DOMAIN_SIZE + CN_DOMAIN_SIZE + CN_DOMAIN_SIZE, cn_domain + mid * CN_DOMAIN_SIZE + CN_DOMAIN_SIZE, (cn_domain_count - mid - 1) * CN_DOMAIN_SIZE);
-		domain_copy(cn_domain + (mid + 1) * CN_DOMAIN_SIZE, d);
-		cn_domain_count++;
-	} else {
-		memmove(cn_domain + mid * CN_DOMAIN_SIZE + CN_DOMAIN_SIZE, cn_domain + mid * CN_DOMAIN_SIZE, (cn_domain_count - mid) * CN_DOMAIN_SIZE);
-		domain_copy(cn_domain + mid * CN_DOMAIN_SIZE, d);
-		cn_domain_count++;
+	if (old_db && old_db->count >= old_db->size) {
+		new_size = old_db->size + CN_DOMAIN_CHUNK;
+	}
+
+	err = cn_domain_clone_db(old_db, new_size, &new_db);
+	if (err != 0) {
+		mutex_unlock(&cn_domain_lock);
+		return err;
+	}
+
+	entries = cn_domain_entries(new_db);
+	if (entries == NULL) {
+		vfree(new_db);
+		mutex_unlock(&cn_domain_lock);
+		return -ENOMEM;
+	}
+
+	count = new_db->count;
+	err = cn_domain_insert_entry(entries, &count, new_db->size, d);
+	if (err) {
+		vfree(new_db);
+		mutex_unlock(&cn_domain_lock);
+		return err;
+	}
+	new_db->count = count;
+
+	rcu_assign_pointer(cn_domain, new_db);
+	mutex_unlock(&cn_domain_lock);
+
+	if (old_db) {
+		synchronize_rcu();
+		vfree(old_db);
 	}
 
 	return 0;
@@ -5065,22 +5134,35 @@ int domain_match(const char *dst, const char *src)
 
 int cn_domain_lookup(const char *d)
 {
+	struct cn_domain_db *db;
+	const char *entries;
 	int low;
 	int high;
 	int mid;
 	int res;
+	int count;
 
-	if (cn_domain == NULL || cn_domain_count == 0) {
+	rcu_read_lock();
+	db = rcu_dereference(cn_domain);
+	if (db == NULL) {
+		rcu_read_unlock();
+		return 0;
+	}
+	count = db->count;
+	entries = cn_domain_entries(db);
+	if (count == 0 || entries == NULL) {
+		rcu_read_unlock();
 		return 0;
 	}
 
 	low = 0;
-	high = cn_domain_count - 1;
+	high = count - 1;
 	while (low <= high) {
 		mid = (low + high) / 2;
-		res = domain_match(cn_domain + mid * CN_DOMAIN_SIZE, d);
+		res = domain_match(entries + mid * CN_DOMAIN_SIZE, d);
 		if (res == 0) {
 			/* found match */
+			rcu_read_unlock();
 			return 1;
 		}
 		if (res < 0) {
@@ -5089,6 +5171,7 @@ int cn_domain_lookup(const char *d)
 			high = mid - 1;
 		}
 	}
+	rcu_read_unlock();
 
 	return 0;
 }
@@ -5149,21 +5232,36 @@ int cn_domain_load_from_path(const char *path)
 
 int cn_domain_load_from_raw(const char *path)
 {
-	int ret = -1;
+	int ret = 0;
 	loff_t pos = 0;
 	ssize_t bytes = 0;
-	struct file *filp;
-	char *buf;
-	char *cn_domain_tmp = NULL;
-	int cn_domain_tmp_size = 0;
+	struct file *filp = NULL;
+	char *buf = NULL;
+	struct cn_domain_db *tmp_db = NULL;
+	struct cn_domain_db *old_db = NULL;
+	int tmp_db_size = CN_DOMAIN_CHUNK;
 	int nbytes = 0;
+	char *entries;
+
+	tmp_db = vmalloc(sizeof(*tmp_db) + tmp_db_size * CN_DOMAIN_SIZE);
+	if (tmp_db == NULL) {
+		NATCAP_ERROR("unable to alloc cn_domain tmp\n");
+		return -ENOMEM;
+	}
+	memset(tmp_db, 0, sizeof(*tmp_db) + tmp_db_size * CN_DOMAIN_SIZE);
+	tmp_db->size = tmp_db_size;
 
 	buf = kmalloc(4096, GFP_KERNEL);
+	if (buf == NULL) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	filp = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
 		NATCAP_ERROR("unable to open cn_domain raw: %s\n", path);
-		return -1;
+		ret = -1;
+		goto out;
 	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
@@ -5171,69 +5269,127 @@ int cn_domain_load_from_raw(const char *path)
 #else
 	while ((bytes = kernel_read(filp, pos, buf, 4096)) > 0) {
 #endif
-		if (cn_domain_tmp == NULL || nbytes + bytes > cn_domain_tmp_size * CN_DOMAIN_SIZE) {
-			char *tmp;
-			cn_domain_tmp_size += 128 * 1024 / CN_DOMAIN_SIZE;
-			tmp = vmalloc(cn_domain_tmp_size * CN_DOMAIN_SIZE);
+		if (nbytes + bytes > tmp_db_size * CN_DOMAIN_SIZE) {
+			struct cn_domain_db *tmp;
+			int new_size = tmp_db_size + CN_DOMAIN_CHUNK;
+
+			tmp = vmalloc(sizeof(*tmp) + new_size * CN_DOMAIN_SIZE);
 			if (tmp == NULL) {
-				if (cn_domain_tmp)
-					vfree(cn_domain_tmp);
 				ret = -ENOMEM;
 				goto out;
 			}
-			if (cn_domain_tmp) {
-				memcpy(tmp, cn_domain_tmp, (cn_domain_tmp_size - 128 * 1024 / CN_DOMAIN_SIZE) * CN_DOMAIN_SIZE);
-				vfree(cn_domain_tmp);
-			}
-			cn_domain_tmp = tmp;
+			memset(tmp, 0, sizeof(*tmp) + new_size * CN_DOMAIN_SIZE);
+			memcpy(cn_domain_entries(tmp), cn_domain_entries(tmp_db), nbytes);
+			vfree(tmp_db);
+			tmp_db = tmp;
+			tmp_db_size = new_size;
+			tmp_db->size = tmp_db_size;
 		}
-		memcpy(cn_domain_tmp + nbytes, buf, bytes);
-		nbytes += bytes;
+
+		entries = cn_domain_entries(tmp_db);
+		if (entries == NULL) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		if (nbytes + bytes <= tmp_db_size * CN_DOMAIN_SIZE) {
+			memcpy(entries + nbytes, buf, bytes);
+			nbytes += bytes;
+		}
 	}
 
-	cn_domain_clean();
+	if (bytes < 0) {
+		ret = bytes;
+		goto out;
+	}
 
-	cn_domain = cn_domain_tmp;
-	cn_domain_size = cn_domain_tmp_size;
-	cn_domain_count = nbytes / CN_DOMAIN_SIZE;
+	tmp_db->count = nbytes / CN_DOMAIN_SIZE;
 
-	NATCAP_INFO("cn_domain_load_from_raw size:%d count:%d bytes:%d\n", cn_domain_size, cn_domain_count, nbytes);
+	mutex_lock(&cn_domain_lock);
+	old_db = rcu_dereference(cn_domain);
+	rcu_assign_pointer(cn_domain, tmp_db);
+	mutex_unlock(&cn_domain_lock);
+
+	if (old_db) {
+		synchronize_rcu();
+		vfree(old_db);
+	}
+
+	NATCAP_INFO("cn_domain_load_from_raw size:%d count:%d bytes:%d\n", tmp_db->size, tmp_db->count, nbytes);
+	tmp_db = NULL;
 
 out:
-	kfree(buf);
-	filp_close(filp, NULL);
+	if (filp && !IS_ERR(filp)) {
+		filp_close(filp, NULL);
+	}
+	if (buf) {
+		kfree(buf);
+	}
+	if (tmp_db) {
+		vfree(tmp_db);
+	}
+	if (ret < 0) {
+		return ret;
+	}
+
 	return 0;
 }
 
 int cn_domain_dump_path(const char *path)
 {
+	struct cn_domain_db *db = NULL;
+	char *buf = NULL;
+	ssize_t total = 0;
 	loff_t pos = 0;
 	ssize_t bytes = 0;
 	struct file *filp;
+	const char *entries;
+	int err = 0;
 
-	if (cn_domain == NULL) {
+	rcu_read_lock();
+	db = rcu_dereference(cn_domain);
+	if (db == NULL) {
+		rcu_read_unlock();
 		return -1;
 	}
+
+	total = db->count * CN_DOMAIN_SIZE;
+	entries = cn_domain_entries(db);
+	if (entries == NULL) {
+		rcu_read_unlock();
+		return -ENOMEM;
+	}
+	if (total > 0) {
+		buf = kmalloc(total, GFP_KERNEL);
+		if (buf == NULL) {
+			rcu_read_unlock();
+			return -ENOMEM;
+		}
+		memcpy(buf, entries, total);
+	}
+	rcu_read_unlock();
 
 	filp = filp_open(path, O_RDWR | O_CREAT | O_LARGEFILE | O_DSYNC, 0);
 	if (IS_ERR(filp)) {
 		NATCAP_ERROR("unable to open cn_domain dump: %s\n", path);
+		kfree(buf);
 		return -1;
 	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-	bytes = kernel_write(filp, cn_domain + pos, cn_domain_count * CN_DOMAIN_SIZE - pos, &pos);
+	bytes = kernel_write(filp, buf, total, &pos);
 #else
-	bytes = kernel_write(filp, cn_domain + pos, cn_domain_count * CN_DOMAIN_SIZE - pos, pos);
+	bytes = kernel_write(filp, buf, total, pos);
 #endif
 	NATCAP_INFO("cn_domain dump: write %d\n", (int)bytes);
+	if (bytes != total) {
+		err = -1;
+	}
 
 	filp_close(filp, NULL);
+	kfree(buf);
 
-	if (bytes != cn_domain_count * CN_DOMAIN_SIZE) {
-		return -1;
-	}
-	return 0;
+	return err;
 }
 
 static struct nf_hook_ops client_hooks[] = {
@@ -5333,9 +5489,5 @@ int natcap_client_init(void)
 void natcap_client_exit(void)
 {
 	nf_unregister_hooks(client_hooks, ARRAY_SIZE(client_hooks));
-
-	if (cn_domain) {
-		vfree(cn_domain);
-		cn_domain = NULL;
-	}
+	cn_domain_clean();
 }
