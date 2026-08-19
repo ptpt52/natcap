@@ -5274,13 +5274,18 @@ int cn_domain_load_from_path(const char *path)
 	int i, s;
 	int err;
 	int count = 0;
+	int ret = 0;
 
 	buf = kmalloc(4096, GFP_KERNEL);
+	if (buf == NULL) {
+		return -ENOMEM;
+	}
 
 	filp = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
 		NATCAP_ERROR("unable to open cn_domain file: %s\n", path);
-		return -1;
+		ret = PTR_ERR(filp);
+		goto out;
 	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
@@ -5297,7 +5302,8 @@ int cn_domain_load_from_path(const char *path)
 					buf[i] = 0;
 					err = cn_domain_insert(buf + s);
 					if (err) {
-						return err;
+						ret = err;
+						goto out;
 					}
 					if (strlen(buf + s) > CN_DOMAIN_SIZE) NATCAP_WARN("cn_domain_insert %d(%s)\n", count, buf + s);
 					count++;
@@ -5311,10 +5317,21 @@ int cn_domain_load_from_path(const char *path)
 		memmove(buf, buf + s, i - s);
 		r_idx = i - s;
 	}
+	if (bytes < 0) {
+		ret = bytes;
+		goto out;
+	}
+
+	if (ret == 0) {
+		NATCAP_INFO("cn_domain_load_from_path %d records loaded\n", count);
+	}
+
+out:
 	kfree(buf);
-	filp_close(filp, NULL);
-	NATCAP_INFO("cn_domain_load_from_path %d records loaded\n", count);
-	return 0;
+	if (filp && !IS_ERR(filp)) {
+		filp_close(filp, NULL);
+	}
+	return ret;
 }
 
 int cn_domain_load_from_raw(const char *path)
@@ -5347,7 +5364,7 @@ int cn_domain_load_from_raw(const char *path)
 	filp = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
 		NATCAP_ERROR("unable to open cn_domain raw: %s\n", path);
-		ret = -1;
+		ret = PTR_ERR(filp);
 		goto out;
 	}
 
@@ -5456,11 +5473,11 @@ int cn_domain_dump_path(const char *path)
 	}
 	rcu_read_unlock();
 
-	filp = filp_open(path, O_RDWR | O_CREAT | O_LARGEFILE | O_DSYNC, 0);
+	filp = filp_open(path, O_RDWR | O_CREAT | O_LARGEFILE | O_DSYNC | O_TRUNC, 0);
 	if (IS_ERR(filp)) {
 		NATCAP_ERROR("unable to open cn_domain dump: %s\n", path);
 		kfree(buf);
-		return -1;
+		return PTR_ERR(filp);
 	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
