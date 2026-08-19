@@ -4076,6 +4076,7 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 			//printk("%pI6->%pI6\n", &ipv6h->saddr, &ipv6h->daddr);
 			//TODO ack icmp6 reply back
 
+			put_peer_user(user);
 			consume_skb(skb);
 			return NF_STOLEN;
 		} while (0);
