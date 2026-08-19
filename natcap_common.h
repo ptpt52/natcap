@@ -352,6 +352,74 @@ static inline int natcap_tcp_header_valid(const struct sk_buff *skb,
 	       tcp_offset + tcp_hdrlen <= skb->len;
 }
 
+static inline int natcap_tcp_header_get(struct sk_buff *skb,
+                                        struct iphdr **iph_out, struct tcphdr **tcph_out)
+{
+	unsigned int network_offset = skb_network_offset(skb);
+	unsigned int ip_hdrlen;
+	unsigned int ip_tot_len;
+	struct iphdr *iph;
+	struct tcphdr *tcph;
+
+	if (network_offset > skb->len ||
+	        !pskb_may_pull(skb, network_offset + sizeof(struct iphdr))) {
+		return 0;
+	}
+
+	iph = ip_hdr(skb);
+	if (iph->version != 4 || iph->ihl < 5 || iph->protocol != IPPROTO_TCP) {
+		return 0;
+	}
+	ip_hdrlen = iph->ihl * 4;
+	ip_tot_len = ntohs(iph->tot_len);
+	if (ip_tot_len < ip_hdrlen + sizeof(struct tcphdr) ||
+	        ip_tot_len > skb->len - network_offset ||
+	        !pskb_may_pull(skb, network_offset + ip_hdrlen + sizeof(struct tcphdr))) {
+		return 0;
+	}
+
+	iph = ip_hdr(skb);
+	tcph = (struct tcphdr *)((unsigned char *)iph + ip_hdrlen);
+	if (!natcap_tcp_header_valid(skb, iph, tcph)) {
+		return 0;
+	}
+
+	*iph_out = iph;
+	*tcph_out = tcph;
+	return 1;
+}
+
+static inline int natcap_tcp_payload_get(struct sk_buff *skb,
+        struct iphdr **iph_out, struct tcphdr **tcph_out,
+        unsigned char **payload_out, unsigned int *payload_len_out)
+{
+	unsigned int network_offset = skb_network_offset(skb);
+	unsigned int ip_hdrlen;
+	unsigned int tcp_hdrlen;
+	unsigned int ip_tot_len;
+	struct iphdr *iph;
+	struct tcphdr *tcph;
+
+	if (!natcap_tcp_header_get(skb, &iph, &tcph)) {
+		return 0;
+	}
+
+	ip_hdrlen = iph->ihl * 4;
+	ip_tot_len = ntohs(iph->tot_len);
+	tcp_hdrlen = tcph->doff * 4;
+	if (!pskb_may_pull(skb, network_offset + ip_tot_len)) {
+		return 0;
+	}
+
+	iph = ip_hdr(skb);
+	tcph = (struct tcphdr *)((unsigned char *)iph + ip_hdrlen);
+	*iph_out = iph;
+	*tcph_out = tcph;
+	*payload_out = (unsigned char *)tcph + tcp_hdrlen;
+	*payload_len_out = ip_tot_len - ip_hdrlen - tcp_hdrlen;
+	return 1;
+}
+
 static inline unsigned int optlen(const u_int8_t *opt, unsigned int offset, unsigned int tcp_hdrlen)
 {
 	/* Beware zero-length options: make finite progress */
