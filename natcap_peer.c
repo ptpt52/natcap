@@ -4148,10 +4148,22 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	struct sk_buff *nskb;
 	struct iphdr *iph;
 	void *l4;
+	unsigned int iph_len;
 
 	if (peer_stop)
 		return NF_ACCEPT;
 
+	if (!pskb_may_pull(skb, sizeof(struct iphdr))) {
+		return NF_ACCEPT;
+	}
+	iph = ip_hdr(skb);
+	iph_len = ntohs(iph->tot_len);
+	if (iph->ihl < 5 || iph_len < iph->ihl * 4 + sizeof(struct icmphdr) || iph_len > skb->len) {
+		return NF_ACCEPT;
+	}
+	if (!pskb_may_pull(skb, iph->ihl * 4 + sizeof(struct icmphdr))) {
+		return NF_ACCEPT;
+	}
 	iph = ip_hdr(skb);
 	l4 = (void *)iph + iph->ihl * 4;
 	if (iph->protocol != IPPROTO_ICMP) {
