@@ -721,7 +721,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			tmp = kmalloc(2048, GFP_KERNEL);
 			if (!tmp)
 				return -ENOMEM;
-			n = sscanf(data, "auth_http_redirect_url=%s\n", tmp);
+			n = sscanf(data, "auth_http_redirect_url=%1023s\n", tmp);
 			if (n == 1 && memcmp("http", tmp, 4) == 0) {
 				void *old;
 				rcu_read_lock();
@@ -742,10 +742,9 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			tmp = kmalloc(1024, GFP_KERNEL);
 			if (!tmp)
 				return -ENOMEM;
-			n = sscanf(data, "htp_confusion_host=%s\n", tmp);
-			tmp[1023] = 0;
-			if (n == 1 && strlen(tmp) <= 63) {
-				strcpy(htp_confusion_host, tmp);
+			n = sscanf(data, "htp_confusion_host=%63s\n", tmp);
+			if (n == 1) {
+				strscpy(htp_confusion_host, tmp, sizeof(htp_confusion_host));
 				kfree(tmp);
 				sprintf(htp_confusion_req, htp_confusion_req_format, get_random_u32(), htp_confusion_host);
 				goto done;
@@ -757,8 +756,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			char *tmp = kmalloc(1024, GFP_KERNEL);
 			if (!tmp)
 				return -ENOMEM;
-			n = sscanf(data, "cn_domain_dump=%s\n", tmp);
-			tmp[1023] = 0;
+			n = sscanf(data, "cn_domain_dump=%1023s\n", tmp);
 			if (n == 1) {
 				err = cn_domain_dump_path(tmp);
 				if (err == 0) {
@@ -773,8 +771,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			char *tmp = kmalloc(1024, GFP_KERNEL);
 			if (!tmp)
 				return -ENOMEM;
-			n = sscanf(data, "cn_domain_path=%s\n", tmp);
-			tmp[1023] = 0;
+			n = sscanf(data, "cn_domain_path=%1023s\n", tmp);
 			if (n == 1) {
 				err = cn_domain_load_from_path(tmp);
 				if (err == 0) {
@@ -789,8 +786,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			char *tmp = kmalloc(1024, GFP_KERNEL);
 			if (!tmp)
 				return -ENOMEM;
-			n = sscanf(data, "cn_domain_raw=%s\n", tmp);
-			tmp[1023] = 0;
+			n = sscanf(data, "cn_domain_raw=%1023s\n", tmp);
 			if (n == 1) {
 				err = cn_domain_load_from_raw(tmp);
 				if (err == 0) {
@@ -803,7 +799,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	} else if (strncmp(data, "cn_domain=", 10) == 0) {
 		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
 			char tmp[128];
-			n = sscanf(data, "cn_domain=%s\n", tmp);
+			n = sscanf(data, "cn_domain=%127s\n", tmp);
 			tmp[127] = 0;
 			if (n == 1) {
 				err = cn_domain_insert(tmp);
@@ -820,7 +816,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	} else if (strncmp(data, "lk_domain=", 10) == 0) {
 		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
 			char tmp[128];
-			n = sscanf(data, "lk_domain=%s\n", tmp);
+			n = sscanf(data, "lk_domain=%127s\n", tmp);
 			tmp[127] = 0;
 			if (n == 1) {
 				n = cn_domain_lookup(tmp);
