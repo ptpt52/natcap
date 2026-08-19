@@ -143,8 +143,18 @@ static inline struct user_expect *peer_user_expect(struct nf_conn *ct)
 static inline struct natcap_TCPOPT *natcap_peer_decode_header(struct tcphdr *tcph)
 {
 	struct natcap_TCPOPT *opt;
+	unsigned int tcp_hdrlen = tcph->doff * 4;
+	unsigned int tcp_optlen;
+
+	if (tcp_hdrlen < sizeof(struct tcphdr) + sizeof(struct natcap_TCPOPT_header) ||
+	        tcp_hdrlen > 60)
+		return NULL;
+	tcp_optlen = tcp_hdrlen - sizeof(struct tcphdr);
 
 	opt = (struct natcap_TCPOPT *)((void *)tcph + sizeof(struct tcphdr));
+	if (opt->header.opsize < sizeof(struct natcap_TCPOPT_header) ||
+	        opt->header.opsize > tcp_optlen)
+		return NULL;
 	if (
 	    !(
 	        (tcph->doff * 4 >= sizeof(struct tcphdr) + ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int)) &&
