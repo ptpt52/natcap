@@ -37,6 +37,7 @@
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_nat.h>
+#include <linux/rcupdate.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
 #include <net/inet_dscp.h>
 #endif
@@ -95,7 +96,7 @@ static inline void natcap_tuple_to_ns(struct natcap_session *ns, const struct tu
 
 extern unsigned short natmap_start;
 extern unsigned short natmap_end;
-extern __be32 *natmap_dip;
+extern __be32 __rcu *natmap_dip;
 
 extern unsigned int peer_multipath;
 

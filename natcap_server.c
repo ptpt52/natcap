@@ -1860,9 +1860,16 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			}
 			if (dport && ntohs(dport) >= natmap_start && ntohs(dport) <= natmap_end && inet_is_local(in, iph->daddr)) {
 				unsigned int idx = ntohs(dport);
-				if (natmap_dip && natmap_dip[idx] != 0) {
+				__be32 mapped;
+				const __be32 *dip;
+
+				rcu_read_lock();
+				dip = rcu_dereference(natmap_dip);
+				mapped = dip ? dip[idx] : 0;
+				rcu_read_unlock();
+				if (mapped != 0) {
 					dport = htons(get_random_u32() % (65536 - 1024) + 1024);
-					if (natcap_dnat_setup(master, natmap_dip[idx], dport) != NF_ACCEPT) {
+					if (natcap_dnat_setup(master, mapped, dport) != NF_ACCEPT) {
 						return NF_DROP;
 					}
 					set_bit(IPS_NATCAP_PRE_BIT, &master->status);
@@ -1872,10 +1879,10 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 					switch (iph->protocol) {
 					case IPPROTO_TCP:
-						NATCAP_INFO("(SPI)" DEBUG_TCP_FMT ": new natmap to %pI4:%u\n", DEBUG_TCP_ARG(iph,l4), &natmap_dip[idx], ntohs(dport));
+						NATCAP_INFO("(SPI)" DEBUG_TCP_FMT ": new natmap to %pI4:%u\n", DEBUG_TCP_ARG(iph,l4), &mapped, ntohs(dport));
 						break;
 					case IPPROTO_UDP:
-						NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": new natmap to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &natmap_dip[idx], ntohs(dport));
+						NATCAP_INFO("(SPI)" DEBUG_UDP_FMT ": new natmap to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &mapped, ntohs(dport));
 						break;
 					}
 					return NF_ACCEPT;
