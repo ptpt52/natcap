@@ -26,6 +26,7 @@
 #include <linux/if_ether.h>
 #include <linux/netfilter.h>
 #include <linux/inetdevice.h>
+#include <linux/rcupdate.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_zones.h>
@@ -608,7 +609,7 @@ static inline void natcap_auth_reply_fmt(int max_payload_len, struct sk_buff *os
 	dev_queue_xmit(nskb);
 }
 
-char *auth_http_redirect_url = NULL;
+char __rcu *auth_http_redirect_url = NULL;
 
 #define HTTP_302_BODY_FMT \
 	"<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\r\n" \
@@ -631,12 +632,16 @@ static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_
 	                              HTTP_302_BODY_FMT;
 	int n = 0;
 	char location[128];
+	const char *url;
 
-	if (auth_http_redirect_url) {
-		snprintf(location, sizeof(location), "%s", auth_http_redirect_url);
+	rcu_read_lock();
+	url = rcu_dereference(auth_http_redirect_url);
+	if (url) {
+		snprintf(location, sizeof(location), "%s", url);
 	} else {
 		snprintf(location, sizeof(location), "http://router-sh.ptpt52.com/index.html?_t=%lu", jiffies);
 	}
+	rcu_read_unlock();
 	n = snprintf(NULL, 0, HTTP_302_BODY_FMT, location);
 
 	natcap_auth_reply_fmt(1024, skb, dev, ct, http_header_fmt, location, n, location);
@@ -3256,8 +3261,8 @@ void natcap_server_exit(void)
 
 	nf_unregister_hooks(server_hooks, ARRAY_SIZE(server_hooks));
 
-	tmp = auth_http_redirect_url;
-	auth_http_redirect_url = NULL;
+	tmp = rcu_dereference(auth_http_redirect_url);
+	rcu_assign_pointer(auth_http_redirect_url, NULL);
 	if (tmp) {
 		synchronize_rcu();
 		kfree(tmp);

@@ -66,9 +66,20 @@ static struct device *natcap_dev;
 static void *natcap_start(struct seq_file *m, loff_t *pos)
 {
 	int n = 0;
+	char auth_http_url[128];
+	const char *url;
 	char *natcap_ctl_buffer = m->private;
 
 	if ((*pos) == 0) {
+		auth_http_url[0] = 0;
+		rcu_read_lock();
+		url = rcu_dereference(auth_http_redirect_url);
+		if (url) {
+			strscpy(auth_http_url, url, sizeof(auth_http_url));
+		} else {
+			strscpy(auth_http_url, "", sizeof(auth_http_url));
+		}
+		rcu_read_unlock();
 		n = snprintf(natcap_ctl_buffer,
 		             PAGE_SIZE - 1,
 		             "# Version: %s\n"
@@ -157,7 +168,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             knock_flood,
 		             ntohs(natcap_redirect_port), ntohs(natcap_client_redirect_port), natcap_max_pmtu, natcap_touch_timeout,
 		             flow_total_tx_bytes, flow_total_rx_bytes,
-		             auth_http_redirect_url,
+		             auth_http_url,
 		             htp_confusion_host,
 		             server_persist_lock,
 		             dns_proxy_drop,
@@ -646,8 +657,11 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				return -ENOMEM;
 			n = sscanf(data, "auth_http_redirect_url=%s\n", tmp);
 			if (n == 1 && memcmp("http", tmp, 4) == 0) {
-				void *old = auth_http_redirect_url;
-				auth_http_redirect_url = tmp;
+				void *old;
+				rcu_read_lock();
+				old = rcu_dereference(auth_http_redirect_url);
+				rcu_read_unlock();
+				rcu_assign_pointer(auth_http_redirect_url, tmp);
 				if (old) {
 					synchronize_rcu();
 					kfree(old);
