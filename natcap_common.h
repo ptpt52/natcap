@@ -331,6 +331,22 @@ static inline struct natcap_TCPOPT *natcap_tcp_decode_header(struct tcphdr *tcph
 	return opt;
 }
 
+static inline int natcap_tcp_header_valid(const struct sk_buff *skb,
+        const struct iphdr *iph, const struct tcphdr *tcph)
+{
+	unsigned int ip_hdrlen = iph->ihl * 4;
+	unsigned int tcp_hdrlen = tcph->doff * 4;
+	unsigned int tcp_offset = (const unsigned char *)tcph -
+	                          (const unsigned char *)iph;
+	unsigned int ip_tot_len = ntohs(iph->tot_len);
+
+	return iph->ihl >= 5 && ip_hdrlen <= skb->len &&
+	       tcp_hdrlen >= sizeof(struct tcphdr) && tcp_hdrlen <= 60 &&
+	       tcp_offset >= ip_hdrlen &&
+	       tcp_offset + tcp_hdrlen <= ip_tot_len &&
+	       tcp_offset + tcp_hdrlen <= skb->len;
+}
+
 static inline unsigned int optlen(const u_int8_t *opt, unsigned int offset)
 {
 	/* Beware zero-length options: make finite progress */

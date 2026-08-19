@@ -1616,6 +1616,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xffff) ^ (ntohl(TCPH(l4)->ack_seq) & 0xffff)) ) {
+			if (!natcap_tcp_header_valid(skb, iph, TCPH(l4)))
+				return NF_ACCEPT;
 			int dir = CTINFO2DIR(ctinfo);
 			int lock_seq = (TCPH(l4)->syn && TCPH(l4)->urg_ptr == __constant_htons(1)) ? 1 : 0;
 			unsigned int tcphdr_len = TCPH(l4)->doff * 4;
@@ -1782,6 +1784,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": Decode completed for UDP-to-TCP packet\n", DEBUG_UDP_ARG(iph,l4));
 			return NF_ACCEPT;
 		} else if ( TCPH(l4)->window == htons(~(ntohs(iph->id) ^ ((ntohl(TCPH(l4)->seq) & 0xffff) | (ntohl(TCPH(l4)->ack_seq) & 0xffff)))) ) {
+			if (!natcap_tcp_header_valid(skb, iph, TCPH(l4)))
+				return NF_ACCEPT;
 			int dir = CTINFO2DIR(ctinfo);
 			unsigned int tcphdr_len = TCPH(l4)->doff * 4;
 			unsigned int foreign_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - tcphdr_len + !!TCPH(l4)->syn;
@@ -2126,6 +2130,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 		}
 
+		if (!natcap_tcp_header_valid(skb, iph, TCPH(l4 + 8)))
+			return NF_DROP;
 		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4 + 8)) {
 			return NF_DROP;
 		}
@@ -2699,6 +2705,8 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 		}
 
+		if (!natcap_tcp_header_valid(skb, iph, TCPH(l4 + 8)))
+			return NF_ACCEPT;
 		if (!skb_make_writable(skb, iph->ihl * 4 + TCPH(l4 + 8)->doff * 4 + 8)) {
 			return NF_DROP;
 		}
