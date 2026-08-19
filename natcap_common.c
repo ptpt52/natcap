@@ -23,6 +23,7 @@
 #include <linux/mman.h>
 #include <linux/spinlock.h>
 #include <linux/rcupdate.h>
+#include <linux/seqlock.h>
 #include <linux/highmem.h>
 #include <linux/udp.h>
 #include <linux/netfilter.h>
@@ -43,7 +44,7 @@
 
 unsigned short natmap_start = 0;
 unsigned short natmap_end = 0;
-__be32 *natmap_dip = NULL;
+__be32 __rcu *natmap_dip = NULL;
 
 unsigned short natcap_udp_seq_lock = 0;
 unsigned short natcap_ignore_forward = 0;
@@ -1826,35 +1827,109 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 
 struct cone_nat_session *cone_nat_array = NULL;
 struct cone_snat_session *cone_snat_array = NULL;
+static seqlock_t cone_nat_tables_seq;
+
+void cone_nat_read_session(unsigned int idx, struct cone_nat_session *dst)
+{
+	unsigned seq;
+
+	if (dst == NULL) {
+		return;
+	}
+	if (cone_nat_array == NULL) {
+		memset(dst, 0, sizeof(*dst));
+		return;
+	}
+
+	do {
+		seq = read_seqbegin(&cone_nat_tables_seq);
+		memcpy(dst, &cone_nat_array[idx], sizeof(*dst));
+	} while (read_seqretry(&cone_nat_tables_seq, seq));
+}
+
+void cone_snat_read_session(unsigned int idx, struct cone_snat_session *dst)
+{
+	unsigned seq;
+
+	if (dst == NULL) {
+		return;
+	}
+	if (cone_snat_array == NULL) {
+		memset(dst, 0, sizeof(*dst));
+		return;
+	}
+
+	do {
+		seq = read_seqbegin(&cone_nat_tables_seq);
+		memcpy(dst, &cone_snat_array[idx], sizeof(*dst));
+	} while (read_seqretry(&cone_nat_tables_seq, seq));
+}
+
+void cone_nat_write_lock(void)
+{
+	write_seqlock(&cone_nat_tables_seq);
+}
+
+void cone_nat_write_unlock(void)
+{
+	write_sequnlock(&cone_nat_tables_seq);
+}
+
+void cone_nat_write_session(unsigned int idx, const struct cone_nat_session *src)
+{
+	if (src == NULL || cone_nat_array == NULL) {
+		return;
+	}
+	memcpy(&cone_nat_array[idx], src, sizeof(*src));
+}
+
+void cone_snat_write_session(unsigned int idx, const struct cone_snat_session *src)
+{
+	if (src == NULL || cone_snat_array == NULL) {
+		return;
+	}
+	memcpy(&cone_snat_array[idx], src, sizeof(*src));
+}
 
 void cone_nat_cleanup(void)
 {
+	cone_nat_write_lock();
 	if (cone_nat_array)
 		memset(cone_nat_array, 0, sizeof(struct cone_nat_session) * 65536);
 	if (cone_snat_array)
 		memset(cone_snat_array, 0, sizeof(struct cone_snat_session) * 32768);
+	cone_nat_write_unlock();
 }
 
 void cone_nat_drop(__be32 iip, __be16 iport, __be32 eip, __be16 eport)
 {
+	struct cone_snat_session css;
+	struct cone_nat_session z_cns;
+	struct cone_snat_session z_css;
+	int idx;
+	int idx_cnt;
+
+	cone_nat_write_lock();
 	if (cone_nat_array) {
-		int idx = ntohs(eport) % 65536;
-		memset(&cone_nat_array[idx], 0, sizeof(struct cone_nat_session));
+		memset(&z_cns, 0, sizeof(z_cns));
+		idx = ntohs(eport) % 65536;
+		cone_nat_write_session(idx, &z_cns);
 	}
 	if (cone_snat_array) {
-		int idx_cnt = 8;
-		int idx = cone_snat_hash(iip, iport, eip) % 32768;
-		struct cone_snat_session css;
+		idx_cnt = 8;
+		idx = cone_snat_hash(iip, iport, eip) % 32768;
+		memset(&z_css, 0, sizeof(z_css));
 
 		while (idx_cnt-- != 0) {
-			memcpy(&css, &cone_snat_array[idx], sizeof(css));
+			cone_snat_read_session(idx, &css);
 			if (css.lan_ip == iip && css.lan_port == iport && css.wan_ip == eip) {
-				memset(&cone_snat_array[idx], 0, sizeof(struct cone_snat_session));
+				cone_snat_write_session(idx, &z_css);
 				break;
 			}
 			idx = (idx + 1) % 32768;
 		}
 	}
+	cone_nat_write_unlock();
 }
 
 #define CONE_NAT_NOW (jiffies / HZ)
@@ -1868,14 +1943,14 @@ static int cone_nat_check_used_fn(__be32 iip, __be16 iport, __be32 eip, __be16 e
 	int idx_cnt = 8;
 
 	idx = ntohs(eport) % 65536;
-	memcpy(&cns, &cone_nat_array[idx], sizeof(cns));
+	cone_nat_read_session(idx, &cns);
 	if (cns.port && ushortmindiff(CONE_NAT_NOW, cns.u16_timestamp) < 300) {
 		return 1;
 	}
 
 	idx = cone_snat_hash(iip, iport, eip) % 32768;
 	while (idx_cnt-- != 0) {
-		memcpy(&css, &cone_snat_array[idx], sizeof(css));
+		cone_snat_read_session(idx, &css);
 		if (!css.lan_ip || (css.lan_ip == iip && css.lan_port == iport) || uintmindiff(CONE_NAT_NOW, css.u32_timestamp) > 300) {
 			return 0;
 		}
@@ -1985,11 +2060,11 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 		}
 
 		cns_idx = ntohs(UDPH(l4)->dest);
-		memcpy(&cns, &cone_nat_array[cns_idx], sizeof(cns));
+		cone_nat_read_session(cns_idx, &cns);
 		css_idx = cone_snat_hash(cns.ip, cns.port, iph->daddr) % 32768;
 		idx_cnt = 8;
 		while (idx_cnt-- != 0) {
-			memcpy(&css, &cone_snat_array[css_idx], sizeof(css));
+			cone_snat_read_session(css_idx, &css);
 			if (cns.ip != 0 && cns.port != 0 && cns.ip == css.lan_ip && cns.port == css.lan_port && css.wan_ip == iph->daddr && css.wan_port == UDPH(l4)->dest) {
 				if (natcap_dnat_setup(ct, cns.ip, cns.port) != NF_ACCEPT) {
 					NATCAP_ERROR("(CCI)" DEBUG_UDP_FMT ": do mapping failed, target=%pI4:%u @port=%u\n",
@@ -1999,9 +2074,11 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 
 #if defined(CONE_NAT_CHECK_USED_HOOK)
 				cns.u16_timestamp = CONE_NAT_NOW;
-				memcpy(&cone_nat_array[cns_idx], &cns, sizeof(cns));
+				cone_nat_write_lock();
+				cone_nat_write_session(cns_idx, &cns);
+				cone_snat_write_session(css_idx, &css);
+				cone_nat_write_unlock();
 				css.u32_timestamp = CONE_NAT_NOW;
-				memcpy(&cone_snat_array[css_idx], &css, sizeof(css));
 #endif
 
 				NATCAP_INFO("(CCI)" DEBUG_UDP_FMT ": do mapping, target=%pI4:%u @port=%u\n",
@@ -2141,7 +2218,7 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 		int idx_cnt;
 
 		idx = ntohs(UDPH(l4)->source) % 65536;
-		memcpy(&cns, &cone_nat_array[idx], sizeof(cns));
+		cone_nat_read_session(idx, &cns);
 		if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip != cns.ip ||
 		        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port != cns.port) {
 
@@ -2168,21 +2245,23 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 #if defined(CONE_NAT_CHECK_USED_HOOK)
 			cns.u16_timestamp = CONE_NAT_NOW;
 #endif
-			memcpy(&cone_nat_array[idx], &cns, sizeof(cns));
-		}
+			cone_nat_write_lock();
+			cone_nat_write_session(idx, &cns);
 #if defined(CONE_NAT_CHECK_USED_HOOK)
-		if (ushortmindiff(CONE_NAT_NOW, cns.u16_timestamp) > 10) {
-			cns.u16_timestamp = CONE_NAT_NOW;
-			memcpy(&cone_nat_array[idx], &cns, sizeof(cns));
-		}
+			if (ushortmindiff(CONE_NAT_NOW, cns.u16_timestamp) > 10) {
+				cns.u16_timestamp = CONE_NAT_NOW;
+				cone_nat_write_session(idx, &cns);
+			}
 #endif
+			cone_nat_write_unlock();
+		}
 
 		idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, iph->saddr) % 32768;
 		css_idx = idx;
 		max_uint_diff = 0;
 		idx_cnt = 8;
 		while (idx_cnt-- != 0) {
-			memcpy(&css, &cone_snat_array[idx], sizeof(css));
+			cone_snat_read_session(idx, &css);
 			if (css.wan_ip == iph->saddr && css.wan_port == UDPH(l4)->source &&
 			        css.lan_ip == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip &&
 			        css.lan_port == ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port) {
@@ -2199,7 +2278,7 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 			idx = (idx + 1) % 32768;
 		}
 		idx = css_idx;
-		memcpy(&css, &cone_snat_array[idx], sizeof(css));
+		cone_snat_read_session(idx, &css);
 		if (max_uint_diff != 0) {
 			if ((css.lan_ip || css.wan_port)
 #if defined(CONE_NAT_CHECK_USED_HOOK)
@@ -2227,14 +2306,16 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 #if defined(CONE_NAT_CHECK_USED_HOOK)
 			css.u32_timestamp = CONE_NAT_NOW;
 #endif
-			memcpy(&cone_snat_array[idx], &css, sizeof(css));
-		}
+			cone_nat_write_lock();
+			cone_snat_write_session(idx, &css);
 #if defined(CONE_NAT_CHECK_USED_HOOK)
-		if (uintmindiff(CONE_NAT_NOW, css.u32_timestamp) > 10) {
-			css.u32_timestamp = CONE_NAT_NOW;
-			memcpy(&cone_nat_array[idx], &css, sizeof(css));
-		}
+			if (uintmindiff(CONE_NAT_NOW, css.u32_timestamp) > 10) {
+				css.u32_timestamp = CONE_NAT_NOW;
+				cone_snat_write_session(idx, &css);
+			}
 #endif
+			cone_nat_write_unlock();
+		}
 	}
 
 	return NF_ACCEPT;
@@ -2411,12 +2492,12 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 		css_idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, newsrc) % 32768;
 		idx_cnt = 8;
 		while (idx_cnt-- != 0) {
-			memcpy(&css, &cone_snat_array[css_idx], sizeof(css));
+			cone_snat_read_session(css_idx, &css);
 			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip == css.lan_ip &&
 			        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port == css.lan_port &&
 			        css.wan_ip == newsrc && css.wan_port != 0) {
 				cns_idx = ntohs(css.wan_port) % 65536;
-				memcpy(&cns, &cone_nat_array[cns_idx], sizeof(cns));
+				cone_nat_read_session(cns_idx, &cns);
 				if (__IP_SET_test_src_port(state, in, out, skb, "cone_nat_unused_port", &UDPH(l4)->source, css.wan_port) <= 0 &&
 				        cns.ip == css.lan_ip && cns.port == css.lan_port) {
 					__be32 oldip;
@@ -2433,9 +2514,11 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 
 #if defined(CONE_NAT_CHECK_USED_HOOK)
 						cns.u16_timestamp = CONE_NAT_NOW;
-						memcpy(&cone_nat_array[cns_idx], &cns, sizeof(cns));
+						cone_nat_write_lock();
+						cone_nat_write_session(cns_idx, &cns);
 						css.u32_timestamp = CONE_NAT_NOW;
-						memcpy(&cone_nat_array[css_idx], &css, sizeof(css));
+						cone_snat_write_session(css_idx, &css);
+						cone_nat_write_unlock();
 #endif
 
 					} else {
@@ -2509,6 +2592,7 @@ int natcap_common_init(void)
 	}
 
 	dnatcap_map_init();
+	seqlock_init(&cone_nat_tables_seq);
 	cone_nat_array = vmalloc(sizeof(struct cone_nat_session) * 65536);
 	if (cone_nat_array == NULL) {
 		ret = -ENOMEM;
