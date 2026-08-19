@@ -23,7 +23,6 @@
 #include <linux/mman.h>
 #include <linux/spinlock.h>
 #include <linux/rcupdate.h>
-#include <linux/seqlock.h>
 #include <linux/highmem.h>
 #include <linux/udp.h>
 #include <linux/netfilter.h>
@@ -1827,12 +1826,9 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 
 struct cone_nat_session *cone_nat_array = NULL;
 struct cone_snat_session *cone_snat_array = NULL;
-static seqlock_t cone_nat_tables_seq;
 
 void cone_nat_read_session(unsigned int idx, struct cone_nat_session *dst)
 {
-	unsigned seq;
-
 	if (dst == NULL) {
 		return;
 	}
@@ -1841,16 +1837,11 @@ void cone_nat_read_session(unsigned int idx, struct cone_nat_session *dst)
 		return;
 	}
 
-	do {
-		seq = read_seqbegin(&cone_nat_tables_seq);
-		memcpy(dst, &cone_nat_array[idx], sizeof(*dst));
-	} while (read_seqretry(&cone_nat_tables_seq, seq));
+	memcpy(dst, &cone_nat_array[idx], sizeof(*dst));
 }
 
 void cone_snat_read_session(unsigned int idx, struct cone_snat_session *dst)
 {
-	unsigned seq;
-
 	if (dst == NULL) {
 		return;
 	}
@@ -1859,20 +1850,7 @@ void cone_snat_read_session(unsigned int idx, struct cone_snat_session *dst)
 		return;
 	}
 
-	do {
-		seq = read_seqbegin(&cone_nat_tables_seq);
-		memcpy(dst, &cone_snat_array[idx], sizeof(*dst));
-	} while (read_seqretry(&cone_nat_tables_seq, seq));
-}
-
-void cone_nat_write_lock(void)
-{
-	write_seqlock(&cone_nat_tables_seq);
-}
-
-void cone_nat_write_unlock(void)
-{
-	write_sequnlock(&cone_nat_tables_seq);
+	memcpy(dst, &cone_snat_array[idx], sizeof(*dst));
 }
 
 void cone_nat_write_session(unsigned int idx, const struct cone_nat_session *src)
@@ -1893,12 +1871,10 @@ void cone_snat_write_session(unsigned int idx, const struct cone_snat_session *s
 
 void cone_nat_cleanup(void)
 {
-	cone_nat_write_lock();
 	if (cone_nat_array)
 		memset(cone_nat_array, 0, sizeof(struct cone_nat_session) * 65536);
 	if (cone_snat_array)
 		memset(cone_snat_array, 0, sizeof(struct cone_snat_session) * 32768);
-	cone_nat_write_unlock();
 }
 
 void cone_nat_drop(__be32 iip, __be16 iport, __be32 eip, __be16 eport)
@@ -1909,7 +1885,6 @@ void cone_nat_drop(__be32 iip, __be16 iport, __be32 eip, __be16 eport)
 	int idx;
 	int idx_cnt;
 
-	cone_nat_write_lock();
 	if (cone_nat_array) {
 		memset(&z_cns, 0, sizeof(z_cns));
 		idx = ntohs(eport) % 65536;
@@ -1929,7 +1904,6 @@ void cone_nat_drop(__be32 iip, __be16 iport, __be32 eip, __be16 eport)
 			idx = (idx + 1) % 32768;
 		}
 	}
-	cone_nat_write_unlock();
 }
 
 #define CONE_NAT_NOW (jiffies / HZ)
@@ -2074,10 +2048,8 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 
 #if defined(CONE_NAT_CHECK_USED_HOOK)
 				cns.u16_timestamp = CONE_NAT_NOW;
-				cone_nat_write_lock();
 				cone_nat_write_session(cns_idx, &cns);
 				cone_snat_write_session(css_idx, &css);
-				cone_nat_write_unlock();
 				css.u32_timestamp = CONE_NAT_NOW;
 #endif
 
@@ -2245,7 +2217,6 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 #if defined(CONE_NAT_CHECK_USED_HOOK)
 			cns.u16_timestamp = CONE_NAT_NOW;
 #endif
-			cone_nat_write_lock();
 			cone_nat_write_session(idx, &cns);
 #if defined(CONE_NAT_CHECK_USED_HOOK)
 			if (ushortmindiff(CONE_NAT_NOW, cns.u16_timestamp) > 10) {
@@ -2253,7 +2224,6 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 				cone_nat_write_session(idx, &cns);
 			}
 #endif
-			cone_nat_write_unlock();
 		}
 
 		idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, iph->saddr) % 32768;
@@ -2306,7 +2276,6 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 #if defined(CONE_NAT_CHECK_USED_HOOK)
 			css.u32_timestamp = CONE_NAT_NOW;
 #endif
-			cone_nat_write_lock();
 			cone_snat_write_session(idx, &css);
 #if defined(CONE_NAT_CHECK_USED_HOOK)
 			if (uintmindiff(CONE_NAT_NOW, css.u32_timestamp) > 10) {
@@ -2314,7 +2283,6 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 				cone_snat_write_session(idx, &css);
 			}
 #endif
-			cone_nat_write_unlock();
 		}
 	}
 
@@ -2514,11 +2482,9 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 
 #if defined(CONE_NAT_CHECK_USED_HOOK)
 						cns.u16_timestamp = CONE_NAT_NOW;
-						cone_nat_write_lock();
 						cone_nat_write_session(cns_idx, &cns);
 						css.u32_timestamp = CONE_NAT_NOW;
 						cone_snat_write_session(css_idx, &css);
-						cone_nat_write_unlock();
 #endif
 
 					} else {
@@ -2599,7 +2565,6 @@ int natcap_common_init(void)
 	}
 
 	dnatcap_map_init();
-	seqlock_init(&cone_nat_tables_seq);
 	cone_nat_array = vmalloc(sizeof(struct cone_nat_session) * 65536);
 	if (cone_nat_array == NULL) {
 		ret = -ENOMEM;

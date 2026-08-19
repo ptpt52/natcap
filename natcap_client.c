@@ -3830,9 +3830,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 				cns.ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 				cns.port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port;
-				cone_nat_write_lock();
 				cone_nat_write_session(idx, &cns);
-				cone_nat_write_unlock();
 
 				idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, iph->saddr) % 32768;
 				cone_snat_read_session(idx, &css);
@@ -3850,9 +3848,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 					css.wan_port = UDPH(l4)->source;
 					css.lan_ip = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip;
 					css.lan_port = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port;
-					cone_nat_write_lock();
 					cone_snat_write_session(idx, &css);
-					cone_nat_write_unlock();
 				}
 			}
 		}
