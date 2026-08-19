@@ -4982,6 +4982,9 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 	struct net *net = &init_net;
 	struct iphdr *iph;
 	void *l4;
+	unsigned int iph_len;
+	unsigned int ip_len;
+	unsigned int udp_len;
 
 	if (READ_ONCE(peer_stop))
 		return NF_ACCEPT;
@@ -4991,13 +4994,32 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 	else if (out)
 		net = dev_net(out);
 
+	if (!pskb_may_pull(skb, sizeof(struct iphdr))) {
+		return NF_ACCEPT;
+	}
+	iph = ip_hdr(skb);
+	if (iph->ihl < 5) {
+		return NF_ACCEPT;
+	}
+	iph_len = iph->ihl * 4;
+	if (!pskb_may_pull(skb, iph_len + sizeof(struct udphdr))) {
+		return NF_ACCEPT;
+	}
 	iph = ip_hdr(skb);
 	if (iph->protocol != IPPROTO_UDP) {
 		return NF_ACCEPT;
 	}
-	l4 = (void *)iph + iph->ihl * 4;
+	l4 = (void *)iph + iph_len;
 
 	if (UDPH(l4)->dest != __constant_htons(53)) {
+		return NF_ACCEPT;
+	}
+	ip_len = ntohs(iph->tot_len);
+	udp_len = ntohs(UDPH(l4)->len);
+	if (ip_len < iph_len + sizeof(struct udphdr) ||
+	        ip_len > skb->len ||
+	        udp_len < sizeof(struct udphdr) + 12 ||
+	        udp_len > ip_len - iph_len) {
 		return NF_ACCEPT;
 	}
 
@@ -5010,11 +5032,11 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 		return NF_ACCEPT;
 	}
 
-	if (!skb_make_writable(skb, skb->len)) {
+	if (!skb_make_writable(skb, iph_len + udp_len)) {
 		return NF_ACCEPT;
 	}
 	iph = ip_hdr(skb);
-	l4 = (void *)iph + iph->ihl * 4;
+	l4 = (void *)iph + iph_len;
 
 	do {
 		struct in6_addr in6;
@@ -5031,7 +5053,7 @@ static unsigned int natcap_peer_dns_hook(void *priv,
 		struct sk_buff *nskb = NULL;
 
 		unsigned char *p = (unsigned char *)UDPH(l4) + sizeof(struct udphdr);
-		int len = skb->len - iph->ihl * 4 - sizeof(struct udphdr);
+		int len = udp_len - sizeof(struct udphdr);
 
 		id = ntohs(get_byte2(p + 0));
 		flags = ntohs(get_byte2(p + 2));
@@ -5189,9 +5211,9 @@ reply_dns:
 				nudph->dest = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all;
 				nudph->check = CSUM_MANGLED_0;
 
-				if (skb->len > niph->ihl * 4 + sizeof(struct udphdr) + pos &&
+				if (len > pos &&
 				        an_count == 0 && ns_count == 0 && ar_count == 1) {
-					ar_pad_len = skb->len - (niph->ihl * 4 + sizeof(struct udphdr) + pos);
+					ar_pad_len = len - pos;
 				}
 
 				skb_trim(nskb, niph->ihl * 4 + sizeof(struct udphdr) + pos);
