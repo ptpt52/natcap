@@ -1391,7 +1391,10 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				iph = ip_hdr(skb);
 				l4 = (void *)iph + iph->ihl * 4;
 
-				skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_decode);
+				if (skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_decode) != 0) {
+					NATCAP_ERROR("(SPCI)" DEBUG_UDP_FMT ": skb_data_hook() failed\n", DEBUG_UDP_ARG(iph,l4));
+					return NF_DROP;
+				}
 				skb_rcsum_tcpudp(skb);
 			}
 
@@ -1762,7 +1765,10 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 
-			skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode);
+			if (skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode) != 0) {
+				NATCAP_ERROR("(SPO)" DEBUG_UDP_FMT ": skb_data_hook() failed\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_DROP;
+			}
 			skb_rcsum_tcpudp(skb);
 		}
 

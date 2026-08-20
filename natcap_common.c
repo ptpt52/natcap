@@ -271,21 +271,27 @@ void natcap_data_decode(unsigned char *buf, int len)
 	}
 }
 
-void skb_data_hook(struct sk_buff *skb, int offset, int len, void (*update)(unsigned char *, int))
+int skb_data_hook(struct sk_buff *skb, int offset, int len, void (*update)(unsigned char *, int))
 {
-	int start = skb_headlen(skb);
-	int i, copy = start - offset;
+	int start;
+	int i, copy;
 	struct sk_buff *frag_iter;
-	int pos = 0;
+
+	if (!skb || !update || offset < 0 || len < 0)
+		return -EINVAL;
+	if (len == 0)
+		return 0;
+
+	start = skb_headlen(skb);
+	copy = start - offset;
 
 	if (copy > 0) {
 		if (copy > len)
 			copy = len;
 		update(skb->data + offset, copy);
 		if ((len -= copy) == 0)
-			return;
+			return 0;
 		offset += copy;
-		pos	= copy;
 	}
 
 	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
@@ -309,10 +315,9 @@ void skb_data_hook(struct sk_buff *skb, int offset, int len, void (*update)(unsi
 				vaddr = kmap_atomic(p);
 				update(vaddr + p_off, p_len);
 				kunmap_atomic(vaddr);
-				pos += p_len;
 			}
 			if (!(len -= copy))
-				return;
+				return 0;
 			offset += copy;
 #else
 			u8 *vaddr;
@@ -323,9 +328,8 @@ void skb_data_hook(struct sk_buff *skb, int offset, int len, void (*update)(unsi
 			update(vaddr + frag->page_offset + offset - start, copy);
 			kunmap_atomic(vaddr);
 			if (!(len -= copy))
-				return;
+				return 0;
 			offset += copy;
-			pos    += copy;
 #endif
 		}
 		start = end;
@@ -338,19 +342,20 @@ void skb_data_hook(struct sk_buff *skb, int offset, int len, void (*update)(unsi
 
 		end = start + frag_iter->len;
 		if ((copy = end - offset) > 0) {
+			int ret;
 			if (copy > len)
 				copy = len;
-			skb_data_hook(frag_iter, offset - start, copy, update);
+			ret = skb_data_hook(frag_iter, offset - start, copy, update);
+			if (ret != 0)
+				return ret;
 			if ((len -= copy) == 0)
-				return;
+				return 0;
 			offset += copy;
-			pos    += copy;
 		}
 		start = end;
 	}
-	BUG_ON(len);
 
-	return;
+	return len ? -EINVAL : 0;
 }
 
 int skb_rcsum_verify(struct sk_buff *skb)
@@ -632,7 +637,8 @@ do_encode:
 		iph = ip_hdr(skb);
 		tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode);
+		if (skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_encode) != 0)
+			return -EINVAL;
 	}
 	if (tcpopt->header.encryption || NATCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_TYPE_NONE) {
 		skb_rcsum_tcpudp(skb);
@@ -687,7 +693,8 @@ do_decode:
 		iph = ip_hdr(skb);
 		tcph = (struct tcphdr *)((void *)iph + iph->ihl * 4);
 
-		skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_decode);
+		if (skb_data_hook(skb, iph->ihl * 4 + tcph->doff * 4, skb->len - (iph->ihl * 4 + tcph->doff * 4), natcap_data_decode) != 0)
+			return -EINVAL;
 	}
 	if (tcpopt->header.encryption || NATCAP_TCPOPT_TYPE(tcpopt->header.type) != NATCAP_TCPOPT_TYPE_NONE) {
 		skb_rcsum_tcpudp(skb);

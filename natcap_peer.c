@@ -193,7 +193,6 @@ static inline void peer_cache_cleanup(void)
 		if (peer_cache[i].user == NULL)
 			continue;
 		ns = natcap_session_get(peer_cache[i].user);
-		//BUG_ON(ns == NULL);
 		ns->p.cache_index = 0;
 		nf_ct_put(peer_cache[i].user);
 		peer_cache[i].user = NULL;
@@ -2950,6 +2949,12 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			data = skb->data + iph->ihl * 4 + TCPH(l4)->doff * 4;
 			data_len = ntohs(iph->tot_len) - (iph->ihl * 4 + TCPH(l4)->doff * 4);
 
+			if (prev_data_len < 0 || data_len < 0) {
+				consume_skb(prev_skb);
+				consume_skb(skb);
+				return NF_STOLEN;
+			}
+
 			if (ntohl(TCPH(l4)->seq) == ntohl(TCPH(prev_l4)->seq) + prev_data_len + add_data_len) {
 				int needmore = 0;
 				if (skb->len < prev_skb->len + data_len + add_data_len &&
@@ -3013,20 +3018,25 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			int sni_type = 0;
 			unsigned int a, b, c, d, e, f;
 			unsigned char client_mac[ETH_ALEN];
-			unsigned char x = data[data_len];
-			data[data_len] = 0;
-			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got tls sni: %s\n", DEBUG_TCP_ARG(iph,l4), data);
-			n = sscanf(data, "m-%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
+			char sni_host[256];
+
+			if (data_len >= (int)sizeof(sni_host)) {
+				consume_skb(skb);
+				return NF_STOLEN;
+			}
+			memcpy(sni_host, data, data_len);
+			sni_host[data_len] = 0;
+
+			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got tls sni: %s\n", DEBUG_TCP_ARG(iph,l4), sni_host);
+			n = sscanf(sni_host, "m-%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
 			if (n != 6) {
-				n = sscanf(data, "x-%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
+				n = sscanf(sni_host, "x-%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
 				if (n != 6) {
-					data[data_len] = x;
 					consume_skb(skb);
 					return NF_STOLEN;
 				}
 				sni_type = 1;
 			}
-			data[data_len] = x;
 
 			client_mac[0] = a;
 			client_mac[1] = b;
@@ -4945,6 +4955,21 @@ static unsigned int natcap_peer_push_out_hook(void *priv,
 	return NF_STOLEN;
 }
 
+static inline int natcap_peer_dns_ensure_tailroom(struct sk_buff *skb, unsigned int reply_len, int ar_pad_len)
+{
+	unsigned int needed = reply_len;
+	unsigned int tailroom;
+
+	if (ar_pad_len > 0)
+		needed += ar_pad_len;
+
+	tailroom = skb_tailroom(skb);
+	if (tailroom >= needed)
+		return 0;
+
+	return pskb_expand_head(skb, 0, needed - tailroom, GFP_ATOMIC);
+}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_peer_dns_hook(unsigned int hooknum,
         struct sk_buff *skb,
@@ -5217,6 +5242,17 @@ reply_dns:
 					ar_pad_len = len - pos;
 				}
 
+				if (ar_pad_len > 0 && skb_tailroom(nskb) < 65) {
+					if (pskb_expand_head(nskb, 0, 65 - skb_tailroom(nskb), GFP_ATOMIC)) {
+						NATCAP_ERROR("(PD)" DEBUG_UDP_FMT ": DNS skb tailroom expand failed\n", DEBUG_UDP_ARG(iph,l4));
+						consume_skb(nskb);
+						nskb = NULL;
+						break;
+					}
+					niph = ip_hdr(nskb);
+					nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
+				}
+
 				skb_trim(nskb, niph->ihl * 4 + sizeof(struct udphdr) + pos);
 				niph->tot_len = htons(nskb->len);
 				nudph->len = ntohs(nskb->len - niph->ihl * 4);
@@ -5233,8 +5269,18 @@ reply_dns:
 			}
 
 			if (qtype == 0x0001 && ip != 0) {
-				struct iphdr *niph = ip_hdr(nskb);
-				struct udphdr *nudph = nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
+				struct iphdr *niph;
+				struct udphdr *nudph;
+
+				if (natcap_peer_dns_ensure_tailroom(nskb, 16, ar_pad_len)) {
+					NATCAP_ERROR("(PD)" DEBUG_UDP_FMT ": DNS skb tailroom expand failed\n", DEBUG_UDP_ARG(iph,l4));
+					consume_skb(nskb);
+					nskb = NULL;
+					break;
+				}
+				niph = ip_hdr(nskb);
+				nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
+				an_p = (unsigned char *)niph + nskb->len;
 
 				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6, __constant_htons(1));
 
@@ -5255,8 +5301,18 @@ reply_dns:
 				set_byte4(an_p + 12, ip);
 				break;
 			} else if (qtype == 0x001c && ip6 != 0) {
-				struct iphdr *niph = ip_hdr(nskb);
-				struct udphdr *nudph = nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
+				struct iphdr *niph;
+				struct udphdr *nudph;
+
+				if (natcap_peer_dns_ensure_tailroom(nskb, 28, ar_pad_len)) {
+					NATCAP_ERROR("(PD)" DEBUG_UDP_FMT ": DNS skb tailroom expand failed\n", DEBUG_UDP_ARG(iph,l4));
+					consume_skb(nskb);
+					nskb = NULL;
+					break;
+				}
+				niph = ip_hdr(nskb);
+				nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
+				an_p = (unsigned char *)niph + nskb->len;
 
 				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 6, __constant_htons(1));
 
@@ -5280,8 +5336,18 @@ reply_dns:
 				set_byte4(an_p + 12 + 12, in6.s6_addr32[3]);
 				break;
 			} else {
-				struct iphdr *niph = ip_hdr(nskb);
-				struct udphdr *nudph = nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
+				struct iphdr *niph;
+				struct udphdr *nudph;
+
+				if (natcap_peer_dns_ensure_tailroom(nskb, 65, ar_pad_len)) {
+					NATCAP_ERROR("(PD)" DEBUG_UDP_FMT ": DNS skb tailroom expand failed\n", DEBUG_UDP_ARG(iph,l4));
+					consume_skb(nskb);
+					nskb = NULL;
+					break;
+				}
+				niph = ip_hdr(nskb);
+				nudph = (struct udphdr *)((void *)niph + niph->ihl * 4);
+				an_p = (unsigned char *)niph + nskb->len;
 
 				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 8, htons(1));
 				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 2, __constant_htons(0x8580));

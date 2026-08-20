@@ -1529,7 +1529,10 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 
-			skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_decode);
+			if (skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_decode) != 0) {
+				NATCAP_ERROR("(CPCI)" DEBUG_UDP_FMT ": skb_data_hook() failed\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_DROP;
+			}
 			skb_rcsum_tcpudp(skb);
 		}
 
@@ -3228,7 +3231,14 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			return NF_ACCEPT;
 		}
 
-		BUG_ON(skb_htp != NULL);
+		if (skb_htp) {
+			NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": unexpected skb_htp in TCPUDPENC path\n", DEBUG_TCP_ARG(iph,l4));
+			if (skb2) {
+				consume_skb(skb2);
+			}
+			consume_skb(skb_htp);
+			return NF_DROP;
+		}
 
 		/* XXX I just confirm it first  */
 		ret = nf_conntrack_confirm(skb);
@@ -3490,7 +3500,10 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 
-			skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode);
+			if (skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode) != 0) {
+				NATCAP_ERROR("(CPO)" DEBUG_UDP_FMT ": skb_data_hook() failed\n", DEBUG_UDP_ARG(iph,l4));
+				return NF_DROP;
+			}
 			skb_rcsum_tcpudp(skb);
 		}
 
@@ -4206,7 +4219,15 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			goto out;
 		}
 
-		BUG_ON(skb_htp != NULL);
+		if (skb_htp) {
+			NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": unexpected skb_htp in TCPUDPENC path\n", DEBUG_TCP_ARG(iph,l4));
+			if (skb2) {
+				consume_skb(skb2);
+			}
+			consume_skb(skb_htp);
+			consume_skb(skb);
+			goto out;
+		}
 
 		if (skb_is_gso(skb)) {
 			struct sk_buff *segs;
@@ -4276,7 +4297,11 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 
-			skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode);
+			if (skb_data_hook(skb, iph->ihl * 4 + sizeof(struct udphdr), skb->len - (iph->ihl * 4 + sizeof(struct udphdr)), natcap_data_encode) != 0) {
+				NATCAP_ERROR("(CPMO)" DEBUG_UDP_FMT ": skb_data_hook() failed\n", DEBUG_UDP_ARG(iph,l4));
+				consume_skb(skb);
+				return NF_ACCEPT;
+			}
 			skb_rcsum_tcpudp(skb);
 		}
 

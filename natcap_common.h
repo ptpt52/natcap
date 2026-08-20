@@ -279,7 +279,7 @@ extern char htp_confusion_host[64];
 
 extern void natcap_data_encode(unsigned char *buf, int len);
 extern void natcap_data_decode(unsigned char *buf, int len);
-extern void skb_data_hook(struct sk_buff *skb, int offset, int len, void (*update)(unsigned char *, int));
+extern int skb_data_hook(struct sk_buff *skb, int offset, int len, void (*update)(unsigned char *, int));
 
 extern int skb_rcsum_verify(struct sk_buff *skb);
 extern int skb_rcsum_tcpudp(struct sk_buff *skb);
