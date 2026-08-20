@@ -3903,7 +3903,6 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 	unsigned int ipv6_payload_len;
 	unsigned char client_mac[ETH_ALEN];
 	int ipv6_l4_offset;
-	u8 nexthdr;
 	struct nf_conntrack_tuple tuple;
 	struct nf_conntrack_tuple_hash *h;
 	struct net *net = &init_net;
@@ -3919,10 +3918,11 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 	if (ipv6_payload_len < sizeof(struct icmp6hdr) || ipv6_payload_len > skb->len - sizeof(struct ipv6hdr)) {
 		return NF_ACCEPT;
 	}
-	nexthdr = ipv6h->nexthdr;
-	ipv6_l4_offset = ipv6_skip_exthdr(skb, sizeof(*ipv6h), &nexthdr, NULL);
-	if (ipv6_l4_offset < 0 || nexthdr != NEXTHDR_ICMP ||
-	        (ipv6_l4_offset + (int)sizeof(struct icmp6hdr) > (int)ipv6_payload_len + (int)sizeof(*ipv6h)) ||
+	if (ipv6h->nexthdr != NEXTHDR_ICMP) {
+		return NF_ACCEPT;
+	}
+	ipv6_l4_offset = sizeof(*ipv6h);
+	if ((ipv6_l4_offset + (int)sizeof(struct icmp6hdr) > (int)ipv6_payload_len + (int)sizeof(*ipv6h)) ||
 	        !pskb_may_pull(skb, ipv6_l4_offset + sizeof(struct icmp6hdr))) {
 		return NF_ACCEPT;
 	}
