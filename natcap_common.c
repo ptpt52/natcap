@@ -152,7 +152,7 @@ static inline ip_set_id_t natcap_ip_set_get_byname(const char *ip_set_name, stru
 #endif
 
 static inline int natcap_ip_set_test(struct ip_set *set, const struct sk_buff *skb,
-				     const struct xt_action_param *par, struct ip_set_adt_opt *opt)
+                                     const struct xt_action_param *par, struct ip_set_adt_opt *opt)
 {
 	int ret;
 
@@ -160,7 +160,7 @@ static inline int natcap_ip_set_test(struct ip_set *set, const struct sk_buff *s
 		return 0;
 
 	if (opt->dim < set->type->dimension ||
-	    !(opt->family == set->family || set->family == NFPROTO_UNSPEC))
+	        !(opt->family == set->family || set->family == NFPROTO_UNSPEC))
 		return 0;
 
 	ret = set->variant->kadt(set, skb, par, IPSET_TEST, opt);
@@ -174,8 +174,8 @@ static inline int natcap_ip_set_test(struct ip_set *set, const struct sk_buff *s
 		ret = 1;
 	} else {
 		if ((opt->cmdflags & IPSET_FLAG_RETURN_NOMATCH) &&
-		    (set->type->features & IPSET_TYPE_NOMATCH) &&
-		    (ret > 0 || ret == -ENOTEMPTY))
+		        (set->type->features & IPSET_TYPE_NOMATCH) &&
+		        (ret > 0 || ret == -ENOTEMPTY))
 			ret = -ret;
 	}
 
@@ -183,7 +183,7 @@ static inline int natcap_ip_set_test(struct ip_set *set, const struct sk_buff *s
 }
 
 static inline int natcap_ip_set_add(struct ip_set *set, const struct sk_buff *skb,
-				    const struct xt_action_param *par, struct ip_set_adt_opt *opt)
+                                    const struct xt_action_param *par, struct ip_set_adt_opt *opt)
 {
 	int ret;
 
@@ -191,7 +191,7 @@ static inline int natcap_ip_set_add(struct ip_set *set, const struct sk_buff *sk
 		return -IPSET_ERR_TYPE_MISMATCH;
 
 	if (opt->dim < set->type->dimension ||
-	    !(opt->family == set->family || set->family == NFPROTO_UNSPEC))
+	        !(opt->family == set->family || set->family == NFPROTO_UNSPEC))
 		return -IPSET_ERR_TYPE_MISMATCH;
 
 	if (!set->variant->region_lock)
@@ -204,7 +204,7 @@ static inline int natcap_ip_set_add(struct ip_set *set, const struct sk_buff *sk
 }
 
 static inline int natcap_ip_set_del(struct ip_set *set, const struct sk_buff *skb,
-				    const struct xt_action_param *par, struct ip_set_adt_opt *opt)
+                                    const struct xt_action_param *par, struct ip_set_adt_opt *opt)
 {
 	int ret;
 
@@ -212,7 +212,7 @@ static inline int natcap_ip_set_del(struct ip_set *set, const struct sk_buff *sk
 		return -IPSET_ERR_TYPE_MISMATCH;
 
 	if (opt->dim < set->type->dimension ||
-	    !(opt->family == set->family || set->family == NFPROTO_UNSPEC))
+	        !(opt->family == set->family || set->family == NFPROTO_UNSPEC))
 		return -IPSET_ERR_TYPE_MISMATCH;
 
 	if (!set->variant->region_lock)
