@@ -1515,7 +1515,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_REPLY) {
 		if (server_flow_stop && hooknum == NF_INET_POST_ROUTING) {
 			/* no stop for UDP 53 */
-			if (iph->protocol != IPPROTO_UDP || UDPH(l4)->dest != 53) {
+			if (iph->protocol != IPPROTO_UDP || UDPH(l4)->dest != __constant_htons(53)) {
 				return NF_DROP;
 			}
 		}
