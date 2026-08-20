@@ -26,6 +26,7 @@
 #include <linux/if_ether.h>
 #include <linux/netfilter.h>
 #include <linux/inetdevice.h>
+#include <linux/mutex.h>
 #include <linux/rcupdate.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_core.h>
@@ -616,6 +617,22 @@ static inline void natcap_auth_reply_fmt(int max_payload_len, struct sk_buff *os
 }
 
 char __rcu *auth_http_redirect_url = NULL;
+static DEFINE_MUTEX(auth_http_redirect_url_lock);
+
+void natcap_auth_http_redirect_url_set(char *new_url)
+{
+	char *old_url;
+
+	mutex_lock(&auth_http_redirect_url_lock);
+	old_url = rcu_dereference_protected(auth_http_redirect_url, 1);
+	rcu_assign_pointer(auth_http_redirect_url, new_url);
+	mutex_unlock(&auth_http_redirect_url_lock);
+
+	if (old_url) {
+		synchronize_rcu();
+		kfree(old_url);
+	}
+}
 
 #define HTTP_302_BODY_FMT \
 	"<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\r\n" \
@@ -702,7 +719,7 @@ static inline unsigned int natcap_try_http_redirect(struct iphdr *iph, struct sk
 		return NF_ACCEPT;
 	}
 
-	if (!natcap_tcp_payload_get(skb, &iph, &tcph, &data, &data_len)) {
+	if (!natcap_tcp_payload_get(skb, &iph, &tcph, &data, &data_len, 5)) {
 		return NF_ACCEPT;
 	}
 	payload_offset = data - skb->data;
@@ -3282,16 +3299,8 @@ cleanup_sockopt:
 
 void natcap_server_exit(void)
 {
-	void *tmp;
-
 	nf_unregister_hooks(server_hooks, ARRAY_SIZE(server_hooks));
-
-	tmp = rcu_dereference(auth_http_redirect_url);
-	rcu_assign_pointer(auth_http_redirect_url, NULL);
-	if (tmp) {
-		synchronize_rcu();
-		kfree(tmp);
-	}
+	natcap_auth_http_redirect_url_set(NULL);
 
 	nf_unregister_sockopt(&so_natcap_mark);
 	nf_unregister_sockopt(&so_natcap_dst);

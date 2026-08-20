@@ -3926,6 +3926,7 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 	        !pskb_may_pull(skb, ipv6_l4_offset + sizeof(struct icmp6hdr))) {
 		return NF_ACCEPT;
 	}
+	ipv6h = ipv6_hdr(skb);
 	icmp6h = (struct icmp6hdr *)((char *)ipv6h + ipv6_l4_offset);
 
 	if (ipv6h->daddr.s6_addr[0] != 0x3f || ipv6h->daddr.s6_addr[1] != 0x99) {

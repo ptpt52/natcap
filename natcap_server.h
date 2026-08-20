@@ -32,5 +32,6 @@ int natcap_server_init(void);
 void natcap_server_exit(void);
 
 extern char __rcu *auth_http_redirect_url;
+void natcap_auth_http_redirect_url_set(char *new_url);
 
 #endif /* _NATCAP_SERVER_H_ */

@@ -2048,9 +2048,9 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 
 #if defined(CONE_NAT_CHECK_USED_HOOK)
 				cns.u16_timestamp = CONE_NAT_NOW;
+				css.u32_timestamp = CONE_NAT_NOW;
 				cone_nat_write_session(cns_idx, &cns);
 				cone_snat_write_session(css_idx, &css);
-				css.u32_timestamp = CONE_NAT_NOW;
 #endif
 
 				NATCAP_INFO("(CCI)" DEBUG_UDP_FMT ": do mapping, target=%pI4:%u @port=%u\n",
@@ -2218,13 +2218,13 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 			cns.u16_timestamp = CONE_NAT_NOW;
 #endif
 			cone_nat_write_session(idx, &cns);
-#if defined(CONE_NAT_CHECK_USED_HOOK)
-			if (ushortmindiff(CONE_NAT_NOW, cns.u16_timestamp) > 10) {
-				cns.u16_timestamp = CONE_NAT_NOW;
-				cone_nat_write_session(idx, &cns);
-			}
-#endif
 		}
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+		if (ushortmindiff(CONE_NAT_NOW, cns.u16_timestamp) > 10) {
+			cns.u16_timestamp = CONE_NAT_NOW;
+			cone_nat_write_session(idx, &cns);
+		}
+#endif
 
 		idx = cone_snat_hash(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.udp.port, iph->saddr) % 32768;
 		css_idx = idx;
@@ -2277,13 +2277,13 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 			css.u32_timestamp = CONE_NAT_NOW;
 #endif
 			cone_snat_write_session(idx, &css);
-#if defined(CONE_NAT_CHECK_USED_HOOK)
-			if (uintmindiff(CONE_NAT_NOW, css.u32_timestamp) > 10) {
-				css.u32_timestamp = CONE_NAT_NOW;
-				cone_snat_write_session(idx, &css);
-			}
-#endif
 		}
+#if defined(CONE_NAT_CHECK_USED_HOOK)
+		if (uintmindiff(CONE_NAT_NOW, css.u32_timestamp) > 10) {
+			css.u32_timestamp = CONE_NAT_NOW;
+			cone_snat_write_session(idx, &css);
+		}
+#endif
 	}
 
 	return NF_ACCEPT;

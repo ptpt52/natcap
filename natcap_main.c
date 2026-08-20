@@ -141,9 +141,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		rcu_read_lock();
 		url = rcu_dereference(auth_http_redirect_url);
 		if (url) {
-			strscpy(auth_http_url, url, sizeof(auth_http_url));
-		} else {
-			strscpy(auth_http_url, "", sizeof(auth_http_url));
+			snprintf(auth_http_url, sizeof(auth_http_url), "%s", url);
 		}
 		rcu_read_unlock();
 		n = snprintf(natcap_ctl_buffer,
@@ -723,15 +721,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				return -ENOMEM;
 			n = sscanf(data, "auth_http_redirect_url=%1023s\n", tmp);
 			if (n == 1 && memcmp("http", tmp, 4) == 0) {
-				void *old;
-				rcu_read_lock();
-				old = rcu_dereference(auth_http_redirect_url);
-				rcu_read_unlock();
-				rcu_assign_pointer(auth_http_redirect_url, tmp);
-				if (old) {
-					synchronize_rcu();
-					kfree(old);
-				}
+				natcap_auth_http_redirect_url_set(tmp);
 				goto done;
 			}
 			kfree(tmp);
@@ -744,7 +734,7 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 				return -ENOMEM;
 			n = sscanf(data, "htp_confusion_host=%63s\n", tmp);
 			if (n == 1) {
-				strscpy(htp_confusion_host, tmp, sizeof(htp_confusion_host));
+				snprintf(htp_confusion_host, sizeof(htp_confusion_host), "%s", tmp);
 				kfree(tmp);
 				sprintf(htp_confusion_req, htp_confusion_req_format, get_random_u32(), htp_confusion_host);
 				goto done;

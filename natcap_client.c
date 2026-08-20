@@ -26,7 +26,6 @@
 #include <linux/init.h>
 #include <linux/ip.h>
 #include <linux/kernel.h>
-#include <linux/mutex.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
@@ -51,24 +50,9 @@
 #define CN_DOMAIN_SIZE 32
 #define CN_DOMAIN_CHUNK (128 * 1024 / CN_DOMAIN_SIZE)
 
-struct cn_domain_db {
-	int size;
-	int count;
-	char entries[];
-};
-
-static struct cn_domain_db __rcu *cn_domain;
-static DEFINE_MUTEX(cn_domain_lock);
-
-static inline char *cn_domain_entries(struct cn_domain_db *db)
-{
-	return db ? db->entries : NULL;
-}
-
-static inline const char *cn_domain_entries_const(const struct cn_domain_db *db)
-{
-	return db ? db->entries : NULL;
-}
+static char *cn_domain;
+static int cn_domain_size;
+static int cn_domain_count;
 
 static int cn_domain_insert_entry(char *cn, int *count, int size, const char *d)
 {
@@ -2879,6 +2863,55 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 	return NF_ACCEPT;
 }
 
+#define WECHAT_C_POST "POST /mmtls"
+#define WECHAT_C_UA "User-Agent: MicroMessenger Client"
+#define WECHAT_C_POST_LEN (sizeof(WECHAT_C_POST) - 1)
+#define WECHAT_C_UA_LEN (sizeof(WECHAT_C_UA) - 1)
+#define NATCAP_HTTP_SCAN_MAX 8192
+
+static int natcap_payload_has_header(const struct sk_buff *skb,
+                                     unsigned int payload_offset, unsigned int payload_len,
+                                     const char *header, unsigned int header_len)
+{
+	unsigned char chunk[128];
+	unsigned char match[64];
+	unsigned int scan_len = min(payload_len, (unsigned int)NATCAP_HTTP_SCAN_MAX);
+	unsigned int pos = 0;
+	int line_start = 1;
+
+	if (header_len == 0 || header_len > sizeof(match)) {
+		return 0;
+	}
+
+	while (pos < scan_len) {
+		unsigned int chunk_len = min((unsigned int)sizeof(chunk), scan_len - pos);
+		unsigned int i;
+
+		if (skb_copy_bits(skb, payload_offset + pos, chunk, chunk_len) != 0) {
+			return 0;
+		}
+		for (i = 0; i < chunk_len; i++) {
+			if (line_start) {
+				unsigned int candidate = pos + i;
+
+				line_start = 0;
+				if (tolower(chunk[i]) == tolower(header[0]) &&
+				        candidate + header_len <= scan_len &&
+				        skb_copy_bits(skb, payload_offset + candidate, match, header_len) == 0 &&
+				        strncasecmp(match, header, header_len) == 0) {
+					return 1;
+				}
+			}
+			if (chunk[i] == '\n') {
+				line_start = 1;
+			}
+		}
+		pos += chunk_len;
+	}
+
+	return 0;
+}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_client_post_out_hook(unsigned int hooknum,
         struct sk_buff *skb,
@@ -2957,15 +2990,12 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		//	Host: szextshort.weixin.qq.com
 		//	Upgrade: mmtls
 		//	User-Agent: MicroMessenger Client
-#define WECHAT_C_POST "POST /mmtls"
-#define WECHAT_C_UA "User-Agent: MicroMessenger Client"
-#define WECHAT_C_POST_LEN (sizeof(WECHAT_C_POST) - 1)
-#define WECHAT_C_UA_LEN (sizeof(WECHAT_C_UA) - 1)
 		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL &&
 		        iph->protocol == IPPROTO_TCP &&
 		        !(IPS_NATCAP & ct->status)) {
 			struct tcphdr *tcph;
 			unsigned int data_len;
+			unsigned int payload_offset;
 			unsigned char *data;
 
 			if (!natcap_tcp_header_get(skb, &iph, &tcph)) {
@@ -2973,25 +3003,21 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			}
 			l4 = tcph;
 			if (tcph->dest == __constant_htons(80) || tcph->dest == __constant_htons(8080)) {
-				if (!natcap_tcp_payload_get(skb, &iph, &tcph, &data, &data_len)) {
+				if (!natcap_tcp_payload_get(skb, &iph, &tcph, &data, &data_len,
+				                            WECHAT_C_POST_LEN)) {
 					return NF_ACCEPT;
 				}
 				l4 = tcph;
+				payload_offset = data - skb->data;
 				if (data_len > 0) {
-					unsigned int i = 0;
 					if (data_len >= WECHAT_C_POST_LEN &&
 					        strncasecmp(data, WECHAT_C_POST, WECHAT_C_POST_LEN) == 0) {
-						i = WECHAT_C_POST_LEN;
-						while (i < data_len) {
-							while (i < data_len && data[i] != '\n') i++;
-							if (i < data_len) i++;
-							if (data_len - i >= WECHAT_C_UA_LEN &&
-							        strncasecmp(data + i, WECHAT_C_UA, WECHAT_C_UA_LEN) == 0) {
-								ip_hdr(skb)->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
-								IP_SET_add_dst_ip(state, in, out, skb, "wechat_iplist");
-								NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": add to wechat_iplist\n", DEBUG_TCP_ARG(iph,l4));
-								ip_hdr(skb)->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
-							}
+						if (natcap_payload_has_header(skb, payload_offset, data_len,
+						                              WECHAT_C_UA, WECHAT_C_UA_LEN)) {
+							ip_hdr(skb)->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
+							IP_SET_add_dst_ip(state, in, out, skb, "wechat_iplist");
+							NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": add to wechat_iplist\n", DEBUG_TCP_ARG(iph,l4));
+							ip_hdr(skb)->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
 						}
 					}
 					set_bit(IPS_NATCAP_BIT, &ct->status);
@@ -5017,84 +5043,13 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 	return NF_ACCEPT;
 }
 
-static int cn_domain_lookup_locked(const struct cn_domain_db *db, const char *d)
-{
-	int low;
-	int high;
-	int mid;
-	int res;
-	int count;
-	const char *entries;
-
-	if (db == NULL) {
-		return 0;
-	}
-
-	count = db->count;
-	if (count <= 0) {
-		return 0;
-	}
-
-	entries = cn_domain_entries((struct cn_domain_db *)db);
-	if (entries == NULL) {
-		return 0;
-	}
-
-	low = 0;
-	high = count - 1;
-	while (low <= high) {
-		mid = (low + high) / 2;
-		res = domain_match(entries + mid * CN_DOMAIN_SIZE, d);
-		if (res == 0) {
-			return 1;
-		}
-		if (res < 0) {
-			low = mid + 1;
-		} else {
-			high = mid - 1;
-		}
-	}
-
-	return 0;
-}
-
-static int cn_domain_clone_db(const struct cn_domain_db *old_db, int new_size, struct cn_domain_db **out)
-{
-	struct cn_domain_db *db;
-
-	db = vmalloc(sizeof(*db) + new_size * CN_DOMAIN_SIZE);
-	if (db == NULL) {
-		return -ENOMEM;
-	}
-
-	memset(db, 0, sizeof(*db) + new_size * CN_DOMAIN_SIZE);
-	if (old_db) {
-		if (old_db->count > 0) {
-			memcpy(cn_domain_entries(db), cn_domain_entries_const(old_db), old_db->count * CN_DOMAIN_SIZE);
-		}
-		db->size = new_size;
-		db->count = old_db->count;
-	} else {
-		db->size = new_size;
-		db->count = 0;
-	}
-
-	*out = db;
-	return 0;
-}
-
 void cn_domain_clean(void)
 {
-	struct cn_domain_db *db;
-
-	mutex_lock(&cn_domain_lock);
-	db = rcu_dereference(cn_domain);
-	rcu_assign_pointer(cn_domain, NULL);
-	mutex_unlock(&cn_domain_lock);
-
-	if (db) {
-		synchronize_rcu();
-		vfree(db);
+	if (cn_domain) {
+		vfree(cn_domain);
+		cn_domain = NULL;
+		cn_domain_size = 0;
+		cn_domain_count = 0;
 	}
 }
 
@@ -5153,61 +5108,39 @@ int domain_cmp(const char *dst, const char *src)
 
 int cn_domain_insert(const char *d)
 {
-	struct cn_domain_db *old_db;
-	struct cn_domain_db *new_db;
-	char *entries;
-	int new_size;
-	int count;
+	char *tmp;
 	int err;
 
-	mutex_lock(&cn_domain_lock);
-	old_db = rcu_dereference(cn_domain);
-	if (cn_domain_lookup_locked(old_db, d)) {
-		mutex_unlock(&cn_domain_lock);
-		return 0;
+	if (cn_domain == NULL) {
+		cn_domain_size = CN_DOMAIN_CHUNK;
+		cn_domain_count = 0;
+		cn_domain = vmalloc(cn_domain_size * CN_DOMAIN_SIZE);
+		if (cn_domain == NULL) {
+			cn_domain_size = 0;
+			return -ENOMEM;
+		}
+		memset(cn_domain, 0, cn_domain_size * CN_DOMAIN_SIZE);
 	}
 
-	if (old_db) {
-		new_size = old_db->size;
-	} else {
-		new_size = CN_DOMAIN_CHUNK;
+	if (cn_domain_count >= cn_domain_size) {
+		int old_size = cn_domain_size;
+
+		cn_domain_size += CN_DOMAIN_CHUNK;
+		tmp = vmalloc(cn_domain_size * CN_DOMAIN_SIZE);
+		if (tmp == NULL) {
+			cn_domain_size = old_size;
+			return -ENOMEM;
+		}
+		memset(tmp, 0, cn_domain_size * CN_DOMAIN_SIZE);
+		memcpy(tmp, cn_domain, old_size * CN_DOMAIN_SIZE);
+		vfree(cn_domain);
+		cn_domain = tmp;
+		NATCAP_INFO("cn_domain_insert cn_domain_size=%d mem=%d\n",
+		            cn_domain_size, cn_domain_size * CN_DOMAIN_SIZE);
 	}
 
-	if (old_db && old_db->count >= old_db->size) {
-		new_size = old_db->size + CN_DOMAIN_CHUNK;
-	}
-
-	err = cn_domain_clone_db(old_db, new_size, &new_db);
-	if (err != 0) {
-		mutex_unlock(&cn_domain_lock);
-		return err;
-	}
-
-	entries = cn_domain_entries(new_db);
-	if (entries == NULL) {
-		vfree(new_db);
-		mutex_unlock(&cn_domain_lock);
-		return -ENOMEM;
-	}
-
-	count = new_db->count;
-	err = cn_domain_insert_entry(entries, &count, new_db->size, d);
-	if (err) {
-		vfree(new_db);
-		mutex_unlock(&cn_domain_lock);
-		return err;
-	}
-	new_db->count = count;
-
-	rcu_assign_pointer(cn_domain, new_db);
-	mutex_unlock(&cn_domain_lock);
-
-	if (old_db) {
-		synchronize_rcu();
-		vfree(old_db);
-	}
-
-	return 0;
+	err = cn_domain_insert_entry(cn_domain, &cn_domain_count, cn_domain_size, d);
+	return err;
 }
 
 int domain_match(const char *dst, const char *src)
@@ -5256,35 +5189,22 @@ int domain_match(const char *dst, const char *src)
 
 int cn_domain_lookup(const char *d)
 {
-	struct cn_domain_db *db;
-	const char *entries;
 	int low;
 	int high;
 	int mid;
 	int res;
-	int count;
 
-	rcu_read_lock();
-	db = rcu_dereference(cn_domain);
-	if (db == NULL) {
-		rcu_read_unlock();
-		return 0;
-	}
-	count = db->count;
-	entries = cn_domain_entries(db);
-	if (count == 0 || entries == NULL) {
-		rcu_read_unlock();
+	if (cn_domain == NULL || cn_domain_count == 0) {
 		return 0;
 	}
 
 	low = 0;
-	high = count - 1;
+	high = cn_domain_count - 1;
 	while (low <= high) {
 		mid = (low + high) / 2;
-		res = domain_match(entries + mid * CN_DOMAIN_SIZE, d);
+		res = domain_match(cn_domain + mid * CN_DOMAIN_SIZE, d);
 		if (res == 0) {
 			/* found match */
-			rcu_read_unlock();
 			return 1;
 		}
 		if (res < 0) {
@@ -5293,8 +5213,6 @@ int cn_domain_lookup(const char *d)
 			high = mid - 1;
 		}
 	}
-	rcu_read_unlock();
-
 	return 0;
 }
 
@@ -5376,19 +5294,9 @@ int cn_domain_load_from_raw(const char *path)
 	ssize_t bytes = 0;
 	struct file *filp = NULL;
 	char *buf = NULL;
-	struct cn_domain_db *tmp_db = NULL;
-	struct cn_domain_db *old_db = NULL;
-	int tmp_db_size = CN_DOMAIN_CHUNK;
+	char *cn_domain_tmp = NULL;
+	int cn_domain_tmp_size = 0;
 	int nbytes = 0;
-	char *entries;
-
-	tmp_db = vmalloc(sizeof(*tmp_db) + tmp_db_size * CN_DOMAIN_SIZE);
-	if (tmp_db == NULL) {
-		NATCAP_ERROR("unable to alloc cn_domain tmp\n");
-		return -ENOMEM;
-	}
-	memset(tmp_db, 0, sizeof(*tmp_db) + tmp_db_size * CN_DOMAIN_SIZE);
-	tmp_db->size = tmp_db_size;
 
 	buf = kmalloc(4096, GFP_KERNEL);
 	if (buf == NULL) {
@@ -5408,33 +5316,26 @@ int cn_domain_load_from_raw(const char *path)
 #else
 	while ((bytes = kernel_read(filp, pos, buf, 4096)) > 0) {
 #endif
-		if (nbytes + bytes > tmp_db_size * CN_DOMAIN_SIZE) {
-			struct cn_domain_db *tmp;
-			int new_size = tmp_db_size + CN_DOMAIN_CHUNK;
+		if (cn_domain_tmp == NULL || nbytes + bytes > cn_domain_tmp_size * CN_DOMAIN_SIZE) {
+			char *tmp;
+			int new_size = cn_domain_tmp_size + CN_DOMAIN_CHUNK;
 
-			tmp = vmalloc(sizeof(*tmp) + new_size * CN_DOMAIN_SIZE);
+			tmp = vmalloc(new_size * CN_DOMAIN_SIZE);
 			if (tmp == NULL) {
 				ret = -ENOMEM;
 				goto out;
 			}
-			memset(tmp, 0, sizeof(*tmp) + new_size * CN_DOMAIN_SIZE);
-			memcpy(cn_domain_entries(tmp), cn_domain_entries(tmp_db), nbytes);
-			vfree(tmp_db);
-			tmp_db = tmp;
-			tmp_db_size = new_size;
-			tmp_db->size = tmp_db_size;
+			memset(tmp, 0, new_size * CN_DOMAIN_SIZE);
+			if (cn_domain_tmp) {
+				memcpy(tmp, cn_domain_tmp, nbytes);
+				vfree(cn_domain_tmp);
+			}
+			cn_domain_tmp = tmp;
+			cn_domain_tmp_size = new_size;
 		}
 
-		entries = cn_domain_entries(tmp_db);
-		if (entries == NULL) {
-			ret = -ENOMEM;
-			goto out;
-		}
-
-		if (nbytes + bytes <= tmp_db_size * CN_DOMAIN_SIZE) {
-			memcpy(entries + nbytes, buf, bytes);
-			nbytes += bytes;
-		}
+		memcpy(cn_domain_tmp + nbytes, buf, bytes);
+		nbytes += bytes;
 	}
 
 	if (bytes < 0) {
@@ -5442,20 +5343,14 @@ int cn_domain_load_from_raw(const char *path)
 		goto out;
 	}
 
-	tmp_db->count = nbytes / CN_DOMAIN_SIZE;
+	cn_domain_clean();
+	cn_domain = cn_domain_tmp;
+	cn_domain_size = cn_domain_tmp_size;
+	cn_domain_count = nbytes / CN_DOMAIN_SIZE;
+	cn_domain_tmp = NULL;
 
-	mutex_lock(&cn_domain_lock);
-	old_db = rcu_dereference(cn_domain);
-	rcu_assign_pointer(cn_domain, tmp_db);
-	mutex_unlock(&cn_domain_lock);
-
-	if (old_db) {
-		synchronize_rcu();
-		vfree(old_db);
-	}
-
-	NATCAP_INFO("cn_domain_load_from_raw size:%d count:%d bytes:%d\n", tmp_db->size, tmp_db->count, nbytes);
-	tmp_db = NULL;
+	NATCAP_INFO("cn_domain_load_from_raw size:%d count:%d bytes:%d\n",
+	            cn_domain_size, cn_domain_count, nbytes);
 
 out:
 	if (filp && !IS_ERR(filp)) {
@@ -5464,8 +5359,8 @@ out:
 	if (buf) {
 		kfree(buf);
 	}
-	if (tmp_db) {
-		vfree(tmp_db);
+	if (cn_domain_tmp) {
+		vfree(cn_domain_tmp);
 	}
 	if (ret < 0) {
 		return ret;
@@ -5476,49 +5371,27 @@ out:
 
 int cn_domain_dump_path(const char *path)
 {
-	struct cn_domain_db *db = NULL;
-	char *buf = NULL;
-	ssize_t total = 0;
+	ssize_t total;
 	loff_t pos = 0;
 	ssize_t bytes = 0;
 	struct file *filp;
-	const char *entries;
 	int err = 0;
 
-	rcu_read_lock();
-	db = rcu_dereference(cn_domain);
-	if (db == NULL) {
-		rcu_read_unlock();
+	if (cn_domain == NULL) {
 		return -1;
 	}
-
-	total = db->count * CN_DOMAIN_SIZE;
-	entries = cn_domain_entries(db);
-	if (entries == NULL) {
-		rcu_read_unlock();
-		return -ENOMEM;
-	}
-	if (total > 0) {
-		buf = kmalloc(total, GFP_KERNEL);
-		if (buf == NULL) {
-			rcu_read_unlock();
-			return -ENOMEM;
-		}
-		memcpy(buf, entries, total);
-	}
-	rcu_read_unlock();
+	total = cn_domain_count * CN_DOMAIN_SIZE;
 
 	filp = filp_open(path, O_RDWR | O_CREAT | O_LARGEFILE | O_DSYNC | O_TRUNC, 0);
 	if (IS_ERR(filp)) {
 		NATCAP_ERROR("unable to open cn_domain dump: %s\n", path);
-		kfree(buf);
 		return PTR_ERR(filp);
 	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-	bytes = kernel_write(filp, buf, total, &pos);
+	bytes = kernel_write(filp, cn_domain, total, &pos);
 #else
-	bytes = kernel_write(filp, buf, total, pos);
+	bytes = kernel_write(filp, cn_domain, total, pos);
 #endif
 	NATCAP_INFO("cn_domain dump: write %d\n", (int)bytes);
 	if (bytes != total) {
@@ -5526,7 +5399,6 @@ int cn_domain_dump_path(const char *path)
 	}
 
 	filp_close(filp, NULL);
-	kfree(buf);
 
 	return err;
 }

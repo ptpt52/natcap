@@ -391,12 +391,14 @@ static inline int natcap_tcp_header_get(struct sk_buff *skb,
 
 static inline int natcap_tcp_payload_get(struct sk_buff *skb,
         struct iphdr **iph_out, struct tcphdr **tcph_out,
-        unsigned char **payload_out, unsigned int *payload_len_out)
+        unsigned char **payload_out, unsigned int *payload_len_out,
+        unsigned int linear_payload_len)
 {
 	unsigned int network_offset = skb_network_offset(skb);
 	unsigned int ip_hdrlen;
 	unsigned int tcp_hdrlen;
 	unsigned int ip_tot_len;
+	unsigned int payload_len;
 	struct iphdr *iph;
 	struct tcphdr *tcph;
 
@@ -407,7 +409,9 @@ static inline int natcap_tcp_payload_get(struct sk_buff *skb,
 	ip_hdrlen = iph->ihl * 4;
 	ip_tot_len = ntohs(iph->tot_len);
 	tcp_hdrlen = tcph->doff * 4;
-	if (!pskb_may_pull(skb, network_offset + ip_tot_len)) {
+	payload_len = ip_tot_len - ip_hdrlen - tcp_hdrlen;
+	linear_payload_len = min(linear_payload_len, payload_len);
+	if (!pskb_may_pull(skb, network_offset + ip_hdrlen + tcp_hdrlen + linear_payload_len)) {
 		return 0;
 	}
 
@@ -416,7 +420,7 @@ static inline int natcap_tcp_payload_get(struct sk_buff *skb,
 	*iph_out = iph;
 	*tcph_out = tcph;
 	*payload_out = (unsigned char *)tcph + tcp_hdrlen;
-	*payload_len_out = ip_tot_len - ip_hdrlen - tcp_hdrlen;
+	*payload_len_out = payload_len;
 	return 1;
 }
 
