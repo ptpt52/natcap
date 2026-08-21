@@ -1099,12 +1099,8 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 	}
 
 	ns = natcap_session_get(ct);
-	if (ns == NULL) {
-		NATCAP_WARN_RATELIMITED("NATCAP server connection has no session: ct=%px status=0x%lx\n", ct, ct->status);
-		return NF_DROP;
-	}
 
-	if ((NS_NATCAP_DROP & ns->n.status)) {
+	if (ns && (NS_NATCAP_DROP & ns->n.status)) {
 		return NF_DROP;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
