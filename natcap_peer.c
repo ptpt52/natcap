@@ -2300,7 +2300,7 @@ static inline int peer_sni_send_synack(const struct net_device *dev, struct sk_b
 	oiph = ip_hdr(oskb);
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
-	mss = natcap_tcpmss_get(otcph);
+	mss = natcap_tcpmss_get(oskb, otcph);
 	if (mss < TCP_MSS_DEFAULT) {
 		mss = TCP_MSS_DEFAULT;
 	}
@@ -3603,7 +3603,7 @@ sni_out:
 				if (pt->remote_seq == 0) {
 					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, new, sending pong(synack) SYNACK back\n", DEBUG_TCP_ARG(iph,l4));
 					pt->remote_seq = ntohl(TCPH(l4)->seq);
-					pt->mss = natcap_tcpmss_get(TCPH(l4));
+					pt->mss = natcap_tcpmss_get(skb, TCPH(l4));
 					pt->last_active = ue->last_active = jiffies;
 					/* initial */
 				} else if (pt->remote_seq == ntohl(TCPH(l4)->seq)) {

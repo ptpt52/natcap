@@ -3113,7 +3113,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			}
 			iph = ip_hdr(skb2);
 			l4 = (void *)iph + iph->ihl * 4;
-			mss = natcap_tcpmss_get(TCPH(l4));
+			mss = natcap_tcpmss_get(skb2, TCPH(l4));
 			if (mss == 0) mss = TCP_MSS_DEFAULT;
 			/* fake mss */
 			set_byte1((void *)l4 + sizeof(struct tcphdr) + 0, TCPOPT_MSS);

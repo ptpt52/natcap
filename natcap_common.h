@@ -480,14 +480,49 @@ static inline u_int32_t tcpmss_reverse_mtu(struct net *net, const struct sk_buff
 	return mtu;
 }
 
-static inline u16 natcap_tcpmss_get(const struct tcphdr *tcph) {
+static inline int natcap_tcpmss_header_info(const struct sk_buff *skb,
+        const struct tcphdr *tcph, unsigned int *tcp_offset,
+        unsigned int *tcp_hdrlen)
+{
+	struct tcphdr _tcph;
+	const struct tcphdr *header;
+	unsigned long offset;
+
+	if ((unsigned long)tcph < (unsigned long)skb->data) {
+		return -1;
+	}
+	offset = (unsigned long)tcph - (unsigned long)skb->data;
+	if (offset > skb->len) {
+		return -1;
+	}
+
+	header = skb_header_pointer(skb, offset, sizeof(_tcph), &_tcph);
+	if (header == NULL) {
+		return -1;
+	}
+	*tcp_hdrlen = header->doff * 4;
+	if (*tcp_hdrlen < sizeof(struct tcphdr) || *tcp_hdrlen > 15 * 4 ||
+	        *tcp_hdrlen > skb->len - offset) {
+		return -1;
+	}
+
+	*tcp_offset = offset;
+	return 0;
+}
+
+static inline u16 natcap_tcpmss_get(const struct sk_buff *skb, const struct tcphdr *tcph) {
+	u8 tcp_header[15 * 4];
 	u16 oldmss;
 	unsigned int i;
-	int tcp_hdrlen;
+	unsigned int tcp_offset;
+	unsigned int tcp_hdrlen;
 	u8 *opt;
 
-	tcp_hdrlen = tcph->doff * 4;
-	opt = (u_int8_t *)tcph;
+	if (natcap_tcpmss_header_info(skb, tcph, &tcp_offset, &tcp_hdrlen) != 0 ||
+	        skb_copy_bits(skb, tcp_offset, tcp_header, tcp_hdrlen) != 0) {
+		return 0;
+	}
+	opt = tcp_header;
 	for (i = sizeof(struct tcphdr); i <= tcp_hdrlen - TCPOLEN_MSS; i += optlen(opt, i, tcp_hdrlen)) {
 		if (opt[i] == TCPOPT_MSS && opt[i+1] == TCPOLEN_MSS) {
 			oldmss = (opt[i+2] << 8) | opt[i+3];
@@ -500,10 +535,15 @@ static inline u16 natcap_tcpmss_get(const struct tcphdr *tcph) {
 static inline int natcap_tcpmss_set(struct sk_buff *skb, struct tcphdr *tcph, u16 newmss) {
 	u16 oldmss;
 	unsigned int i;
-	int tcp_hdrlen;
+	unsigned int tcp_offset;
+	unsigned int tcp_hdrlen;
 	u8 *opt;
 
-	tcp_hdrlen = tcph->doff * 4;
+	if (natcap_tcpmss_header_info(skb, tcph, &tcp_offset, &tcp_hdrlen) != 0 ||
+	        tcp_offset + tcp_hdrlen > skb_headlen(skb)) {
+		return -1;
+	}
+	tcph = (struct tcphdr *)(skb->data + tcp_offset);
 	opt = (u_int8_t *)tcph;
 	for (i = sizeof(struct tcphdr); i <= tcp_hdrlen - TCPOLEN_MSS; i += optlen(opt, i, tcp_hdrlen)) {
 		if (opt[i] == TCPOPT_MSS && opt[i+1] == TCPOLEN_MSS) {
@@ -528,10 +568,15 @@ static inline int natcap_tcpmss_set(struct sk_buff *skb, struct tcphdr *tcph, u1
 static inline int natcap_tcpmss_adjust(struct sk_buff *skb, struct tcphdr *tcph, int delta, unsigned int max_mss) {
 	u16 oldmss, newmss;
 	unsigned int i;
-	int tcp_hdrlen;
+	unsigned int tcp_offset;
+	unsigned int tcp_hdrlen;
 	u8 *opt;
 
-	tcp_hdrlen = tcph->doff * 4;
+	if (natcap_tcpmss_header_info(skb, tcph, &tcp_offset, &tcp_hdrlen) != 0 ||
+	        tcp_offset + tcp_hdrlen > skb_headlen(skb)) {
+		return -1;
+	}
+	tcph = (struct tcphdr *)(skb->data + tcp_offset);
 	opt = (u_int8_t *)tcph;
 	for (i = sizeof(struct tcphdr); i <= tcp_hdrlen - TCPOLEN_MSS; i += optlen(opt, i, tcp_hdrlen)) {
 		if (opt[i] == TCPOPT_MSS && opt[i+1] == TCPOLEN_MSS) {
