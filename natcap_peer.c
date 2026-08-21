@@ -171,7 +171,12 @@ static inline void peer_cache_cleaner(void)
 		if (!time_after(jiffies, peer_cache[i].jiffies + PEER_CACHE_TIMEOUT * HZ))
 			break;
 		ns = natcap_session_get(peer_cache[i].user);
-		ns->p.cache_index = 0;
+		if (ns != NULL) {
+			ns->p.cache_index = 0;
+		} else {
+			NATCAP_WARN_RATELIMITED("peer cache connection has no session: ct=%px status=0x%lx\n",
+			                         peer_cache[i].user, peer_cache[i].user->status);
+		}
 		nf_ct_put(peer_cache[i].user);
 		peer_cache[i].user = NULL;
 		if (peer_cache[i].skb != NULL) {
@@ -193,7 +198,12 @@ static inline void peer_cache_cleanup(void)
 		if (peer_cache[i].user == NULL)
 			continue;
 		ns = natcap_session_get(peer_cache[i].user);
-		ns->p.cache_index = 0;
+		if (ns != NULL) {
+			ns->p.cache_index = 0;
+		} else {
+			NATCAP_WARN_RATELIMITED("peer cache connection has no session during cleanup: ct=%px status=0x%lx\n",
+			                         peer_cache[i].user, peer_cache[i].user->status);
+		}
 		nf_ct_put(peer_cache[i].user);
 		peer_cache[i].user = NULL;
 		if (peer_cache[i].skb != NULL) {

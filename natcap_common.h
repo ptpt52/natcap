@@ -213,6 +213,9 @@ extern char htp_confusion_host[64];
 #define NATCAP_WARN(fmt, ...) \
 	NATCAP_LOG_IF(IS_NATCAP_WARN(), KERN_WARNING, "warning:", fmt, ##__VA_ARGS__)
 
+#define NATCAP_WARN_RATELIMITED(fmt, ...) \
+	NATCAP_LOG_RATELIMITED_IF(IS_NATCAP_WARN(), KERN_WARNING, "warning:", fmt, ##__VA_ARGS__)
+
 #define NATCAP_ERROR(fmt, ...) \
 	NATCAP_LOG_IF(IS_NATCAP_ERROR(), KERN_ERR, "error:", fmt, ##__VA_ARGS__)
 
@@ -221,11 +224,13 @@ extern char htp_confusion_host[64];
 #undef NATCAP_DEBUG
 #undef NATCAP_INFO
 #undef NATCAP_WARN
+#undef NATCAP_WARN_RATELIMITED
 #undef NATCAP_ERROR
 #define NATCAP_FIXME(fmt, ...) do { } while (0)
 #define NATCAP_DEBUG(fmt, ...) do { } while (0)
 #define NATCAP_INFO(fmt, ...) do { } while (0)
 #define NATCAP_WARN(fmt, ...) do { } while (0)
+#define NATCAP_WARN_RATELIMITED(fmt, ...) do { } while (0)
 #define NATCAP_ERROR(fmt, ...) do { } while (0)
 #endif
 

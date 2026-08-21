@@ -680,7 +680,11 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
 	ns = natcap_session_get(ct);
-	if ((IPS_NATCAP & ct->status) && (NS_NATCAP_TCPUDPENC & ns->n.status)) {
+	if ((IPS_NATCAP & ct->status) && ns == NULL) {
+		NATCAP_WARN_RATELIMITED("NATCAP session missing while resetting SYNACK: ct=%px status=0x%lx\n", ct, ct->status);
+		return -EINVAL;
+	}
+	if (ns && (NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		header_len = 8;
 		protocol = IPPROTO_UDP;
 	}

@@ -258,6 +258,11 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	skb_rcsum_tcpudp(nskb);
 
 	ns = natcap_session_get(ct);
+	if (ns == NULL) {
+		NATCAP_WARN_RATELIMITED("NATCAP session missing while building auth UDP reply: ct=%px status=0x%lx\n", ct, ct->status);
+		consume_skb(nskb);
+		return;
+	}
 	if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		natcap_udp_to_tcp_pack(nskb, ns, 1, NULL);
 	}
@@ -285,6 +290,10 @@ static inline void natcap_auth_tcp_reply_rst(const struct net_device *dev, struc
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
 	ns = natcap_session_get(ct);
+	if (ns == NULL) {
+		NATCAP_WARN_RATELIMITED("NATCAP session missing while building auth TCP RST: ct=%px status=0x%lx\n", ct, ct->status);
+		return;
+	}
 	if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		header_len = 8;
 		protocol = IPPROTO_UDP;
@@ -389,6 +398,10 @@ static inline void natcap_auth_tcp_reply_rstack(const struct net_device *dev, st
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
 	ns = natcap_session_get(ct);
+	if (ns == NULL) {
+		NATCAP_WARN_RATELIMITED("NATCAP session missing while building auth TCP RSTACK: ct=%px status=0x%lx\n", ct, ct->status);
+		return;
+	}
 	if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		header_len = 8;
 		protocol = IPPROTO_UDP;
@@ -496,6 +509,10 @@ static inline void natcap_auth_reply_fmt(int max_payload_len, struct sk_buff *os
 	otcph = (struct tcphdr *)((void *)oiph + oiph->ihl * 4);
 
 	ns = natcap_session_get(ct);
+	if (ns == NULL) {
+		NATCAP_WARN_RATELIMITED("NATCAP session missing while building auth reply: ct=%px status=0x%lx\n", ct, ct->status);
+		return;
+	}
 	if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
 		header_len = 8;
 		protocol = IPPROTO_UDP;
@@ -1082,8 +1099,12 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 	}
 
 	ns = natcap_session_get(ct);
+	if (ns == NULL) {
+		NATCAP_WARN_RATELIMITED("NATCAP server connection has no session: ct=%px status=0x%lx\n", ct, ct->status);
+		return NF_DROP;
+	}
 
-	if (ns && (NS_NATCAP_DROP & ns->n.status)) {
+	if ((NS_NATCAP_DROP & ns->n.status)) {
 		return NF_DROP;
 	}
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
