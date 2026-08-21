@@ -86,6 +86,79 @@ unsigned int peer_pub_idx = 0;
 
 static unsigned int rt_out_magic = 0;
 
+static inline int natcap_l2_len_valid(unsigned int l2_len)
+{
+	return l2_len == 0 ||
+	       (l2_len >= ETH_HLEN && l2_len <= NF_L2_MAX_LEN);
+}
+
+static inline int natcap_skb_l2_len(const struct sk_buff *skb,
+        const void *network_header, unsigned int *l2_len)
+{
+	const unsigned char *nh = network_header;
+	const unsigned char *mac;
+	long len;
+
+	if (!skb || !network_header || !l2_len)
+		return -EINVAL;
+
+	if (!skb_mac_header_was_set(skb)) {
+		if (skb->dev && skb->dev->hard_header_len == 0 && nh == skb->data) {
+			*l2_len = 0;
+			return 0;
+		}
+		return -EINVAL;
+	}
+
+	mac = skb_mac_header(skb);
+	if (mac < skb->head || nh < mac || nh > skb_tail_pointer(skb))
+		return -EINVAL;
+
+	len = nh - mac;
+	if (len < 0 || len > NF_L2_MAX_LEN ||
+	        (len != 0 && len < ETH_HLEN))
+		return -EINVAL;
+
+	*l2_len = len;
+	return 0;
+}
+
+static inline int natcap_route_cache_l2(struct natcap_route *route,
+        const struct sk_buff *skb, const void *network_header, int reverse_eth)
+{
+	unsigned int l2_len;
+	unsigned char mac[ETH_ALEN];
+
+	if (natcap_skb_l2_len(skb, network_header, &l2_len) != 0) {
+		route->l2_head_len = 0;
+		memset(route->l2_head, 0, sizeof(route->l2_head));
+		return -EINVAL;
+	}
+
+	if (l2_len > 0) {
+		memcpy(route->l2_head, skb_mac_header(skb), l2_len);
+		if (reverse_eth) {
+			memcpy(mac, ((struct ethhdr *)route->l2_head)->h_source, ETH_ALEN);
+			memcpy(((struct ethhdr *)route->l2_head)->h_source,
+			       ((struct ethhdr *)route->l2_head)->h_dest, ETH_ALEN);
+			memcpy(((struct ethhdr *)route->l2_head)->h_dest, mac, ETH_ALEN);
+		}
+	}
+	route->l2_head_len = l2_len;
+
+	return 0;
+}
+
+static inline int natcap_skb_push_l2(struct sk_buff *skb, unsigned int l2_len)
+{
+	if (!natcap_l2_len_valid(l2_len) || skb_headroom(skb) < l2_len)
+		return -EINVAL;
+
+	skb_push(skb, l2_len);
+	skb_reset_mac_header(skb);
+	return 0;
+}
+
 static struct natcap_fastpath_route peer_fastpath_route[MAX_PEER_NUM];
 struct natcap_fastpath_route *natcap_pfr = peer_fastpath_route;
 
@@ -1093,7 +1166,9 @@ static void natcap_auth_request_upstream(const unsigned char *client_mac, __be32
 	}
 
 	fue = peer_fakeuser_expect(user);
-	if (fue->pmi != 0 || fue->state != FUE_STATE_CONNECTED || fue->rt_out_magic != rt_out_magic) {
+	if (fue->pmi != 0 || fue->state != FUE_STATE_CONNECTED ||
+	        fue->rt_out_magic != rt_out_magic || !fue->rt_out.outdev ||
+	        !natcap_l2_len_valid(fue->rt_out.l2_head_len)) {
 		nf_ct_put(user);
 		spin_unlock_bh(&ps->lock);
 		return;
@@ -1164,7 +1239,12 @@ static void natcap_auth_request_upstream(const unsigned char *client_mac, __be32
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(skb);
 
-	skb_push(skb, (char *)ip_hdr(skb) - (char *)eth_hdr(skb));
+	if (natcap_skb_push_l2(skb, fue->rt_out.l2_head_len) != 0) {
+		consume_skb(skb);
+		nf_ct_put(user);
+		spin_unlock_bh(&ps->lock);
+		return;
+	}
 	dev_queue_xmit(skb);
 
 	nf_ct_put(user);
@@ -2072,18 +2152,26 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 	skb_rcsum_tcpudp(nskb);
 
 	if (ops != NULL) {
-		skb_push(nskb, (char *)niph - (char *)neth);
+		unsigned int l2_len;
+
+		if (natcap_skb_l2_len(nskb, niph, &l2_len) != 0 ||
+		        natcap_skb_push_l2(nskb, l2_len) != 0) {
+			NATCAP_WARN_RATELIMITED("invalid L2 header while sending peer ping\n");
+			consume_skb(nskb);
+			nf_ct_put(user);
+			spin_unlock_bh(&ps->lock);
+			return NULL;
+		}
 		nskb->dev = (struct net_device *)dev;
 		//back l2 header
 		if (fue->rt_out_magic != rt_out_magic || fue->rt_out.outdev != nskb->dev) {
-			if ((char *)niph - (char *)neth <= NF_L2_MAX_LEN) {
-				fue->rt_out.l2_head_len = (char *)niph - (char *)neth; //assume l2_head_len <= NF_L2_MAX_LEN
-				memcpy(fue->rt_out.l2_head, (char *)neth, (char *)niph - (char *)neth);
+			if (natcap_route_cache_l2(&fue->rt_out, nskb, niph, 0) == 0) {
+				fue->rt_out.outdev = nskb->dev;
+				fue->rt_out_magic = rt_out_magic;
 			} else {
-				fue->rt_out.l2_head_len = 0;
+				fue->rt_out.outdev = NULL;
+				fue->rt_out_magic = 0;
 			}
-			fue->rt_out.outdev = nskb->dev;
-			fue->rt_out_magic = rt_out_magic;
 
 		}
 		if ((nskb->mark & 0x3f00)) {
@@ -2095,14 +2183,13 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 
 				if (pfr->saddr != niph->saddr || pfr->rt_out_magic != rt_out_magic || pfr->rt_out.outdev != nskb->dev) {
 					pfr->saddr = niph->saddr;
-					if ((char *)niph - (char *)neth <= NF_L2_MAX_LEN) {
-						pfr->rt_out.l2_head_len = (char *)niph - (char *)neth;
-						memcpy(pfr->rt_out.l2_head, (char *)neth, (char *)niph - (char *)neth);
+					if (natcap_route_cache_l2(&pfr->rt_out, nskb, niph, 0) == 0) {
+						pfr->rt_out.outdev = nskb->dev;
+						pfr->rt_out_magic = rt_out_magic;
 					} else {
-						pfr->rt_out.l2_head_len = 0;
+						pfr->rt_out.outdev = NULL;
+						pfr->rt_out_magic = 0;
 					}
-					pfr->rt_out.outdev = nskb->dev;
-					pfr->rt_out_magic = rt_out_magic;
 					pfr->is_dead = 1;
 					pfr->weight = 100;
 				}
@@ -2115,9 +2202,14 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		            ntcph->syn ? "sent ping(syn) SYN out" : "sent ping(ack) ACK out");
 		dev_queue_xmit(nskb);
 		return NULL;
-	} else if (fue->rt_out.outdev && fue->rt_out_magic == rt_out_magic) {
-		skb_push(nskb, fue->rt_out.l2_head_len);
-		skb_reset_mac_header(nskb);
+	} else if (fue->rt_out.outdev && fue->rt_out_magic == rt_out_magic &&
+	           natcap_l2_len_valid(fue->rt_out.l2_head_len)) {
+		if (natcap_skb_push_l2(nskb, fue->rt_out.l2_head_len) != 0) {
+			consume_skb(nskb);
+			nf_ct_put(user);
+			spin_unlock_bh(&ps->lock);
+			return NULL;
+		}
 		memcpy(skb_mac_header(nskb), fue->rt_out.l2_head, fue->rt_out.l2_head_len);
 		nskb->dev = fue->rt_out.outdev;
 		nf_ct_put(user);
@@ -3495,19 +3587,13 @@ sni_out:
 			}
 
 			if (ue->rt_out_magic != rt_out_magic || ue->rt_out.outdev != skb->dev) {
-				if ((char *)iph - (char *)eth_hdr(skb) <= NF_L2_MAX_LEN) {
-					ue->rt_out.l2_head_len = (char *)iph - (char *)eth_hdr(skb);
-					if (ue->rt_out.l2_head_len >= ETH_HLEN) {
-						memcpy(((struct ethhdr *)ue->rt_out.l2_head)->h_dest, eth_hdr(skb)->h_source, ETH_ALEN);
-						memcpy(((struct ethhdr *)ue->rt_out.l2_head)->h_source, eth_hdr(skb)->h_dest, ETH_ALEN);
-						((struct ethhdr *)ue->rt_out.l2_head)->h_proto = eth_hdr(skb)->h_proto;
-						memcpy(ue->rt_out.l2_head + ETH_HLEN, (char *)eth_hdr(skb) + ETH_HLEN, ue->rt_out.l2_head_len - ETH_HLEN);
-					}
+				if (natcap_route_cache_l2(&ue->rt_out, skb, iph, 1) == 0) {
+					ue->rt_out.outdev = skb->dev;
+					ue->rt_out_magic = rt_out_magic;
 				} else {
-					ue->rt_out.l2_head_len = 0;
+					ue->rt_out.outdev = NULL;
+					ue->rt_out_magic = 0;
 				}
-				ue->rt_out.outdev = skb->dev;
-				ue->rt_out_magic = rt_out_magic;
 			}
 
 			if (pt->sni_ban != tcpopt->header.encryption)
@@ -3748,19 +3834,13 @@ sni_skip:
 			}
 
 			if (ue->rt_out_magic != rt_out_magic || ue->rt_out.outdev != skb->dev) {
-				if ((char *)iph - (char *)eth_hdr(skb) <= NF_L2_MAX_LEN) {
-					ue->rt_out.l2_head_len = (char *)iph - (char *)eth_hdr(skb);
-					if (ue->rt_out.l2_head_len >= ETH_HLEN) {
-						memcpy(((struct ethhdr *)ue->rt_out.l2_head)->h_dest, eth_hdr(skb)->h_source, ETH_ALEN);
-						memcpy(((struct ethhdr *)ue->rt_out.l2_head)->h_source, eth_hdr(skb)->h_dest, ETH_ALEN);
-						((struct ethhdr *)ue->rt_out.l2_head)->h_proto = eth_hdr(skb)->h_proto;
-						memcpy(ue->rt_out.l2_head + ETH_HLEN, (char *)eth_hdr(skb) + ETH_HLEN, ue->rt_out.l2_head_len - ETH_HLEN);
-					}
+				if (natcap_route_cache_l2(&ue->rt_out, skb, iph, 1) == 0) {
+					ue->rt_out.outdev = skb->dev;
+					ue->rt_out_magic = rt_out_magic;
 				} else {
-					ue->rt_out.l2_head_len = 0;
+					ue->rt_out.outdev = NULL;
+					ue->rt_out_magic = 0;
 				}
-				ue->rt_out.outdev = skb->dev;
-				ue->rt_out_magic = rt_out_magic;
 			}
 
 			if (pt->sni_ban != tcpopt->header.encryption)
@@ -3989,7 +4069,8 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 		}
 
 		ue = peer_user_expect(user);
-		if (ue->rt_out_magic != rt_out_magic) {
+		if (ue->rt_out_magic != rt_out_magic || !ue->rt_out.outdev ||
+		        !natcap_l2_len_valid(ue->rt_out.l2_head_len)) {
 			nf_ct_put(user);
 			return NF_ACCEPT;
 		}
@@ -4116,7 +4197,10 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 			nskb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(nskb);
 
-			skb_push(nskb, (char *)ip_hdr(nskb) - (char *)eth_hdr(nskb));
+			if (natcap_skb_push_l2(nskb, ue->rt_out.l2_head_len) != 0) {
+				consume_skb(nskb);
+				break;
+			}
 			dev_queue_xmit(nskb);
 
 			//printk("%pI6->%pI6\n", &ipv6h->saddr, &ipv6h->daddr);
@@ -5407,7 +5491,18 @@ reply_dns:
 		skb_rcsum_tcpudp(nskb);
 		nskb->dev = (struct net_device *)in;
 
-		skb_push(nskb, (char *)ip_hdr(nskb) - (char *)eth_hdr(nskb));
+		do {
+			unsigned int l2_len;
+
+			if (natcap_skb_l2_len(nskb, ip_hdr(nskb), &l2_len) != 0 ||
+			        natcap_skb_push_l2(nskb, l2_len) != 0) {
+				consume_skb(nskb);
+				nskb = NULL;
+				break;
+			}
+		} while (0);
+		if (nskb == NULL)
+			break;
 		dev_queue_xmit(nskb);
 
 		consume_skb(skb);
