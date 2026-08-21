@@ -1859,7 +1859,7 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 	//just set a mss we do not care what it is
 	set_byte1((void *)tcpopt + header_len + 0, TCPOPT_MSS);
 	set_byte1((void *)tcpopt + header_len + 1, TCPOLEN_MSS);
-	set_byte2((void *)tcpopt + header_len + 2, ntohs(TCP_MSS_DEFAULT)); //just set a fake mss
+	set_byte2((void *)tcpopt + header_len + 2, htons(TCP_MSS_DEFAULT)); //just set a fake mss
 
 	if (ext_header_len > 0) {
 		unsigned int i;
@@ -2145,7 +2145,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 	if (tcpolen_mss == TCPOLEN_MSS) {
 		set_byte1((void *)tcpopt + header_len + 0, TCPOPT_MSS);
 		set_byte1((void *)tcpopt + header_len + 1, TCPOLEN_MSS);
-		set_byte2((void *)tcpopt + header_len + 2, ntohs(fue->mss));
+		set_byte2((void *)tcpopt + header_len + 2, htons(fue->mss));
 	}
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -2277,7 +2277,7 @@ static inline struct sk_buff *peer_sni_to_syn(struct sk_buff *oskb, unsigned sho
 
 	set_byte1((void *)tcpopt + header_len + 0, TCPOPT_MSS);
 	set_byte1((void *)tcpopt + header_len + 1, TCPOLEN_MSS);
-	set_byte2((void *)tcpopt + header_len + 2, ntohs(mss)); //just use mss from client.
+	set_byte2((void *)tcpopt + header_len + 2, htons(mss)); //just use mss from client.
 
 	oskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(oskb);
@@ -2351,7 +2351,7 @@ static inline int peer_sni_send_synack(const struct net_device *dev, struct sk_b
 	tcpopt = (struct natcap_TCPOPT *)((void *)ntcph + sizeof(struct tcphdr));
 	set_byte1((void *)tcpopt + header_len + 0, TCPOPT_MSS);
 	set_byte1((void *)tcpopt + header_len + 1, TCPOLEN_MSS);
-	set_byte2((void *)tcpopt + header_len + 2, ntohs(mss)); //just use mss from client.
+	set_byte2((void *)tcpopt + header_len + 2, htons(mss)); //just use mss from client.
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb_rcsum_tcpudp(nskb);
@@ -5349,7 +5349,7 @@ reply_dns:
 
 				skb_trim(nskb, niph->ihl * 4 + sizeof(struct udphdr) + pos);
 				niph->tot_len = htons(nskb->len);
-				nudph->len = ntohs(nskb->len - niph->ihl * 4);
+				nudph->len = htons(nskb->len - niph->ihl * 4);
 
 				an_p = (unsigned char *)niph + nskb->len;
 				set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 2, __constant_htons(0x8180));
@@ -5385,7 +5385,7 @@ reply_dns:
 					set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 10, __constant_htons(1));
 				}
 				niph->tot_len = htons(nskb->len);
-				nudph->len = ntohs(nskb->len - niph->ihl * 4);
+				nudph->len = htons(nskb->len - niph->ihl * 4);
 
 				set_byte2(an_p, htons(0xc000 | qname_off));
 				set_byte2(an_p + 2, __constant_htons(0x0001));
@@ -5417,7 +5417,7 @@ reply_dns:
 					set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 10, __constant_htons(1));
 				}
 				niph->tot_len = htons(nskb->len);
-				nudph->len = ntohs(nskb->len - niph->ihl * 4);
+				nudph->len = htons(nskb->len - niph->ihl * 4);
 
 				set_byte2(an_p, htons(0xc000 | qname_off));
 				set_byte2(an_p + 2, __constant_htons(0x001c));
@@ -5453,7 +5453,7 @@ reply_dns:
 					set_byte2((unsigned char *)nudph + sizeof(struct udphdr) + 10, __constant_htons(1));
 				}
 				niph->tot_len = htons(nskb->len);
-				nudph->len = ntohs(nskb->len - niph->ihl * 4);
+				nudph->len = htons(nskb->len - niph->ihl * 4);
 
 				set_byte2(an_p, htons(0xc000 | (qname_off + 13)));
 				set_byte2(an_p + 2, __constant_htons(0x0006));

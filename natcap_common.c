@@ -1766,7 +1766,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 			set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2, ns->ping.remote_dest);
 			set_byte1(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2, TCPOPT_MSS);
 			set_byte1(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2 + 1, TCPOLEN_MSS);
-			set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2 + 1 + 1, ntohs(natcap_max_pmtu - 40));
+			set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2 + 1 + 1, htons(natcap_max_pmtu - 40));
 
 			//ns->n.current_seq = ntohl(TCPH(l4)->seq);
 			ns->ping.saddr = iph->saddr;
@@ -1817,7 +1817,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 		iph = ip_hdr(*ping_skb);
 		l4 = (void *)iph + iph->ihl * 4;
 		(*ping_skb)->len -= ntohs(iph->tot_len) - (iph->ihl * 4 + sizeof(struct tcphdr));
-		iph->tot_len = ntohs(iph->ihl * 4 + sizeof(struct tcphdr));
+		iph->tot_len = htons(iph->ihl * 4 + sizeof(struct tcphdr));
 		iph->id = jiffies;
 		TCPH(l4)->window = htons(~(ntohs(iph->id) ^ ((ntohl(TCPH(l4)->seq) & 0xffff) | (ntohl(TCPH(l4)->ack_seq) & 0xffff))));
 

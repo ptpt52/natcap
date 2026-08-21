@@ -2119,7 +2119,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2, ct->tuplehash[dir].tuple.dst.u.all);
 					set_byte1(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2, TCPOPT_MSS);
 					set_byte1(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2 + 1, TCPOLEN_MSS);
-					set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2 + 1 + 1, ntohs(natcap_max_pmtu - 40));
+					set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2 + 1 + 1, htons(natcap_max_pmtu - 40));
 
 					ns->ping.saddr = iph->saddr;
 					ns->ping.daddr = iph->daddr;
@@ -3118,7 +3118,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			/* fake mss */
 			set_byte1((void *)l4 + sizeof(struct tcphdr) + 0, TCPOPT_MSS);
 			set_byte1((void *)l4 + sizeof(struct tcphdr) + 1, TCPOLEN_MSS);
-			set_byte2((void *)l4 + sizeof(struct tcphdr) + 2, ntohs(mss));
+			set_byte2((void *)l4 + sizeof(struct tcphdr) + 2, htons(mss));
 			skb2->len = iph->ihl * 4 + sizeof(struct tcphdr) + TCPOLEN_MSS;
 			iph->tot_len = htons(skb2->len);
 			TCPH(l4)->doff = (sizeof(struct tcphdr) + TCPOLEN_MSS) / 4;

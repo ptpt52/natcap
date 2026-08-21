@@ -251,7 +251,7 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 	set_byte4((void *)nudph + sizeof(struct udphdr), __constant_htonl(NATCAP_E_MAGIC_A));
 	nudph->source = oudph->dest;
 	nudph->dest = oudph->source;
-	nudph->len = ntohs(nskb->len - niph->ihl * 4);
+	nudph->len = htons(nskb->len - niph->ihl * 4);
 	nudph->check = CSUM_MANGLED_0;
 
 	nskb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -2386,7 +2386,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2, ct->tuplehash[dir].tuple.dst.u.all);
 					set_byte1(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2, TCPOPT_MSS);
 					set_byte1(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2 + 1, TCPOLEN_MSS);
-					set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2 + 1 + 1, ntohs(natcap_max_pmtu - 40));
+					set_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2 + 2 + 1 + 1, htons(natcap_max_pmtu - 40));
 
 					ns->ping.saddr = iph->saddr;
 					ns->ping.daddr = iph->daddr;
