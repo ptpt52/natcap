@@ -736,7 +736,8 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 			if (n == 1) {
 				snprintf(htp_confusion_host, sizeof(htp_confusion_host), "%s", tmp);
 				kfree(tmp);
-				sprintf(htp_confusion_req, htp_confusion_req_format, get_random_u32(), htp_confusion_host);
+				snprintf(htp_confusion_req, sizeof(htp_confusion_req), htp_confusion_req_format,
+				         get_random_u32(), htp_confusion_host);
 				goto done;
 			}
 			kfree(tmp);
