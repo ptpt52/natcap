@@ -178,7 +178,6 @@ static inline int natcap_ip_set_test(struct ip_set *set, const struct sk_buff *s
 		        (ret > 0 || ret == -ENOTEMPTY))
 			ret = -ret;
 	}
-
 	return (ret < 0 ? 0 : ret);
 }
 
@@ -1237,6 +1236,16 @@ int ip_set_del_dst_ip(const struct net_device *in, const struct net_device *out,
 	return ret;
 }
 
+/*
+ * MAC-only ipset lookups may use a synthetic skb with a valid Ethernet
+ * header but no associated net_device.  Newer kernels reject such skbs
+ * before hash:mac accesses eth_hdr(), so provide an Ethernet identity only
+ * for the duration of the lookup.
+ */
+static struct net_device natcap_ip_set_ether_dev = {
+	.type = ARPHRD_ETHER,
+};
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 int ip_set_test_src_mac(const struct nf_hook_state *state, struct sk_buff *skb, const char *ip_set_name)
 #else
@@ -1248,6 +1257,8 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 	struct ip_set *set;
 	struct ip_set_adt_opt opt;
 	struct xt_action_param par;
+	struct net_device *old_dev;
+	unsigned int old_mac_len;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 	struct net *net = state->net;
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
@@ -1286,7 +1297,19 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 		return 0;
 	}
 
+	old_dev = skb->dev;
+	old_mac_len = skb->mac_len;
+	/* Do not mask malformed headers or replace metadata on a real skb. */
+	if (!skb->dev && skb_mac_header(skb) >= skb->head &&
+	        skb_mac_header(skb) + ETH_HLEN <= skb->data) {
+		skb->dev = &natcap_ip_set_ether_dev;
+		if (skb->mac_len < ETH_HLEN)
+			skb->mac_len = ETH_HLEN;
+	}
 	ret = natcap_ip_set_test(set, skb, &par, &opt);
+	/* The per-CPU skb is reused by other synthetic packet paths. */
+	skb->mac_len = old_mac_len;
+	skb->dev = old_dev;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 	ip_set_put_byindex(net, id);
