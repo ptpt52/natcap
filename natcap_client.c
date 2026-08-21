@@ -4452,6 +4452,39 @@ eat:
 	return NF_STOLEN;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+static inline int natcap_dns_test_dst_ip(const struct nf_hook_state *state,
+        struct sk_buff *skb, __be32 daddr, const char *ip_set_name)
+{
+	struct iphdr *iph = ip_hdr(skb);
+	__be32 old_daddr = iph->daddr;
+	int ret;
+
+	iph->daddr = daddr;
+	ret = ip_set_test_dst_ip(state, skb, ip_set_name);
+	iph->daddr = old_daddr;
+
+	return ret;
+}
+#define NATCAP_DNS_TEST_DST_IP(state, in, out, skb, daddr, name) natcap_dns_test_dst_ip(state, skb, daddr, name)
+#else
+static inline int natcap_dns_test_dst_ip(const struct net_device *in,
+        const struct net_device *out, struct sk_buff *skb, __be32 daddr,
+        const char *ip_set_name)
+{
+	struct iphdr *iph = ip_hdr(skb);
+	__be32 old_daddr = iph->daddr;
+	int ret;
+
+	iph->daddr = daddr;
+	ret = ip_set_test_dst_ip(in, out, skb, ip_set_name);
+	iph->daddr = old_daddr;
+
+	return ret;
+}
+#define NATCAP_DNS_TEST_DST_IP(state, in, out, skb, daddr, name) natcap_dns_test_dst_ip(in, out, skb, daddr, name)
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 static unsigned int natcap_client_pre_master_in_hook(unsigned int hooknum,
         struct sk_buff *skb,
@@ -4934,14 +4967,9 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 						NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n",
 						             DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
 						do {
-							unsigned int old_ip = 0;
-
 							if ((IPS_NATCAP & ct->status)) {
 								if (dns_proxy_drop == 0 || dns_proxy_drop == 1) {
-									old_ip = iph->daddr;
-									iph->daddr = ip;
-									if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) {
-										iph->daddr = old_ip;
+									if (NATCAP_DNS_TEST_DST_IP(state, in, out, skb, ip, "cniplist") > 0) {
 										if (dns_proxy_drop == 1) {
 											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]proxy DNS ANS is in cniplist ip = %pI4, drop\n",
 											            DEBUG_UDP_ARG(iph,l4), id, &ip);
@@ -4951,7 +4979,6 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 										}
 									}
-									iph->daddr = old_ip;
 									if (is_cn_domain && cn_domain) {
 										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]proxy DNS ANS is cn_domain ip = %pI4, drop\n",
 										            DEBUG_UDP_ARG(iph,l4), id, &ip);
@@ -4961,9 +4988,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 										            DEBUG_UDP_ARG(iph,l4), id, &ip);
 									}
 								} else if (dns_proxy_drop == 2) {
-									iph->daddr = ip;
-									if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) { //XXX: now cniplist=C_cniplist
-										iph->daddr = old_ip;
+									if (NATCAP_DNS_TEST_DST_IP(state, in, out, skb, ip, "cniplist") > 0) { //XXX: now cniplist=C_cniplist
 										if ((!is_cn_domain && cn_domain) || !cn_domain) {
 											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]proxy DNS ANS is C_cniplist and not cn_domain ip = %pI4, drop\n",
 											            DEBUG_UDP_ARG(iph,l4), id, &ip);
@@ -4974,21 +4999,16 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 										}
 									} else {
 										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]proxy DNS ANS is cniplist ip = %pI4, accept\n",
-										            DEBUG_UDP_ARG(iph,l4), id, &ip);
-									}
-									iph->daddr = old_ip;
+											            DEBUG_UDP_ARG(iph,l4), id, &ip);
+										}
 								}
 							} else {
 								if (dns_proxy_drop == 0 || dns_proxy_drop == 1) {
-									old_ip = iph->daddr;
-									iph->daddr = ip;
-									if (IP_SET_test_dst_ip(state, in, out, skb, "dnsdroplist") > 0) {
-										iph->daddr = old_ip;
+									if (NATCAP_DNS_TEST_DST_IP(state, in, out, skb, ip, "dnsdroplist") > 0) {
 										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]direct DNS ANS is dnsdroplist ip = %pI4, drop\n",
 										            DEBUG_UDP_ARG(iph,l4), id, &ip);
 										return NF_DROP;
-									} else if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") <= 0) {
-										iph->daddr = old_ip;
+									} else if (NATCAP_DNS_TEST_DST_IP(state, in, out, skb, ip, "cniplist") <= 0) {
 										if ((!is_cn_domain && cn_domain) || !cn_domain) {
 											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]direct DNS ANS is C_cniplist and not cn_domain ip = %pI4, drop\n",
 											            DEBUG_UDP_ARG(iph,l4), id, &ip);
@@ -4998,16 +5018,11 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 										}
 									} else {
-										iph->daddr = old_ip;
 										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]direct DNS ANS is cniplist ip = %pI4, accept\n",
 										            DEBUG_UDP_ARG(iph,l4), id, &ip);
 									}
-									iph->daddr = old_ip;
 								} else if (dns_proxy_drop == 2) {
-									old_ip = iph->daddr;
-									iph->daddr = ip;
-									if (IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0) { //XXX: now cniplist=C_cniplist
-										iph->daddr = old_ip;
+									if (NATCAP_DNS_TEST_DST_IP(state, in, out, skb, ip, "cniplist") > 0) { //XXX: now cniplist=C_cniplist
 										if ((is_cn_domain && cn_domain)) {
 											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]direct DNS ANS is C_cniplist and cn_domain ip = %pI4, drop\n",
 											            DEBUG_UDP_ARG(iph,l4), id, &ip);
@@ -5018,9 +5033,8 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 										}
 									} else {
 										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]direct DNS ANS is cniplist ip = %pI4, accept\n",
-										            DEBUG_UDP_ARG(iph,l4), id, &ip);
-									}
-									iph->daddr = old_ip;
+											            DEBUG_UDP_ARG(iph,l4), id, &ip);
+										}
 								}
 							}
 						} while (0);
