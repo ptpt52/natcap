@@ -131,7 +131,6 @@ static void natmap_dip_cleanup(void)
 
 static void *natcap_start(struct seq_file *m, loff_t *pos)
 {
-	int n = 0;
 	char auth_http_url[128];
 	const char *url;
 	char *natcap_ctl_buffer = m->private;
@@ -144,8 +143,8 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 			snprintf(auth_http_url, sizeof(auth_http_url), "%s", url);
 		}
 		rcu_read_unlock();
-		n = snprintf(natcap_ctl_buffer,
-		             PAGE_SIZE - 1,
+		scnprintf(natcap_ctl_buffer,
+		          PAGE_SIZE,
 		             "# Version: %s\n"
 		             "# Usage:\n"
 		             "#    disabled=Number -- set disable/enable\n"
@@ -244,7 +243,6 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		             peer_sni_cache_used_nodes(),
 		             disabled, debug, server_persist_timeout,
 		             cnipwhitelist_mode, &dns_server, ntohs(dns_port));
-		natcap_ctl_buffer[n] = 0;
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
 		struct tuple *dst = NULL;
@@ -256,11 +254,10 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		}
 
 		if (dst) {
-			n = snprintf(natcap_ctl_buffer,
-			             PAGE_SIZE - 1,
+			scnprintf(natcap_ctl_buffer,
+			          PAGE_SIZE,
 			             "server %d " TUPLE_FMT "\n",
 			             x, TUPLE_ARG(dst));
-			natcap_ctl_buffer[n] = 0;
 			return natcap_ctl_buffer;
 		}
 	}
