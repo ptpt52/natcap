@@ -4570,7 +4570,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": Received reply\n", DEBUG_TCP_ARG(iph,l4));
+		NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": TCP dual-path reply received\n", DEBUG_TCP_ARG(iph,l4));
 
 		if ((IPS_NATCAP & ct->status)) {
 			master = ct->master;
@@ -4582,7 +4582,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			}
 
 			if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
-				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": got cfm\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": confirmation lock acquired\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 
 				if (!TCPH(l4)->rst && cnipwhitelist_mode == 0) {
@@ -4594,7 +4594,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					TCPH(l4)->dest = master->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all;
 					TCPH(l4)->source = master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all;
 					if (!is_natcap_server(iph->saddr) && IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
-						NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn natcap got response add target to gfwlist0\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": NATCAP reply: target outside cniplist action=add-to-gfwlist0\n", DEBUG_TCP_ARG(iph,l4));
 						IP_SET_add_src_ip(state, in, out, skb, "gfwlist0");
 					}
 					iph->saddr = saddr;
@@ -4603,7 +4603,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				}
 			}
 			if (!(IPS_NATCAP_ACK & ct->status)) {
-				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": drop without lock cfm\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": confirmation lock not acquired action=drop\n", DEBUG_TCP_ARG(iph,l4));
 				if (TCPH(l4)->syn && TCPH(l4)->ack) {
 					natcap_reset_synack(skb, in, ct);
 				}
@@ -4641,8 +4641,8 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				return ret;
 			}
 			if ((struct nf_conn *)skb_nfct(skb) != master) {
-				NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": SKB nfct mismatch (not master), ct=%p, master=%p, skb_nfct(skb)=%p\n", DEBUG_TCP_ARG(iph,l4), ct, master, skb_nfct(skb));
-				NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": Invalid CT [%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
+				NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": conntrack re-entry mismatch: expected master=%p current=%p original-ct=%p\n", DEBUG_TCP_ARG(iph,l4), master, skb_nfct(skb), ct);
+				NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": conntrack tuples: original=[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] master=[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
 				             DEBUG_TCP_ARG(iph,l4),
 				             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 				             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
@@ -4656,25 +4656,25 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				return NF_DROP;
 			}
 
-			NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": NATCAP reply completed\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_DEBUG("(CPMI)" DEBUG_TCP_FMT ": NATCAP reply attached to master conntrack\n", DEBUG_TCP_ARG(iph,l4));
 		} else {
 			if (TCPH(l4)->rst && cnipwhitelist_mode == 0) {
 				if ((TCPH(l4)->source == __constant_htons(80) || TCPH(l4)->source == __constant_htons(443)) &&
 				        IP_SET_test_src_ip(state, in, out, skb, "cniplist") <= 0) {
-					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": bypass get reset add target to gfwlist0\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": bypass RST: target outside cniplist action=add-to-gfwlist0\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_add_src_ip(state, in, out, skb, "gfwlist0");
 				}
 			}
 			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
-				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": got cfm\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": confirmation lock acquired\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				if (cnipwhitelist_mode == 0 && !TCPH(l4)->rst && IP_SET_test_src_ip(state, in, out, skb, "cniplist") > 0) {
-					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": multi-conn bypass got response add target to bypasslist\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": bypass reply: target matched cniplist action=add-to-bypasslist\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_add_src_ip(state, in, out, skb, "bypasslist");
 				}
 			}
 			if (!(IPS_NATCAP_ACK & ct->status)) {
-				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": drop without lock cfm\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_INFO("(CPMI)" DEBUG_TCP_FMT ": confirmation lock not acquired action=drop\n", DEBUG_TCP_ARG(iph,l4));
 				if (TCPH(l4)->syn && TCPH(l4)->ack) {
 					natcap_reset_synack(skb, in, ct);
 				}
@@ -4697,7 +4697,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 
-		NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": Received reply\n", DEBUG_UDP_ARG(iph,l4));
+		NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": UDP dual-path reply received\n", DEBUG_UDP_ARG(iph,l4));
 
 		if ((IPS_NATCAP & ct->status)) {
 			master = ct->master;
@@ -4709,7 +4709,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			}
 
 			if (!(IPS_NATCAP_CFM & master->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &master->status)) {
-				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": got cfm\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": confirmation lock acquired\n", DEBUG_UDP_ARG(iph,l4));
 				if (master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53)) {
 					//not DNS
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -4718,7 +4718,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			if (master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53)) {
 				//not DNS
 				if (!(IPS_NATCAP_ACK & ct->status)) {
-					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": drop without lock cfm\n", DEBUG_UDP_ARG(iph,l4));
+					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": confirmation lock not acquired action=drop\n", DEBUG_UDP_ARG(iph,l4));
 					return NF_DROP;
 				}
 			}
@@ -4752,8 +4752,8 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				return ret;
 			}
 			if ((struct nf_conn *)skb_nfct(skb) != master) {
-				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": SKB nfct mismatch (not master), ct=%p, master=%p, skb_nfct(skb)=%p\n", DEBUG_UDP_ARG(iph,l4), ct, master, skb_nfct(skb));
-				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": Invalid CT [%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
+				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": conntrack re-entry mismatch: expected master=%p current=%p original-ct=%p\n", DEBUG_UDP_ARG(iph,l4), master, skb_nfct(skb), ct);
+				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": conntrack tuples: original=[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] master=[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
 				             DEBUG_UDP_ARG(iph,l4),
 				             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 				             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
@@ -4767,7 +4767,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				return NF_DROP;
 			}
 
-			NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": NATCAP reply completed\n", DEBUG_UDP_ARG(iph,l4));
+			NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": NATCAP reply attached to master conntrack\n", DEBUG_UDP_ARG(iph,l4));
 
 			if (master->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53)) {
 				//not DNS
@@ -4776,7 +4776,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			ns = natcap_session_get(master);
 		} else {
 			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
-				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": got cfm\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": confirmation lock acquired\n", DEBUG_UDP_ARG(iph,l4));
 				if (ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53)) {
 					//not DNS
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -4785,7 +4785,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			if (ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u.all != __constant_htons(53)) {
 				//not DNS
 				if (!(IPS_NATCAP_ACK & ct->status)) {
-					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": drop without lock cfm\n", DEBUG_UDP_ARG(iph,l4));
+					NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": confirmation lock not acquired action=drop\n", DEBUG_UDP_ARG(iph,l4));
 					return NF_DROP;
 				}
 				return NF_ACCEPT;
@@ -4922,7 +4922,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					if (name != NULL) {
 						if ((name_len = get_rdata(p, len, pos, name, 2047)) >= 0) {
 							name[name_len] = 0;
-							NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
+							NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": DNS answer owner: id=0x%04x name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
 						}
 						kfree(name);
 					}
@@ -5055,7 +5055,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				case 28: //AAAA
 					if (rdlength == 16) {
 						unsigned char *ipv6 = p + pos;
-						NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ipv6=%pI6\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, ipv6);
+						NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": DNS AAAA answer: id=0x%04x type=%u class=%u ttl=%u rdlength=%u address=%pI6\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, ipv6);
 					}
 					break;
 
@@ -5072,16 +5072,16 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 						if (name != NULL) {
 							if ((name_len = get_rdata(p, len, pos, name, 2047)) >= 0) {
 								name[name_len] = 0;
-								NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
+								NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": DNS answer data: id=0x%04x name=%s\n", DEBUG_UDP_ARG(iph,l4), id, name);
 							}
 							kfree(name);
 						}
 					}
-					NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
+					NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": DNS answer: id=0x%04x type=%u class=%u ttl=%u rdlength=%u\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
 					break;
 
 				default:
-					NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
+					NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": DNS answer: id=0x%04x type=%u class=%u ttl=%u rdlength=%u\n", DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength);
 					break;
 				}
 
