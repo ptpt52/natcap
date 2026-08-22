@@ -1138,7 +1138,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 			if (ret != 0) {
-				NATCAP_ERROR("(SPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() failed ret= %d\n", DEBUG_TCP_ARG(iph,l4), ret);
+				NATCAP_ERROR("(SPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 				return NF_DROP;
 			}
 			if (!TCPH(l4)->syn && NATCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION && (NS_NATCAP_CONFUSION & ns->n.status)) {
@@ -1183,7 +1183,7 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 			}
 			ns = natcap_session_in(ct);
 			if (NULL == ns) {
-				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
@@ -1289,12 +1289,12 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 
 				ns = natcap_session_in(ct);
 				if (NULL == ns) {
-					NATCAP_WARN("(SPCI)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
+					NATCAP_WARN("(SPCI)" DEBUG_UDP_FMT ": NATCAP session acquisition failed\n", DEBUG_UDP_ARG(iph,l4));
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
 
-				NATCAP_DEBUG("(SPCI)" DEBUG_UDP_FMT ": control packet decoded action=accept\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_DEBUG("(SPCI)" DEBUG_UDP_FMT ": control packet decoded stage=pre-auth\n", DEBUG_UDP_ARG(iph,l4));
 				if (NATCAP_UDP_GET_ENC(get_byte2((void *)UDPH(l4) + sizeof(struct udphdr) + 10)) == NATCAP_UDP_ENC) {
 					short_set_bit(NS_NATCAP_ENC_BIT, &ns->n.status);
 				}
@@ -1773,7 +1773,7 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 
 		return NF_STOLEN;
 	} else if (iph->protocol == IPPROTO_UDP) {
-		NATCAP_DEBUG("(SPO)" DEBUG_UDP_FMT ": data reply action=accept\n", DEBUG_UDP_ARG(iph,l4));
+		NATCAP_DEBUG("(SPO)" DEBUG_UDP_FMT ": data reply received stage=pre-transform\n", DEBUG_UDP_ARG(iph,l4));
 		if ((NS_NATCAP_ENC & ns->n.status)) {
 			if (!skb_make_writable(skb, skb->len)) {
 				NATCAP_ERROR("(SPO)" DEBUG_UDP_FMT ": skb_make_writable() failed\n", DEBUG_UDP_ARG(iph,l4));
@@ -2032,7 +2032,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 			ns = natcap_session_in(ct);
 			if (ns == NULL) {
-				NATCAP_WARN("(SPI)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(SPI)" DEBUG_UDP_FMT ": NATCAP session acquisition failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
 			if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
@@ -2155,7 +2155,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					ct = master->master;
 					ns = natcap_session_in(ct);
 					if (ns == NULL) {
-						NATCAP_WARN("(SPI)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_WARN("(SPI)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 						consume_skb(skb);
 						return NF_STOLEN;
 					}
@@ -2200,7 +2200,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					skb->ip_summed = CHECKSUM_UNNECESSARY;
 					skb_rcsum_tcpudp(skb);
 
-					NATCAP_INFO("(SPI)" DEBUG_TCP_FMT ": get keepalive ping action=send flow=pong\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_INFO("(SPI)" DEBUG_TCP_FMT ": keepalive ping received action=send-pong\n", DEBUG_TCP_ARG(iph,l4));
 
 					skb_nfct_reset(skb);
 					nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
@@ -2249,7 +2249,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					ct = master->master;
 					ns = natcap_session_in(ct);
 					if (ns == NULL) {
-						NATCAP_WARN("(SPI)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_WARN("(SPI)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 						consume_skb(skb);
 						return NF_STOLEN;
 					}
@@ -2339,7 +2339,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 					ns = natcap_session_in(ct);
 					if (ns == NULL) {
-						NATCAP_WARN("(SPI)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
+						NATCAP_WARN("(SPI)" DEBUG_UDP_FMT ": NATCAP session acquisition failed\n", DEBUG_UDP_ARG(iph,l4));
 						consume_skb(skb);
 						return NF_STOLEN;
 					}
@@ -2520,7 +2520,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 
 		ns = natcap_session_in(ct);
 		if (ns == NULL) {
-			NATCAP_WARN("(SPI)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(SPI)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
 		}

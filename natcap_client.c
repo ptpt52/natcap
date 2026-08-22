@@ -932,7 +932,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -992,7 +992,7 @@ bypass_tcp:
 
 						ns = natcap_session_in(ct);
 						if (!ns) {
-							NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+							NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 							set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 							return NF_ACCEPT;
 						}
@@ -1044,7 +1044,7 @@ bypass_tcp:
 
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1095,7 +1095,7 @@ bypass_tcp:
 			get_dns_proxy_server(UDPH(l4)->dest, &server);
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session acquisition failed\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1120,7 +1120,7 @@ bypass_tcp:
 
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session acquisition failed\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1145,7 +1145,7 @@ bypass_tcp:
 
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session acquisition failed\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1189,7 +1189,7 @@ natcap_dual_out_udp:
 
 				ns = natcap_session_in(ct);
 				if (!ns) {
-					NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
+					NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session acquisition failed\n", DEBUG_UDP_ARG(iph,l4));
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
@@ -1251,7 +1251,7 @@ bypass_udp:
 
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session acquisition failed\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1318,7 +1318,7 @@ natcaped_out:
 		l4 = (void *)iph + iph->ihl * 4;
 		ns = natcap_session_in(ct);
 		if (!ns) {
-			NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
+			NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session acquisition failed\n", DEBUG_UDP_ARG(iph,l4));
 			return NF_ACCEPT;
 		}
 		if (TCPH(l4)->syn && !TCPH(l4)->ack && cnipwhitelist_mode == 0) {
@@ -1489,7 +1489,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 		if (ret != 0) {
-			NATCAP_ERROR("(CPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() failed ret= %d\n", DEBUG_TCP_ARG(iph,l4), ret);
+			NATCAP_ERROR("(CPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 			return NF_DROP;
 		}
 		if ((tcpopt.header.type & NATCAP_TCPOPT_CONFUSION)) {
@@ -1520,7 +1520,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_E_MAGIC_A) &&
 		        UDPH(l4)->len == __constant_htons(sizeof(struct udphdr) + 4)) {
 			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
-				NATCAP_INFO("(CPCI)" DEBUG_UDP_FMT ": received CFM pkt\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_INFO("(CPCI)" DEBUG_UDP_FMT ": confirmation packet received\n", DEBUG_UDP_ARG(iph,l4));
 			}
 			natcap_server_in_touch(ns->n.group_x, ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 			consume_skb(skb);
@@ -1771,7 +1771,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 			ns = natcap_session_in(ct);
 			if (ns == NULL) {
-				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session acquisition failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
 			if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
@@ -1894,7 +1894,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					ct = master->master;
 					ns = natcap_session_in(ct);
 					if (ns == NULL) {
-						NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 						consume_skb(skb);
 						return NF_STOLEN;
 					}
@@ -1939,7 +1939,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					skb->ip_summed = CHECKSUM_UNNECESSARY;
 					skb_rcsum_tcpudp(skb);
 
-					NATCAP_INFO("(CPI)" DEBUG_TCP_FMT ": get keepalive ping action=send flow=pong\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_INFO("(CPI)" DEBUG_TCP_FMT ": keepalive ping received action=send-pong\n", DEBUG_TCP_ARG(iph,l4));
 
 					skb_nfct_reset(skb);
 					nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
@@ -1988,7 +1988,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					ct = master->master;
 					ns = natcap_session_in(ct);
 					if (ns == NULL) {
-						NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 						consume_skb(skb);
 						return NF_STOLEN;
 					}
@@ -2080,7 +2080,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 					ns = natcap_session_in(ct);
 					if (ns == NULL) {
-						NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
+						NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session acquisition failed\n", DEBUG_UDP_ARG(iph,l4));
 						consume_skb(skb);
 						return NF_STOLEN;
 					}
@@ -2259,7 +2259,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 		ns = natcap_session_in(ct);
 		if (ns == NULL) {
-			NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
 		}
@@ -3938,10 +3938,10 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	if (NULL == master_ns) {
 		switch(iph->protocol) {
 		case IPPROTO_TCP:
-			NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 			break;
 		case IPPROTO_UDP:
-			NATCAP_WARN("(CPMO)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
+			NATCAP_WARN("(CPMO)" DEBUG_UDP_FMT ": NATCAP session acquisition failed\n", DEBUG_UDP_ARG(iph,l4));
 			break;
 		}
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -4991,7 +4991,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 										            DEBUG_UDP_ARG(iph,l4), dns_proxy_drop, id, &ip);
 										return NF_DROP;
 									} else {
-										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=proxy mode=%d id=0x%04x answer=%pI4 cn_domain=%s action=accept\n",
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=proxy mode=%d id=0x%04x answer=%pI4 cn_domain=%s decision=allow-current-answer\n",
 										            DEBUG_UDP_ARG(iph,l4), dns_proxy_drop, id, &ip,
 										            cn_domain ? "miss" : "disabled");
 									}
@@ -5003,11 +5003,11 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 											            cn_domain ? "miss" : "disabled");
 											return NF_DROP;
 										} else {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=proxy mode=2 id=0x%04x answer=%pI4 C_cniplist=match cn_domain=match action=accept\n",
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=proxy mode=2 id=0x%04x answer=%pI4 C_cniplist=match cn_domain=match decision=allow-current-answer\n",
 											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 										}
 									} else {
-										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=proxy mode=2 id=0x%04x answer=%pI4 C_cniplist=miss action=accept\n",
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=proxy mode=2 id=0x%04x answer=%pI4 C_cniplist=miss decision=allow-current-answer\n",
 										            DEBUG_UDP_ARG(iph,l4), id, &ip);
 									}
 								}
@@ -5024,11 +5024,11 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 											            cn_domain ? "miss" : "disabled");
 											return NF_DROP;
 										} else {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=%d id=0x%04x answer=%pI4 cniplist=miss cn_domain=match action=accept\n",
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=%d id=0x%04x answer=%pI4 cniplist=miss cn_domain=match decision=allow-current-answer\n",
 											            DEBUG_UDP_ARG(iph,l4), dns_proxy_drop, id, &ip);
 										}
 									} else {
-										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=%d id=0x%04x answer=%pI4 cniplist=match action=accept\n",
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=%d id=0x%04x answer=%pI4 cniplist=match decision=allow-current-answer\n",
 										            DEBUG_UDP_ARG(iph,l4), dns_proxy_drop, id, &ip);
 									}
 								} else if (dns_proxy_drop == 2) {
@@ -5038,12 +5038,12 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 											return NF_DROP;
 										} else {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=2 id=0x%04x answer=%pI4 C_cniplist=match cn_domain=%s action=accept\n",
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=2 id=0x%04x answer=%pI4 C_cniplist=match cn_domain=%s decision=allow-current-answer\n",
 											            DEBUG_UDP_ARG(iph,l4), id, &ip,
 											            cn_domain ? "miss" : "disabled");
 										}
 									} else {
-										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=2 id=0x%04x answer=%pI4 C_cniplist=miss action=accept\n",
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=2 id=0x%04x answer=%pI4 C_cniplist=miss decision=allow-current-answer\n",
 										            DEBUG_UDP_ARG(iph,l4), id, &ip);
 									}
 								}
@@ -5286,7 +5286,7 @@ int cn_domain_load_from_path(const char *path)
 
 	filp = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
-		NATCAP_ERROR("cn_domain source open failed: path=: %s\n", path);
+		NATCAP_ERROR("cn_domain source open failed: path=%s\n", path);
 		ret = PTR_ERR(filp);
 		goto out;
 	}
@@ -5356,7 +5356,7 @@ int cn_domain_load_from_raw(const char *path)
 
 	filp = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
-		NATCAP_ERROR("cn_domain raw source open failed: path=: %s\n", path);
+		NATCAP_ERROR("cn_domain raw source open failed: path=%s\n", path);
 		ret = PTR_ERR(filp);
 		goto out;
 	}
@@ -5434,7 +5434,7 @@ int cn_domain_dump_path(const char *path)
 
 	filp = filp_open(path, O_RDWR | O_CREAT | O_LARGEFILE | O_DSYNC | O_TRUNC, 0);
 	if (IS_ERR(filp)) {
-		NATCAP_ERROR("cn_domain dump open failed: path=: %s\n", path);
+		NATCAP_ERROR("cn_domain dump open failed: path=%s\n", path);
 		return PTR_ERR(filp);
 	}
 

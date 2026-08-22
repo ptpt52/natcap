@@ -975,7 +975,7 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 	user = nf_ct_get(uskb, &ctinfo);
 
 	if (!user) {
-		NATCAP_ERROR("fakeuser initialization failed: mac=[%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] failed\n",
+		NATCAP_ERROR("fakeuser conntrack creation failed: mac=[%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u]\n",
 		             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		             &saddr, ntohs(sport), &daddr, ntohs(dport));
 		skb_nfct_reset(uskb);
@@ -1053,7 +1053,7 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 		spin_unlock_bh(&ue->lock);
 
 		if (user != peer_port_map[ntohs(ue->map_port)]) {
-			NATCAP_WARN("fakeuser initialization failed: mac=[%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] map_port allocation failed\n",
+			NATCAP_WARN("fakeuser map_port allocation failed: mac=[%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u]\n",
 			            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 			            &saddr, ntohs(sport), &daddr, ntohs(dport));
 			/* alloc_peer_port fail: portmap would not work, but sni should work */
@@ -3265,7 +3265,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				}
 				ns = natcap_session_in(ct);
 				if (!ns) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 					spin_unlock_bh(&ue->lock);
 					nf_ct_put(user);
 					consume_skb(cache_skb);
@@ -4485,7 +4485,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 
 		ns = natcap_session_in(ct);
 		if (!ns) {
-			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 			goto h_out;
 		}
 		ns->p.local_seq = fue->local_seq; //can't be 0
@@ -4571,7 +4571,7 @@ knock:
 
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
 				put_peer_user(user);
 				return NF_ACCEPT;
 			}
