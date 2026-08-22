@@ -1013,7 +1013,7 @@ static inline struct sk_buff *natcap_peer_ctrl_alloc(struct sk_buff *oskb, int d
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR("Failed to allocate skb\n");
+		NATCAP_ERROR("skb allocation failed\n");
 		return NULL;
 	}
 	nskb->tail += offset;

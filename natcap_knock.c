@@ -155,7 +155,7 @@ static unsigned int natcap_knock_dnat_hook(void *priv,
 
 	if (IP_SET_test_dst_ip(state, in, out, skb, "knocklist") > 0) {
 		natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
-		NATCAP_INFO("(KD)" DEBUG_TCP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+		NATCAP_INFO("(KD)" DEBUG_TCP_FMT ": new connection before encode: server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 	} else {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		return NF_ACCEPT;
@@ -163,18 +163,18 @@ static unsigned int natcap_knock_dnat_hook(void *priv,
 
 	if (!(IPS_NATCAP & ct->status) && !test_and_set_bit(IPS_NATCAP_BIT, &ct->status)) { /* first time out */
 		if (!TCPH(l4)->syn || TCPH(l4)->ack) {
-			NATCAP_INFO("(KD)" DEBUG_TCP_FMT ": First packet in is not SYN, bypassing\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_INFO("(KD)" DEBUG_TCP_FMT ": first packet is not SYN action=bypass\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
 		if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
-			NATCAP_ERROR("(KD)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+			NATCAP_ERROR("(KD)" DEBUG_TCP_FMT ": NATCAP DNAT setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
 		}
 	}
 
-	NATCAP_DEBUG("(KD)" DEBUG_TCP_FMT ": Encode completed\n", DEBUG_TCP_ARG(iph,l4));
+	NATCAP_DEBUG("(KD)" DEBUG_TCP_FMT ": encode action=complete\n", DEBUG_TCP_ARG(iph,l4));
 
 	return NF_ACCEPT;
 }
@@ -264,11 +264,11 @@ static unsigned int natcap_knock_post_out_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 	}
 	if (ret != 0) {
-		NATCAP_ERROR("(KPO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+		NATCAP_ERROR("(KPO)" DEBUG_TCP_FMT ": natcap_tcp_encode() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 		return NF_DROP;
 	}
 
-	NATCAP_DEBUG("(KPO)" DEBUG_TCP_FMT ": Encode completed\n", DEBUG_TCP_ARG(iph,l4));
+	NATCAP_DEBUG("(KPO)" DEBUG_TCP_FMT ": encode action=complete\n", DEBUG_TCP_ARG(iph,l4));
 
 	return NF_ACCEPT;
 }

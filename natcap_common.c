@@ -1474,7 +1474,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 
 	if (test_and_set_bit(IPS_NATCAP_SESSION_BIT, &ct->status)) {
 		/* someone else is already running in this progress */
-		NATCAP_INFO("Another process is already running this operation!\n");
+		NATCAP_INFO("operation already in progress\n");
 		return -1;
 	}
 
@@ -1504,7 +1504,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 #endif
 	if (!new) {
 		clear_bit(IPS_NATCAP_SESSION_BIT, &ct->status);
-		NATCAP_ERROR("Failed to krealloc (size=%u)\n", (unsigned int)alloc_size);
+		NATCAP_ERROR("conntrack extension reallocation failed (size=%u)\n", (unsigned int)alloc_size);
 		return -1;
 	}
 
@@ -1543,7 +1543,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 
 	if (nkoff > NATCAP_MAX_OFF) {
 		clear_bit(IPS_NATCAP_SESSION_BIT, &ct->status);
-		NATCAP_ERROR("realloc ct->ext->len > %u not supported!\n", NATCAP_MAX_OFF);
+		NATCAP_ERROR("conntrack extension offset exceeds supported limit=%u\n", NATCAP_MAX_OFF);
 		return -1;
 	}
 
@@ -1557,7 +1557,7 @@ int natcap_session_init(struct nf_conn *ct, gfp_t gfp)
 #endif
 	if (!new) {
 		clear_bit(IPS_NATCAP_SESSION_BIT, &ct->status);
-		NATCAP_ERROR("Failed to krealloc (size=%u)\n", (unsigned int)alloc_size);
+		NATCAP_ERROR("conntrack extension reallocation failed (size=%u)\n", (unsigned int)alloc_size);
 		return -1;
 	}
 	memset((void *)new + newoff, 0, newlen - newoff);
@@ -1672,11 +1672,11 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	}
 
 	if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr))) {
-		NATCAP_ERROR("Failed to make skb writable\n");
+		NATCAP_ERROR("skb write preparation failed\n");
 		return -ENOMEM;
 	}
 	if (skb_tailroom(skb) < sizeof(struct tcphdr) - sizeof(struct udphdr) && pskb_expand_head(skb, 0, sizeof(struct tcphdr) - sizeof(struct udphdr), GFP_ATOMIC)) {
-		NATCAP_ERROR("Failed to expand skb head\n");
+		NATCAP_ERROR("skb head expansion failed\n");
 		return -ENOMEM;
 	}
 	iph = ip_hdr(skb);
@@ -1746,7 +1746,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 			offset += skb_tailroom(skb);
 			*ping_skb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 			if (!(*ping_skb)) {
-				NATCAP_ERROR("Failed to allocate skb\n");
+				NATCAP_ERROR("skb allocation failed\n");
 				return 0;
 			}
 			(*ping_skb)->tail += offset;
@@ -1800,7 +1800,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(*ping_skb);
 
-			NATCAP_WARN("ping: Timeout on new SYN %pI4:%u->%pI4:%u tuple[%pI4:%u->%pI4:%u]\n",
+			NATCAP_WARN("keepalive timeout: pending SYN %pI4:%u->%pI4:%u tuple[%pI4:%u->%pI4:%u]\n",
 			            &iph->saddr, ntohs(TCPH(l4)->source), &iph->daddr, ntohs(TCPH(l4)->dest),
 			            &ns->ping.remote_saddr, ntohs(ns->ping.remote_source), &ns->ping.remote_daddr, ntohs(ns->ping.remote_dest));
 
@@ -1833,7 +1833,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 		ns->ping.stage = 1;
 		*ping_skb = skb_copy(skb, GFP_ATOMIC);
 		if ((*ping_skb) == NULL) {
-			NATCAP_ERROR("Failed to allocate skb\n");
+			NATCAP_ERROR("skb allocation failed\n");
 			return 0;
 		}
 
@@ -1846,7 +1846,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 
 		skb_rcsum_tcpudp(*ping_skb);
 
-		NATCAP_INFO("ping: send %pI4:%u->%pI4:%u\n",
+		NATCAP_INFO("keepalive ping action=send flow=%pI4:%u->%pI4:%u\n",
 		            &iph->saddr, ntohs(TCPH(l4)->source), &iph->daddr, ntohs(TCPH(l4)->dest));
 
 	}
@@ -2046,7 +2046,7 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 	//alloc natcap_session
 	ns = natcap_session_in(ct);
 	if (!ns) {
-		NATCAP_DEBUG("(CCI)" DEBUG_UDP_FMT ": NATCAP session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+		NATCAP_DEBUG("(CCI)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
 	if ((NS_NATCAP_CONE & ns->n.status)) {
@@ -2071,7 +2071,7 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 			cone_snat_read_session(css_idx, &css);
 			if (cns.ip != 0 && cns.port != 0 && cns.ip == css.lan_ip && cns.port == css.lan_port && css.wan_ip == iph->daddr && css.wan_port == UDPH(l4)->dest) {
 				if (natcap_dnat_setup(ct, cns.ip, cns.port) != NF_ACCEPT) {
-					NATCAP_ERROR("(CCI)" DEBUG_UDP_FMT ": do mapping failed, target=%pI4:%u @port=%u\n",
+					NATCAP_ERROR("(CCI)" DEBUG_UDP_FMT ": mapping creation failed, target=%pI4:%u @port=%u\n",
 					             DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
 					return NF_ACCEPT;
 				}
@@ -2083,7 +2083,7 @@ static unsigned int natcap_common_cone_in_hook(void *priv,
 				cone_snat_write_session(css_idx, &css);
 #endif
 
-				NATCAP_INFO("(CCI)" DEBUG_UDP_FMT ": do mapping, target=%pI4:%u @port=%u\n",
+				NATCAP_INFO("(CCI)" DEBUG_UDP_FMT ": mapping created: target=%pI4:%u @port=%u\n",
 				            DEBUG_UDP_ARG(iph,l4), &cns.ip, ntohs(cns.port), ntohs(UDPH(l4)->dest));
 
 				short_set_bit(NS_NATCAP_CONE_BIT, &ns->n.status);
@@ -2180,7 +2180,7 @@ static unsigned int natcap_common_cone_out_hook(void *priv,
 		        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all != ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all) {
 			int offlen;
 			if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
-				NATCAP_ERROR("(CCO)" DEBUG_UDP_FMT ": pskb_expand_head failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_ERROR("(CCO)" DEBUG_UDP_FMT ": pskb_expand_head() failed\n", DEBUG_UDP_ARG(iph,l4));
 				consume_skb(skb);
 				return NF_STOLEN;
 			}
@@ -2421,7 +2421,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 			if (!(IPS_NATFLOW_FF_STOP & ct->status)) set_bit(IPS_NATFLOW_FF_STOP_BIT, &ct->status);
 
 			if (ns->n.cone_pkts != 0) {
-				NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": cone_pkts is %u before, maybe out of order\n", DEBUG_UDP_ARG(iph,l4), ns->n.cone_pkts);
+				NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": cone packet sequence out of order: previous=%u\n", DEBUG_UDP_ARG(iph,l4), ns->n.cone_pkts);
 				ns->n.cone_pkts = 0;
 			}
 
@@ -2455,7 +2455,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 			NATCAP_INFO("(CCS)" DEBUG_UDP_FMT ": SNAT to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &ip, ntohs(port));
 			ret = natcap_snat_setup(ct, ip, port);
 			if (ret != NF_ACCEPT) {
-				NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": NATCAP snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": NATCAP SNAT setup failed\n", DEBUG_UDP_ARG(iph,l4));
 			}
 			short_set_bit(NS_NATCAP_CONESNAT_BIT, &ns->n.status);
 
@@ -2483,7 +2483,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 		nh = rt_nexthop(rt, ip_hdr(skb)->daddr);
 		newsrc = inet_select_addr(out, nh, RT_SCOPE_UNIVERSE);
 		if (!newsrc) {
-			NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": %s ate my IP address\n", DEBUG_UDP_ARG(iph,l4), out->name);
+			NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": SNAT skipped: output device %s assigned the source address\n", DEBUG_UDP_ARG(iph,l4), out->name);
 			return NF_ACCEPT;
 		}
 
@@ -2507,7 +2507,7 @@ static unsigned int natcap_common_cone_snat_hook(void *priv,
 						NATCAP_INFO("(CCS)" DEBUG_UDP_FMT ": SNAT to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &css.wan_ip, ntohs(css.wan_port));
 						ret = natcap_snat_setup(ct, css.wan_ip, css.wan_port);
 						if (ret != NF_ACCEPT) {
-							NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": NATCAP snat_setup failed\n", DEBUG_UDP_ARG(iph,l4));
+							NATCAP_WARN("(CCS)" DEBUG_UDP_FMT ": NATCAP SNAT setup failed\n", DEBUG_UDP_ARG(iph,l4));
 						}
 
 #if defined(CONE_NAT_CHECK_USED_HOOK)

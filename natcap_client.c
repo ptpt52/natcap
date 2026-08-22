@@ -696,7 +696,7 @@ static inline int natcap_reset_synack(struct sk_buff *oskb, const struct net_dev
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR("Failed to allocate skb\n");
+		NATCAP_ERROR("skb allocation failed\n");
 		return -1;
 	}
 	nskb->tail += offset;
@@ -898,7 +898,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if (!TCPH(l4)->syn || TCPH(l4)->ack) {
-			NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": First packet in is not SYN, bypassing\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": first packet is not SYN action=bypass\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			return NF_ACCEPT;
@@ -911,7 +911,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 
 			if (natcap_tcp_decode_header(TCPH(l4)) != NULL || natcap_peer_decode_header(TCPH(l4)) != NULL) {
-				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": First packet is already encoded, bypassing\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": first packet already encoded action=bypass\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -932,7 +932,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			natcap_knock_info_select(iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": NATCAP session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -985,14 +985,14 @@ bypass_tcp:
 
 						natcap_server_info_select(SERVER_GROUP_0, state, in, out, skb, iph->daddr, TCPH(l4)->dest, &server);
 						if (server.ip == 0) {
-							NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": Server not found\n", DEBUG_TCP_ARG(iph,l4));
+							NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": server selection failed\n", DEBUG_TCP_ARG(iph,l4));
 							set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 							return NF_ACCEPT;
 						}
 
 						ns = natcap_session_in(ct);
 						if (!ns) {
-							NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": NATCAP session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+							NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
 							set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 							return NF_ACCEPT;
 						}
@@ -1036,7 +1036,7 @@ bypass_tcp:
 			}
 			natcap_server_info_select(x, state, in, out, skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
-				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": Server not found\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": server selection failed\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1044,7 +1044,7 @@ bypass_tcp:
 
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": NATCAP session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1074,7 +1074,7 @@ bypass_tcp:
 				         skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 24))) {
 					iph = ip_hdr(skb);
 					l4 = (void *)iph + iph->ihl * 4;
-					NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": First packet is already encoded, bypassing\n", DEBUG_UDP_ARG(iph,l4));
+					NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": first packet already encoded action=bypass\n", DEBUG_UDP_ARG(iph,l4));
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
@@ -1095,7 +1095,7 @@ bypass_tcp:
 			get_dns_proxy_server(UDPH(l4)->dest, &server);
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1113,14 +1113,14 @@ bypass_tcp:
 		if (UDPH(l4)->dest == __constant_htons(53) && iph->daddr == gfw0_dns_magic_server) {
 			natcap_server_info_select(SERVER_GROUP_0, state, in, out, skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
-				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": gfw0 dns no server found\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": DNS route=gfw0 server selection failed\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
 
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1138,14 +1138,14 @@ bypass_tcp:
 		if (UDPH(l4)->dest == __constant_htons(53) && iph->daddr == gfw1_dns_magic_server) {
 			natcap_server_info_select(SERVER_GROUP_1, state, in, out, skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
-				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": gfw1 dns no server found\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": DNS route=gfw1 server selection failed\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
 			}
 
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1182,14 +1182,14 @@ natcap_dual_out_udp:
 					natcap_server_info_select(SERVER_GROUP_0, state, in, out, skb, iph->daddr, UDPH(l4)->dest, &server);
 				}
 				if (server.ip == 0) {
-					NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": Server not found\n", DEBUG_UDP_ARG(iph,l4));
+					NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": server selection failed\n", DEBUG_UDP_ARG(iph,l4));
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
 
 				ns = natcap_session_in(ct);
 				if (!ns) {
-					NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+					NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
 					set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
@@ -1243,7 +1243,7 @@ bypass_udp:
 
 			natcap_server_info_select(x, state, in, out, skb, iph->daddr, ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all, &server);
 			if (server.ip == 0) {
-				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": Server not found\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": server selection failed\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1251,7 +1251,7 @@ bypass_udp:
 
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
 				set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				return NF_ACCEPT;
@@ -1262,7 +1262,7 @@ bypass_udp:
 			if (in && strncmp(in->name, "natcap", 6) == 0) {
 				if (!(NS_NATCAP_NOLIMIT & ns->n.status)) short_set_bit(NS_NATCAP_NOLIMIT_BIT, &ns->n.status);
 			}
-			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection, before encode, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection before encode: server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
 		}
 	}
 
@@ -1273,23 +1273,23 @@ dnat_out:
 		case IPPROTO_TCP:
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 			if (natcap_session_in(ct) == NULL) {
-				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": natcap_session_init failed\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_TCP_FMT ": NATCAP session initialization failed\n", DEBUG_TCP_ARG(iph,l4));
 			}
 			break;
 		case IPPROTO_UDP:
 			NATCAP_INFO("(CD)" DEBUG_UDP_FMT ": new connection, after encode, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
 			if (natcap_session_in(ct) == NULL) {
-				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": natcap_session_init failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session initialization failed\n", DEBUG_UDP_ARG(iph,l4));
 			}
 			break;
 		}
 		if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 			switch (iph->protocol) {
 			case IPPROTO_TCP:
-				NATCAP_ERROR("(CD)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+				NATCAP_ERROR("(CD)" DEBUG_TCP_FMT ": NATCAP DNAT setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 				break;
 			case IPPROTO_UDP:
-				NATCAP_ERROR("(CD)" DEBUG_UDP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
+				NATCAP_ERROR("(CD)" DEBUG_UDP_FMT ": NATCAP DNAT setup failed, server=" TUPLE_FMT "\n", DEBUG_UDP_ARG(iph,l4), TUPLE_ARG(&server));
 				break;
 			}
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -1300,10 +1300,10 @@ dnat_out:
 
 	switch (iph->protocol) {
 	case IPPROTO_TCP:
-		NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": Encode completed\n", DEBUG_TCP_ARG(iph,l4));
+		NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": encode action=complete\n", DEBUG_TCP_ARG(iph,l4));
 		break;
 	case IPPROTO_UDP:
-		NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": Encode completed\n", DEBUG_UDP_ARG(iph,l4));
+		NATCAP_DEBUG("(CD)" DEBUG_UDP_FMT ": encode action=complete\n", DEBUG_UDP_ARG(iph,l4));
 		break;
 	}
 
@@ -1318,7 +1318,7 @@ natcaped_out:
 		l4 = (void *)iph + iph->ihl * 4;
 		ns = natcap_session_in(ct);
 		if (!ns) {
-			NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+			NATCAP_WARN("(CD)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
 			return NF_ACCEPT;
 		}
 		if (TCPH(l4)->syn && !TCPH(l4)->ack && cnipwhitelist_mode == 0) {
@@ -1332,7 +1332,7 @@ natcaped_out:
 			}
 			if ((NS_NATCAP_SYN1 & ns->n.status) && (NS_NATCAP_SYN2 & ns->n.status)) {
 				if (!is_natcap_server(iph->daddr)) {
-					NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": natcaped syn3 del target from gfwlist0\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_DEBUG("(CD)" DEBUG_TCP_FMT ": NATCAP third SYN: target action=delete-from-gfwlist0\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_del_dst_ip(state, in, out, skb, "gfwlist0");
 				}
 			}
@@ -1429,14 +1429,14 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 							server.port = opt->dst.data.port;
 							//server.encryption = opt->header.encryption;
 							if (natcap_dnat_setup(ct, server.ip, server.port) == NF_ACCEPT) {
-								NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": NATCAP dnat_setup succeeded, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+								NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": NATCAP DNAT setup succeeded, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 							}
 						} else if (NATCAP_TCPOPT_TYPE(opt->header.type) == NATCAP_TCPOPT_TYPE_ALL) {
 							server.ip = opt->all.data.ip;
 							server.port = opt->all.data.port;
 							//server.encryption = opt->header.encryption;
 							if (natcap_dnat_setup(ct, server.ip, server.port) == NF_ACCEPT) {
-								NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": NATCAP dnat_setup succeeded, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+								NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": NATCAP DNAT setup succeeded, target=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 							}
 						}
 					}
@@ -1482,19 +1482,19 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			natcap_server_in_touch(ns->n.group_x, ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 		}
 
-		NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": Decode started\n", DEBUG_TCP_ARG(iph,l4));
+		NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": decode action=start\n", DEBUG_TCP_ARG(iph,l4));
 
 		tcpopt.header.encryption = !!(NS_NATCAP_ENC & ns->n.status);
 		ret = natcap_tcp_decode(ct, skb, &tcpopt, IP_CT_DIR_REPLY);
 		iph = ip_hdr(skb);
 		l4 = (void *)iph + iph->ihl * 4;
 		if (ret != 0) {
-			NATCAP_ERROR("(CPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() ret = %d\n", DEBUG_TCP_ARG(iph,l4), ret);
+			NATCAP_ERROR("(CPCI)" DEBUG_TCP_FMT ": natcap_tcp_decode() failed ret= %d\n", DEBUG_TCP_ARG(iph,l4), ret);
 			return NF_DROP;
 		}
 		if ((tcpopt.header.type & NATCAP_TCPOPT_CONFUSION)) {
 			if (tcpopt.header.opsize < sizeof(struct natcap_TCPOPT_header) + sizeof(__be32)) {
-				NATCAP_WARN("(CPCI)" DEBUG_TCP_FMT ": invalid confusion option size=%u\n", DEBUG_TCP_ARG(iph,l4), tcpopt.header.opsize);
+				NATCAP_WARN("(CPCI)" DEBUG_TCP_FMT ": invalid TCP confusion option size=%u\n", DEBUG_TCP_ARG(iph,l4), tcpopt.header.opsize);
 				return NF_DROP;
 			}
 			__be32 offset = get_byte4((const void *)&tcpopt + tcpopt.header.opsize - sizeof(__be32));
@@ -1509,7 +1509,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			return NF_STOLEN;
 		}
 
-		NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": Decode completed\n", DEBUG_TCP_ARG(iph,l4));
+		NATCAP_DEBUG("(CPCI)" DEBUG_TCP_FMT ": decode action=complete\n", DEBUG_TCP_ARG(iph,l4));
 	} else if (iph->protocol == IPPROTO_UDP) {
 		if (!skb_make_writable(skb, iph->ihl * 4 + sizeof(struct udphdr) + 4)) {
 			return NF_ACCEPT;
@@ -1520,7 +1520,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 		if (get_byte4((void *)UDPH(l4) + sizeof(struct udphdr)) == __constant_htonl(NATCAP_E_MAGIC_A) &&
 		        UDPH(l4)->len == __constant_htons(sizeof(struct udphdr) + 4)) {
 			if (!(IPS_NATCAP_CFM & ct->status) && !test_and_set_bit(IPS_NATCAP_CFM_BIT, &ct->status)) {
-				NATCAP_INFO("(CPCI)" DEBUG_UDP_FMT ": got CFM pkt\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_INFO("(CPCI)" DEBUG_UDP_FMT ": received CFM pkt\n", DEBUG_UDP_ARG(iph,l4));
 			}
 			natcap_server_in_touch(ns->n.group_x, ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip);
 			consume_skb(skb);
@@ -1542,7 +1542,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			skb_rcsum_tcpudp(skb);
 		}
 
-		NATCAP_DEBUG("(CPCI)" DEBUG_UDP_FMT ": Decode completed\n", DEBUG_UDP_ARG(iph,l4));
+		NATCAP_DEBUG("(CPCI)" DEBUG_UDP_FMT ": decode action=complete\n", DEBUG_UDP_ARG(iph,l4));
 	}
 
 	return NF_ACCEPT;
@@ -1676,10 +1676,10 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 					switch (iph->protocol) {
 					case IPPROTO_TCP:
-						NATCAP_INFO("(CPI)" DEBUG_TCP_FMT ": new natmap to %pI4:%u\n", DEBUG_TCP_ARG(iph,l4), &mapped, ntohs(dport));
+						NATCAP_INFO("(CPI)" DEBUG_TCP_FMT ": NAT mapping created: target=%pI4:%u\n", DEBUG_TCP_ARG(iph,l4), &mapped, ntohs(dport));
 						break;
 					case IPPROTO_UDP:
-						NATCAP_INFO("(CPI)" DEBUG_UDP_FMT ": new natmap to %pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &mapped, ntohs(dport));
+						NATCAP_INFO("(CPI)" DEBUG_UDP_FMT ": NAT mapping created: target=%pI4:%u\n", DEBUG_UDP_ARG(iph,l4), &mapped, ntohs(dport));
 						break;
 					}
 					return NF_ACCEPT;
@@ -1711,11 +1711,11 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				return NF_ACCEPT;
 			}
 
-			NATCAP_DEBUG("(CPI)" DEBUG_TCP_FMT ": Received UDP-to-TCP packet\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_DEBUG("(CPI)" DEBUG_TCP_FMT ": UDP-to-TCP packet received\n", DEBUG_TCP_ARG(iph,l4));
 
 			if (skb->ip_summed == CHECKSUM_NONE) {
 				if (skb_rcsum_verify(skb) != 0) {
-					NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": Failed to verify skb checksum\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": skb checksum verification failed\n", DEBUG_TCP_ARG(iph,l4));
 					return NF_DROP;
 				}
 				skb->csum = 0;
@@ -1771,7 +1771,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 			ns = natcap_session_in(ct);
 			if (ns == NULL) {
-				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
 			if (!(NS_NATCAP_TCPUDPENC & ns->n.status)) {
@@ -1797,7 +1797,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					ns->ping.stage = 1;
 					skb = skb_copy(skb, GFP_ATOMIC);
 					if (skb == NULL) {
-						NATCAP_ERROR("Failed to allocate skb\n");
+						NATCAP_ERROR("skb allocation failed\n");
 						return NF_ACCEPT;
 					}
 					iph = ip_hdr(skb);
@@ -1864,7 +1864,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 				*/
 			}
 
-			NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": Decode completed for UDP-to-TCP packet\n", DEBUG_UDP_ARG(iph,l4));
+			NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": decode action=complete for UDP-to-TCP packet\n", DEBUG_UDP_ARG(iph,l4));
 			return NF_ACCEPT;
 		} else if ( TCPH(l4)->window == htons(~(ntohs(iph->id) ^ ((ntohl(TCPH(l4)->seq) & 0xffff) | (ntohl(TCPH(l4)->ack_seq) & 0xffff)))) ) {
 			if (!natcap_tcp_header_valid(skb, iph, TCPH(l4)))
@@ -1894,13 +1894,13 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					ct = master->master;
 					ns = natcap_session_in(ct);
 					if (ns == NULL) {
-						NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": NATCAP session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
 						consume_skb(skb);
 						return NF_STOLEN;
 					}
 
 					if (skb_tailroom(skb) < 16 && pskb_expand_head(skb, 0, 16, GFP_ATOMIC)) {
-						NATCAP_ERROR("Failed to expand skb head\n");
+						NATCAP_ERROR("skb head expansion failed\n");
 						consume_skb(skb);
 						return NF_STOLEN;
 					}
@@ -1939,7 +1939,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					skb->ip_summed = CHECKSUM_UNNECESSARY;
 					skb_rcsum_tcpudp(skb);
 
-					NATCAP_INFO("(CPI)" DEBUG_TCP_FMT ": get ping: send pong\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_INFO("(CPI)" DEBUG_TCP_FMT ": get keepalive ping action=send flow=pong\n", DEBUG_TCP_ARG(iph,l4));
 
 					skb_nfct_reset(skb);
 					nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
@@ -1988,7 +1988,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					ct = master->master;
 					ns = natcap_session_in(ct);
 					if (ns == NULL) {
-						NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": NATCAP session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
 						consume_skb(skb);
 						return NF_STOLEN;
 					}
@@ -1998,7 +1998,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 						ns->ping.remote_daddr = get_byte4(l4 + sizeof(struct tcphdr) + 4 + 4);
 						ns->ping.remote_source = get_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4);
 						ns->ping.remote_dest = get_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2);
-						NATCAP_INFO("(CPI)" DEBUG_TCP_FMT ": get pong for %pI4:%u->%pI4:%u\n", DEBUG_TCP_ARG(iph,l4),
+						NATCAP_INFO("(CPI)" DEBUG_TCP_FMT ": keepalive pong received: flow=%pI4:%u->%pI4:%u\n", DEBUG_TCP_ARG(iph,l4),
 						            &ns->ping.remote_saddr, ntohs(ns->ping.remote_source),
 						            &ns->ping.remote_daddr, ntohs(ns->ping.remote_dest));
 					}
@@ -2006,7 +2006,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					        ns->ping.remote_daddr != get_byte4(l4 + sizeof(struct tcphdr) + 4 + 4) ||
 					        ns->ping.remote_source != get_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4) ||
 					        ns->ping.remote_dest != get_byte2(l4 + sizeof(struct tcphdr) + 4 + 4 + 4 + 2)) {
-						NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": invalid pong\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": keepalive pong validation failed\n", DEBUG_TCP_ARG(iph,l4));
 						consume_skb(skb);
 						return NF_STOLEN;
 					}
@@ -2080,7 +2080,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 					ns = natcap_session_in(ct);
 					if (ns == NULL) {
-						NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+						NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
 						consume_skb(skb);
 						return NF_STOLEN;
 					}
@@ -2159,7 +2159,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					return NF_STOLEN;
 				}
 			}
-			NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": got UDP-to-TCP packet syn\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": received UDP-to-TCP packet syn\n", DEBUG_TCP_ARG(iph,l4));
 			return NF_DROP;
 		} else {
 			set_bit(IPS_NATCAP_PRE_BIT, &master->status);
@@ -2173,7 +2173,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 	l4 = (void *)iph + iph->ihl * 4;
 	if (skb_is_gso(skb)) {
-		NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": SKB is GSO\n", DEBUG_UDP_ARG(iph,l4));
+		NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": GSO packet detected\n", DEBUG_UDP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
 
@@ -2206,7 +2206,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 		if (skb->ip_summed == CHECKSUM_NONE) {
 			if (skb_rcsum_verify(skb) != 0) {
-				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": Failed to verify skb checksum\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": skb checksum verification failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
 			skb->csum = 0;
@@ -2259,7 +2259,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 
 		ns = natcap_session_in(ct);
 		if (ns == NULL) {
-			NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": NATCAP session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(CPI)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_DROP;
 		}
@@ -2306,7 +2306,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			ct = master->master;
 			ns = natcap_session_get(ct);
 			if (ns == NULL) {
-				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session_get failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session lookup failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
 
@@ -2577,7 +2577,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					}
 					ns = natcap_session_get(ct);
 					if (ns == NULL) {
-						NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session_get failed\n", DEBUG_UDP_ARG(iph,l4));
+						NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session lookup failed\n", DEBUG_UDP_ARG(iph,l4));
 						nf_ct_put(ct);
 						return NF_DROP;
 					}
@@ -2675,7 +2675,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			ct = master->master;
 			ns = natcap_session_get(ct);
 			if (ns == NULL) {
-				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session_get failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session lookup failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
 
@@ -2724,7 +2724,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			ct = master->master;
 			ns = natcap_session_get(ct);
 			if (ns == NULL) {
-				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session_get failed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session lookup failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
 			for (i = 0; i < MAX_PEER_NUM; i++) {
@@ -2776,13 +2776,13 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 		ct = master->master;
 		ns = natcap_session_get(ct);
 		if (ns == NULL) {
-			NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session_get failed\n", DEBUG_UDP_ARG(iph,l4));
+			NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": NATCAP session lookup failed\n", DEBUG_UDP_ARG(iph,l4));
 			return NF_DROP;
 		}
 
 		if (skb->ip_summed == CHECKSUM_NONE) {
 			if (skb_rcsum_verify(skb) != 0) {
-				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": Failed to verify skb checksum\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_WARN("(CPI)" DEBUG_UDP_FMT ": skb checksum verification failed\n", DEBUG_UDP_ARG(iph,l4));
 				return NF_DROP;
 			}
 			skb->csum = 0;
@@ -2801,7 +2801,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			short_set_bit(idx, &ns->peer.mark);
 		}
 
-		NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": Peer pass up (started)\n", DEBUG_UDP_ARG(iph,l4));
+		NATCAP_DEBUG("(CPI)" DEBUG_UDP_FMT ": peer pass-up action=start\n", DEBUG_UDP_ARG(iph,l4));
 
 		/* XXX I just confirm it first  */
 		ret = nf_conntrack_confirm(skb);
@@ -2850,7 +2850,7 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 			atomic_set(&natcap_pfr[idx].rx_speed[(jiffies / HZ + 1) % SPEED_SAMPLE_COUNT], 0);
 		}
 
-		NATCAP_DEBUG("(CPI)" DEBUG_TCP_FMT ": Peer pass up (completed) ct=[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n", DEBUG_TCP_ARG(iph,l4),
+		NATCAP_DEBUG("(CPI)" DEBUG_TCP_FMT ": peer pass-up action=complete ct=[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n", DEBUG_TCP_ARG(iph,l4),
 		             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 		             &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
 		             &ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_REPLY].tuple.dst.u.all),
@@ -3025,7 +3025,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 						                              WECHAT_C_UA, WECHAT_C_UA_LEN)) {
 							ip_hdr(skb)->daddr = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip;
 							IP_SET_add_dst_ip(state, in, out, skb, "wechat_iplist");
-							NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": add to wechat_iplist\n", DEBUG_TCP_ARG(iph,l4));
+							NATCAP_INFO("(CPO)" DEBUG_TCP_FMT ": target action=add-to-wechat_iplist\n", DEBUG_TCP_ARG(iph,l4));
 							ip_hdr(skb)->daddr = ct->tuplehash[IP_CT_DIR_REPLY].tuple.src.u3.ip;
 						}
 					}
@@ -3053,7 +3053,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 					return NF_ACCEPT;
 				}
 				if ((NS_NATCAP_SYN1 & ns->n.status) && (NS_NATCAP_SYN2 & ns->n.status)) {
-					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass syn3 del target from bypasslist\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": bypass third SYN: target action=delete-from-bypasslist\n", DEBUG_TCP_ARG(iph,l4));
 					IP_SET_del_dst_ip(state, in, out, skb, "bypasslist");
 				}
 			}
@@ -3104,13 +3104,13 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			 * just strim the tcp options
 			 */
 			if (skb_is_gso(skb) || (!TCPH(l4)->syn || TCPH(l4)->ack)) {
-				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": NATCAP tcpopt_setup failed (ret=%d)\n", DEBUG_TCP_ARG(iph,l4), ret);
+				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": NATCAP TCP option setup failed (ret=%d)\n", DEBUG_TCP_ARG(iph,l4), ret);
 				return NF_DROP;
 			}
 
 			skb2 = skb_copy(skb, GFP_ATOMIC);
 			if (skb2 == NULL) {
-				NATCAP_ERROR("Failed to allocate skb\n");
+				NATCAP_ERROR("skb allocation failed\n");
 				return NF_DROP;
 			}
 			iph = ip_hdr(skb2);
@@ -3130,7 +3130,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			                          ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
 			                          ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 			if (ret != 0) {
-				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": NATCAP tcpopt_setup failed (ret=%d)\n", DEBUG_TCP_ARG(iph,l4), ret);
+				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": NATCAP TCP option setup failed (ret=%d)\n", DEBUG_TCP_ARG(iph,l4), ret);
 				consume_skb(skb2);
 				return NF_DROP;
 			}
@@ -3145,7 +3145,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 			if (ret != 0) {
-				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": NATCAP tcpopt_setup failed (ret=%d)\n", DEBUG_TCP_ARG(iph,l4), ret);
+				NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": NATCAP TCP option setup failed (ret=%d)\n", DEBUG_TCP_ARG(iph,l4), ret);
 				consume_skb(skb2);
 				return NF_DROP;
 			}
@@ -3164,7 +3164,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 		}
 		if (ret != 0) {
-			NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d, skb2=%p\n", DEBUG_TCP_ARG(iph,l4), ret, skb2);
+			NATCAP_ERROR("(CPO)" DEBUG_TCP_FMT ": natcap_tcp_encode() failed ret=%d, skb2=%p\n", DEBUG_TCP_ARG(iph,l4), ret, skb2);
 			if (skb2) {
 				consume_skb(skb2);
 			}
@@ -3184,7 +3184,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			offset += skb_tailroom(skb);
 			skb_htp = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 			if (!skb_htp) {
-				NATCAP_ERROR("Failed to allocate skb\n");
+				NATCAP_ERROR("skb allocation failed\n");
 				if (skb2) {
 					consume_skb(skb2);
 				}
@@ -3212,7 +3212,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 		}
 
-		NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": Encode completed\n", DEBUG_TCP_ARG(iph,l4));
+		NATCAP_DEBUG("(CPO)" DEBUG_TCP_FMT ": encode action=complete\n", DEBUG_TCP_ARG(iph,l4));
 
 		/* on client side original. skb_htp is gen by skb
 		 * we post skb out first, then skb_htp.
@@ -3293,7 +3293,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 			if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 				consume_skb(skb);
 				skb = nskb;
-				NATCAP_ERROR("Failed to expand skb head\n");
+				NATCAP_ERROR("skb head expansion failed\n");
 				continue;
 			}
 			iph = ip_hdr(skb);
@@ -3468,7 +3468,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				}
 			}
 
-			NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": Post-routing hook completed\n", DEBUG_UDP_ARG(iph,l4));
+			NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": post-routing action=complete\n", DEBUG_UDP_ARG(iph,l4));
 			flow_total_tx_bytes += skb->len;
 
 			if (pcskb) {
@@ -3525,7 +3525,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				offset += skb_tailroom(skb);
 				nskb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 				if (!nskb) {
-					NATCAP_ERROR("Failed to allocate skb\n");
+					NATCAP_ERROR("skb allocation failed\n");
 					return NF_ACCEPT;
 				}
 				nskb->tail += offset;
@@ -3564,7 +3564,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 				skb_rcsum_tcpudp(nskb);
 
-				NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": Post-routing hook completed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": post-routing action=complete\n", DEBUG_UDP_ARG(iph,l4));
 
 				/* XXX I just confirm it first  */
 				/* confirm before post out */
@@ -3599,7 +3599,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				unsigned short uflag = NATCAP_UDP_TYPE2;
 
 				if (skb_tailroom(skb) < off && pskb_expand_head(skb, 0, off, GFP_ATOMIC)) {
-					NATCAP_ERROR("Failed to expand skb head\n");
+					NATCAP_ERROR("skb head expansion failed\n");
 					return NF_ACCEPT;
 				}
 				iph = ip_hdr(skb);
@@ -3642,7 +3642,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 
 				skb_rcsum_tcpudp(skb);
 
-				NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": Post-routing hook completed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_DEBUG("(CPO)" DEBUG_UDP_FMT ": post-routing action=complete\n", DEBUG_UDP_ARG(iph,l4));
 			}
 		}
 
@@ -3762,7 +3762,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 	skb = skb_copy(skb_orig, GFP_ATOMIC);
 	if (skb == NULL) {
-		NATCAP_ERROR("Failed to allocate skb\n");
+		NATCAP_ERROR("skb allocation failed\n");
 		return NF_ACCEPT;
 	}
 	skb_nfct_reset(skb);
@@ -3800,7 +3800,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			ns->n.new_source = *portptr;
 		}
 
-		NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": Post-routing hook started\n", DEBUG_TCP_ARG(iph,l4));
+		NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": post-routing action=start\n", DEBUG_TCP_ARG(iph,l4));
 		csum_replace4(&iph->check, iph->daddr, ns->n.target_ip);
 		inet_proto_csum_replace4(&TCPH(l4)->check, skb, iph->daddr, ns->n.target_ip, true);
 		inet_proto_csum_replace2(&TCPH(l4)->check, skb, TCPH(l4)->source, ns->n.new_source, false);
@@ -3858,7 +3858,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			}
 		}
 
-		NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": Post-routing hook started\n", DEBUG_UDP_ARG(iph,l4));
+		NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": post-routing action=start\n", DEBUG_UDP_ARG(iph,l4));
 		csum_replace4(&iph->check, iph->daddr, ns->n.target_ip);
 		if (UDPH(l4)->check) {
 			inet_proto_csum_replace4(&UDPH(l4)->check, skb, iph->daddr, ns->n.target_ip, true);
@@ -3938,10 +3938,10 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 	if (NULL == master_ns) {
 		switch(iph->protocol) {
 		case IPPROTO_TCP:
-			NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": NATCAP session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
 			break;
 		case IPPROTO_UDP:
-			NATCAP_WARN("(CPMO)" DEBUG_UDP_FMT ": NATCAP session_in failed\n", DEBUG_UDP_ARG(iph,l4));
+			NATCAP_WARN("(CPMO)" DEBUG_UDP_FMT ": NATCAP session input processing failed\n", DEBUG_UDP_ARG(iph,l4));
 			break;
 		}
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -4002,7 +4002,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 		switch (iph->protocol) {
 		case IPPROTO_TCP:
-			NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": Invalid CT [%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
+			NATCAP_WARN("(CPMO)" DEBUG_TCP_FMT ": conntrack tuple mismatch: original=[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
 			            DEBUG_TCP_ARG(iph,l4),
 			            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 			            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
@@ -4015,7 +4015,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			           );
 			break;
 		case IPPROTO_UDP:
-			NATCAP_WARN("(CPMO)" DEBUG_UDP_FMT ": Invalid CT [%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
+			NATCAP_WARN("(CPMO)" DEBUG_UDP_FMT ": conntrack tuple mismatch: original=[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u] and master[%pI4:%u->%pI4:%u %pI4:%u<-%pI4:%u]\n",
 			            DEBUG_UDP_ARG(iph,l4),
 			            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all),
 			            &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip, ntohs(ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all),
@@ -4083,7 +4083,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			 * so we dup a skb and mark it with NATCAP_TCPOPT_SYN as a pioneer to 'kick the door'
 			 */
 			if (skb_is_gso(skb) || (!TCPH(l4)->syn || TCPH(l4)->ack)) {
-				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": NATCAP tcpopt_setup failed (ret=%d)\n", DEBUG_TCP_ARG(iph,l4), ret);
+				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": NATCAP TCP option setup failed (ret=%d)\n", DEBUG_TCP_ARG(iph,l4), ret);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				consume_skb(skb);
 				return NF_ACCEPT;
@@ -4091,7 +4091,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 			skb2 = skb_copy(skb, GFP_ATOMIC);
 			if (skb2 == NULL) {
-				NATCAP_ERROR("Failed to allocate skb\n");
+				NATCAP_ERROR("skb allocation failed\n");
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				consume_skb(skb);
 				return NF_ACCEPT;
@@ -4107,7 +4107,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			                          ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u3.ip,
 			                          ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.tcp.port);
 			if (ret != 0) {
-				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": NATCAP tcpopt_setup failed (ret=%d)\n", DEBUG_TCP_ARG(iph,l4), ret);
+				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": NATCAP TCP option setup failed (ret=%d)\n", DEBUG_TCP_ARG(iph,l4), ret);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				consume_skb(skb2);
 				consume_skb(skb);
@@ -4126,7 +4126,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			iph = ip_hdr(skb);
 			l4 = (void *)iph + iph->ihl * 4;
 			if (ret != 0) {
-				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": NATCAP tcpopt_setup failed (ret=%d)\n", DEBUG_TCP_ARG(iph,l4), ret);
+				NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": NATCAP TCP option setup failed (ret=%d)\n", DEBUG_TCP_ARG(iph,l4), ret);
 				set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 				consume_skb(skb2);
 				consume_skb(skb);
@@ -4149,7 +4149,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 		}
 		if (ret != 0) {
-			NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": natcap_tcp_encode() ret=%d, skb2=%p\n", DEBUG_TCP_ARG(iph,l4), ret, skb2);
+			NATCAP_ERROR("(CPMO)" DEBUG_TCP_FMT ": natcap_tcp_encode() failed ret=%d, skb2=%p\n", DEBUG_TCP_ARG(iph,l4), ret, skb2);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 			if (skb2) {
 				consume_skb(skb2);
@@ -4171,7 +4171,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			offset += skb_tailroom(skb);
 			skb_htp = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 			if (!skb_htp) {
-				NATCAP_ERROR("Failed to allocate skb\n");
+				NATCAP_ERROR("skb allocation failed\n");
 				if (skb2) {
 					consume_skb(skb2);
 				}
@@ -4200,7 +4200,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			l4 = (void *)iph + iph->ihl * 4;
 		}
 
-		NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": Encode completed\n", DEBUG_TCP_ARG(iph,l4));
+		NATCAP_DEBUG("(CPMO)" DEBUG_TCP_FMT ": encode action=complete\n", DEBUG_TCP_ARG(iph,l4));
 
 		/* on client side original. skb_htp is gen by skb
 		 * we post skb out first, then skb_htp.
@@ -4261,7 +4261,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 				consume_skb(skb);
 				skb = nskb;
-				NATCAP_ERROR("Failed to expand skb head\n");
+				NATCAP_ERROR("skb head expansion failed\n");
 				continue;
 			}
 			iph = ip_hdr(skb);
@@ -4285,7 +4285,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_rcsum_tcpudp(skb);
 
-			NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": Post-routing hook completed\n", DEBUG_UDP_ARG(iph,l4));
+			NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": post-routing action=complete\n", DEBUG_UDP_ARG(iph,l4));
 
 			flow_total_tx_bytes += skb->len;
 			NF_OKFN(skb);
@@ -4323,7 +4323,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				offset += skb_tailroom(skb);
 				nskb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 				if (!nskb) {
-					NATCAP_ERROR("Failed to allocate skb\n");
+					NATCAP_ERROR("skb allocation failed\n");
 					consume_skb(skb);
 					return NF_ACCEPT;
 				}
@@ -4360,7 +4360,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 				skb_rcsum_tcpudp(nskb);
 
-				NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": Post-routing hook completed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": post-routing action=complete\n", DEBUG_UDP_ARG(iph,l4));
 
 				if ((NS_NATCAP_TCPUDPENC & master_ns->n.status)) {
 					struct sk_buff *ping_skb = NULL;
@@ -4378,7 +4378,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 				unsigned short uflag = NATCAP_UDP_TYPE2;
 
 				if (skb_tailroom(skb) < off && pskb_expand_head(skb, 0, off, GFP_ATOMIC)) {
-					NATCAP_ERROR("Failed to expand skb head\n");
+					NATCAP_ERROR("skb head expansion failed\n");
 					consume_skb(skb);
 					return NF_ACCEPT;
 				}
@@ -4421,7 +4421,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 
 				skb_rcsum_tcpudp(skb);
 
-				NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": Post-routing hook completed\n", DEBUG_UDP_ARG(iph,l4));
+				NATCAP_DEBUG("(CPMO)" DEBUG_UDP_FMT ": post-routing action=complete\n", DEBUG_UDP_ARG(iph,l4));
 			}
 		}
 
@@ -5185,7 +5185,7 @@ int cn_domain_insert(const char *d)
 		memcpy(tmp, cn_domain, old_size * CN_DOMAIN_SIZE);
 		vfree(cn_domain);
 		cn_domain = tmp;
-		NATCAP_INFO("cn_domain_insert cn_domain_size=%d mem=%d\n",
+		NATCAP_INFO("cn_domain resize: capacity=%d mem=%d\n",
 		            cn_domain_size, cn_domain_size * CN_DOMAIN_SIZE);
 	}
 
@@ -5286,7 +5286,7 @@ int cn_domain_load_from_path(const char *path)
 
 	filp = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
-		NATCAP_ERROR("unable to open cn_domain file: %s\n", path);
+		NATCAP_ERROR("cn_domain source open failed: path=: %s\n", path);
 		ret = PTR_ERR(filp);
 		goto out;
 	}
@@ -5326,7 +5326,7 @@ int cn_domain_load_from_path(const char *path)
 	}
 
 	if (ret == 0) {
-		NATCAP_INFO("cn_domain_load_from_path %d records loaded\n", count);
+		NATCAP_INFO("cn_domain load: source=path records=%d\n", count);
 	}
 
 out:
@@ -5356,7 +5356,7 @@ int cn_domain_load_from_raw(const char *path)
 
 	filp = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
-		NATCAP_ERROR("unable to open cn_domain raw: %s\n", path);
+		NATCAP_ERROR("cn_domain raw source open failed: path=: %s\n", path);
 		ret = PTR_ERR(filp);
 		goto out;
 	}
@@ -5399,7 +5399,7 @@ int cn_domain_load_from_raw(const char *path)
 	cn_domain_count = nbytes / CN_DOMAIN_SIZE;
 	cn_domain_tmp = NULL;
 
-	NATCAP_INFO("cn_domain_load_from_raw size:%d count:%d bytes:%d\n",
+	NATCAP_INFO("cn_domain load: source=raw size=%d records=%d bytes=%d\n",
 	            cn_domain_size, cn_domain_count, nbytes);
 
 out:
@@ -5434,7 +5434,7 @@ int cn_domain_dump_path(const char *path)
 
 	filp = filp_open(path, O_RDWR | O_CREAT | O_LARGEFILE | O_DSYNC | O_TRUNC, 0);
 	if (IS_ERR(filp)) {
-		NATCAP_ERROR("unable to open cn_domain dump: %s\n", path);
+		NATCAP_ERROR("cn_domain dump open failed: path=: %s\n", path);
 		return PTR_ERR(filp);
 	}
 
@@ -5443,7 +5443,7 @@ int cn_domain_dump_path(const char *path)
 #else
 	bytes = kernel_write(filp, cn_domain, total, pos);
 #endif
-	NATCAP_INFO("cn_domain dump: write %d\n", (int)bytes);
+	NATCAP_INFO("cn_domain dump: bytes-written=%d\n", (int)bytes);
 	if (bytes != total) {
 		err = -1;
 	}

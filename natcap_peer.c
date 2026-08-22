@@ -547,7 +547,7 @@ static void peer_timer_flush(struct timer_list *ignore)
 			if (after(jiffies, ue->last_active + peer_port_map_timeout * HZ)) {
 				set_byte4(client_mac, get_byte4((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip));
 				set_byte2(client_mac + 4, get_byte2((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all));
-				NATCAP_INFO("C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] timeout drop\n",
+				NATCAP_INFO("C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] timeout action=drop\n",
 				            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 				            &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 				           );
@@ -568,7 +568,7 @@ static void peer_timer_flush(struct timer_list *ignore)
 			if (user != NULL) {
 				struct fakeuser_expect *fue = peer_fakeuser_expect(user);
 				if (after(jiffies, fue->last_active + peer_conn_timeout * HZ)) {
-					NATCAP_INFO("conn[%u:%u] @N[[%pI4:%u] [AS %ds] timeout drop\n",
+					NATCAP_INFO("conn[%u:%u] @N[[%pI4:%u] [AS %ds] timeout action=drop\n",
 					            ntohs(peer_fakeuser_sport(user)), ntohs(peer_fakeuser_dport(user)),
 					            &ps->ip, ntohs(ps->map_port), fue->last_active != 0 ?(uintmindiff(fue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 					           );
@@ -598,7 +598,7 @@ static inline void peer_port_map_kill(unsigned short idx)
 		struct user_expect *ue = peer_user_expect(user);
 		set_byte4(client_mac, get_byte4((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip));
 		set_byte2(client_mac + 4, get_byte2((void *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u.all));
-		NATCAP_INFO("C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] killed\n",
+		NATCAP_INFO("C[%02x:%02x:%02x:%02x:%02x:%02x,%pI4,%pI4] P=%u [AS %ds] action=remove\n",
 		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		            &ue->local_ip, &ue->ip, ntohs(ue->map_port), ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1)
 		           );
@@ -762,7 +762,7 @@ static struct peer_server_node *peer_server_node_in(__be32 ip, unsigned short co
 		spin_lock_bh(&ps->lock);
 init_out:
 		if (ps->ip != 0) {
-			NATCAP_WARN("Dropping old server %pI4 (map_port=%u), replacing with new=%pI4\n",
+			NATCAP_WARN("server replacement: old=%pI4 map_port=%u new=%pI4\n",
 			            &ps->ip, ntohs(ps->map_port), &ip);
 		}
 		for (i = 0; i < MAX_PEER_CONN; i++) {
@@ -849,19 +849,19 @@ static struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be
 	user = nf_ct_get(uskb, &ctinfo);
 
 	if (!user) {
-		NATCAP_ERROR("fakeuser create for ct[%pI4:%u->%pI4:%u] failed\n", &saddr, ntohs(sport), &daddr, ntohs(dport));
+		NATCAP_ERROR("fakeuser creation failed: ct[%pI4:%u->%pI4:%u]\n", &saddr, ntohs(sport), &daddr, ntohs(dport));
 		skb_nfct_reset(uskb);
 		return NULL;
 	}
 
 	if (!user->ext) {
-		NATCAP_ERROR("fakeuser create for ct[%pI4:%u->%pI4:%u] failed, user->ext is NULL\n", &saddr, ntohs(sport), &daddr, ntohs(dport));
+		NATCAP_ERROR("fakeuser creation failed: ct[%pI4:%u->%pI4:%u] reason=session-extension-missing\n", &saddr, ntohs(sport), &daddr, ntohs(dport));
 		skb_nfct_reset(uskb);
 		return NULL;
 	}
 	if (nf_ct_is_confirmed(user)) {
 		skb_nfct_reset(uskb);
-		NATCAP_WARN("fakeuser create for ct[%pI4:%u->%pI4:%u] failed, user nf_ct_is_confirmed\n", &saddr, ntohs(sport), &daddr, ntohs(dport));
+		NATCAP_WARN("fakeuser creation failed: ct[%pI4:%u->%pI4:%u] reason=conntrack-already-confirmed\n", &saddr, ntohs(sport), &daddr, ntohs(dport));
 		return NULL;
 	}
 	if (!(IPS_NATCAP_PEER & user->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &user->status)) {
@@ -873,7 +873,7 @@ static struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be
 #endif
 		if (!new) {
 			clear_bit(IPS_NATCAP_PEER_BIT, &user->status);
-			NATCAP_ERROR("fakeuser create for ct[%pI4:%u->%pI4:%u] failed, realloc user->ext failed\n", &saddr, ntohs(sport), &daddr, ntohs(dport));
+			NATCAP_ERROR("fakeuser creation failed: ct[%pI4:%u->%pI4:%u] reason=session-extension-reallocation-failed\n", &saddr, ntohs(sport), &daddr, ntohs(dport));
 			skb_nfct_reset(uskb);
 			return NULL;
 		}
@@ -913,7 +913,7 @@ static struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be
 	natcap_user_timeout_touch(user, peer_conn_timeout);
 
 	fue = peer_fakeuser_expect(user);
-	NATCAP_DEBUG("fakeuser create user[%pI4:%u->%pI4:%u] pmi=%d upmi=%d\n", &saddr, ntohs(sport), &daddr, ntohs(dport), pmi, fue->pmi);
+	NATCAP_DEBUG("fakeuser created: user[%pI4:%u->%pI4:%u] pmi=%d upmi=%d\n", &saddr, ntohs(sport), &daddr, ntohs(dport), pmi, fue->pmi);
 
 	return user;
 }
@@ -975,7 +975,7 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 	user = nf_ct_get(uskb, &ctinfo);
 
 	if (!user) {
-		NATCAP_ERROR("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] failed\n",
+		NATCAP_ERROR("fakeuser initialization failed: mac=[%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] failed\n",
 		             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		             &saddr, ntohs(sport), &daddr, ntohs(dport));
 		skb_nfct_reset(uskb);
@@ -983,7 +983,7 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 	}
 
 	if (!user->ext) {
-		NATCAP_ERROR("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] failed, user->ext is NULL\n",
+		NATCAP_ERROR("fakeuser initialization failed: mac=[%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] reason=session-extension-missing\n",
 		             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		             &saddr, ntohs(sport), &daddr, ntohs(dport));
 		skb_nfct_reset(uskb);
@@ -998,7 +998,7 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 #endif
 		if (!new) {
 			clear_bit(IPS_NATCAP_PEER_BIT, &user->status);
-			NATCAP_ERROR("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] failed, realloc user->ext failed\n",
+			NATCAP_ERROR("fakeuser initialization failed: mac=[%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] reason=session-extension-reallocation-failed\n",
 			             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 			             &saddr, ntohs(sport), &daddr, ntohs(dport));
 			skb_nfct_reset(uskb);
@@ -1053,7 +1053,7 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 		spin_unlock_bh(&ue->lock);
 
 		if (user != peer_port_map[ntohs(ue->map_port)]) {
-			NATCAP_WARN("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] alloc map_port fail\n",
+			NATCAP_WARN("fakeuser initialization failed: mac=[%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] map_port allocation failed\n",
 			            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 			            &saddr, ntohs(sport), &daddr, ntohs(dport));
 			/* alloc_peer_port fail: portmap would not work, but sni should work */
@@ -1062,7 +1062,7 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 
 	if (ntohl(saddr) != user->mark) {
 		__be32 old_ip = htonl(user->mark);
-		NATCAP_WARN("user [%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] change ip from %pI4(ttl=%u) to %pI4(ttl=%u) P=%u AS=%d\n",
+		NATCAP_WARN("fakeuser IP update: mac=[%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] change ip from %pI4(ttl=%u) to %pI4(ttl=%u) P=%u AS=%d\n",
 		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		            &saddr, ntohs(sport), &daddr, ntohs(dport),
 		            &old_ip, (unsigned int)((user->status & 0xff000000) >> 24), &saddr, ttl, ntohs(ue->map_port),
@@ -1108,7 +1108,7 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 		}
 		if (pt) {
 			spin_lock_bh(&ue->lock);
-			NATCAP_INFO("user [%02x:%02x:%02x:%02x:%02x:%02x] @map_port=%u use new-ct[%pI4:%u->%pI4:%u] replace old-ct[%pI4:%u->%pI4:%u] time=%u,%u\n",
+			NATCAP_INFO("fakeuser conntrack replacement: mac=[%02x:%02x:%02x:%02x:%02x:%02x] @map_port=%u use new-ct=[%pI4:%u->%pI4:%u] replace old-ct=[%pI4:%u->%pI4:%u] time=%u,%u\n",
 			            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 			            ntohs(ue->map_port), &saddr, ntohs(sport), &daddr, ntohs(dport),
 			            &pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport), pt->last_active, (unsigned int)last_jiffies);
@@ -1312,14 +1312,14 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 	user = nf_ct_get(uskb, &ctinfo);
 
 	if (!user) {
-		NATCAP_ERROR("auth user [%02x:%02x:%02x:%02x:%02x:%02x] not found\n",
+		NATCAP_ERROR("authentication user lookup failed: mac=[%02x:%02x:%02x:%02x:%02x:%02x]\n",
 		             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
 		skb_nfct_reset(uskb);
 		return 0;
 	}
 
 	if (!user->ext) {
-		NATCAP_ERROR("auth user [%02x:%02x:%02x:%02x:%02x:%02x] not found, user->ext is NULL\n",
+		NATCAP_ERROR("authentication user lookup failed: mac=[%02x:%02x:%02x:%02x:%02x:%02x] reason=session-extension-missing\n",
 		             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
 		skb_nfct_reset(uskb);
 		return 0;
@@ -1333,7 +1333,7 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 #endif
 		if (!new) {
 			clear_bit(IPS_NATCAP_PEER_BIT, &user->status);
-			NATCAP_ERROR("auth user [%02x:%02x:%02x:%02x:%02x:%02x] not found, realloc user->ext failed\n",
+			NATCAP_ERROR("authentication user lookup failed: mac=[%02x:%02x:%02x:%02x:%02x:%02x] reason=session-extension-reallocation-failed\n",
 			             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
 			skb_nfct_reset(uskb);
 			return 0;
@@ -1387,7 +1387,7 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 		spin_unlock_bh(&ue->lock);
 
 		if (user != peer_port_map[ntohs(ue->map_port)]) {
-			NATCAP_WARN("auth user [%02x:%02x:%02x:%02x:%02x:%02x] alloc map_port fail\n",
+			NATCAP_WARN("authentication user: mac=[%02x:%02x:%02x:%02x:%02x:%02x] map_port allocation failed\n",
 			            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
 			/* alloc_peer_port fail: portmap would not work, but sni should work */
 		}
@@ -1395,7 +1395,7 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 
 	if (ntohl(client_ip) != user->mark) {
 		__be32 old_ip = htonl(user->mark);
-		NATCAP_WARN("auth user [%02x:%02x:%02x:%02x:%02x:%02x] change ip from %pI4 to %pI4 P=%u AS=%d\n",
+		NATCAP_WARN("authentication user IP update: mac=[%02x:%02x:%02x:%02x:%02x:%02x] change ip from %pI4 to %pI4 P=%u AS=%d\n",
 		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		            &old_ip, &client_ip, ntohs(ue->map_port),
 		            ue->last_active_auth != 0 ? (uintmindiff(ue->last_active_auth, jiffies) + HZ / 2) / HZ : (-1));
@@ -1483,14 +1483,14 @@ static inline void natcap_auth_user_confirm(const unsigned char *client_mac, int
 	user = nf_ct_get(uskb, &ctinfo);
 
 	if (!user) {
-		NATCAP_ERROR("auth user [%02x:%02x:%02x:%02x:%02x:%02x] not found\n",
+		NATCAP_ERROR("authentication user lookup failed: mac=[%02x:%02x:%02x:%02x:%02x:%02x]\n",
 		             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
 		skb_nfct_reset(uskb);
 		return;
 	}
 
 	if (!user->ext) {
-		NATCAP_ERROR("auth user [%02x:%02x:%02x:%02x:%02x:%02x] not found, user->ext is NULL\n",
+		NATCAP_ERROR("authentication user lookup failed: mac=[%02x:%02x:%02x:%02x:%02x:%02x] reason=session-extension-missing\n",
 		             client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
 		skb_nfct_reset(uskb);
 		return;
@@ -1550,7 +1550,7 @@ static inline void natcap_auth_reply(const struct net_device *dev, struct sk_buf
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR("Failed to allocate skb\n");
+		NATCAP_ERROR("skb allocation failed\n");
 		return;
 	}
 	nskb->tail += offset;
@@ -1634,7 +1634,7 @@ static inline void natcap_peer_echo_request(const struct net_device *dev, struct
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR("Failed to allocate skb\n");
+		NATCAP_ERROR("skb allocation failed\n");
 		return;
 	}
 	nskb->tail += offset;
@@ -1698,7 +1698,7 @@ static inline void natcap_peer_echo_reply(const struct net_device *dev, struct s
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR("Failed to allocate skb\n");
+		NATCAP_ERROR("skb allocation failed\n");
 		return;
 	}
 	nskb->tail += offset;
@@ -1783,7 +1783,7 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR("Failed to allocate skb\n");
+		NATCAP_ERROR("skb allocation failed\n");
 		return;
 	}
 	nskb->tail += offset;
@@ -1893,7 +1893,7 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
 				ntcph->seq = htonl(ntohl(ntcph->seq) + 1);
 				ntcph->syn = 0;
 			} else {
-				NATCAP_ERROR("Failed to allocate skb\n");
+				NATCAP_ERROR("skb allocation failed\n");
 			}
 		}
 	}
@@ -2030,7 +2030,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR("Failed to allocate skb\n");
+		NATCAP_ERROR("skb allocation failed\n");
 		nf_ct_put(user);
 		spin_unlock_bh(&ps->lock);
 		return NULL;
@@ -2249,7 +2249,7 @@ static inline struct sk_buff *peer_sni_to_syn(struct sk_buff *oskb, unsigned sho
 	offset += skb_tailroom(oskb);
 
 	if (add_len > 0 && skb_tailroom(oskb) < add_len && pskb_expand_head(oskb, 0, add_len, GFP_ATOMIC)) {
-		NATCAP_ERROR("Failed to expand skb head\n");
+		NATCAP_ERROR("skb head expansion failed\n");
 		return NULL;
 	}
 	oskb->tail += offset;
@@ -2310,7 +2310,7 @@ static inline int peer_sni_send_synack(const struct net_device *dev, struct sk_b
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR("Failed to allocate skb\n");
+		NATCAP_ERROR("skb allocation failed\n");
 		return -1;
 	}
 	nskb->tail += offset;
@@ -2380,7 +2380,7 @@ static inline int peer_sni_send_ack(const struct net_device *dev, struct sk_buff
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR("Failed to allocate skb\n");
+		NATCAP_ERROR("skb allocation failed\n");
 		return -1;
 	}
 	nskb->tail += offset;
@@ -2564,7 +2564,7 @@ static inline void sni_ack_pass_back(struct sk_buff *oskb, struct sk_buff *cache
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR("Failed to allocate skb\n");
+		NATCAP_ERROR("skb allocation failed\n");
 		return;
 	}
 	nskb->tail += offset - header_len;
@@ -2673,7 +2673,7 @@ static inline void sni_cache_skb_pass_back(struct sk_buff *oskb, struct sk_buff 
 	offset += skb_tailroom(oskb);
 	nskb = skb_copy_expand(oskb, skb_headroom(oskb), skb_tailroom(oskb) + add_len, GFP_ATOMIC);
 	if (!nskb) {
-		NATCAP_ERROR("Failed to allocate skb\n");
+		NATCAP_ERROR("skb allocation failed\n");
 		return;
 	}
 	nskb->tail += offset - header_len;
@@ -3062,7 +3062,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				if (skb->len < prev_skb->len + data_len + add_data_len &&
 				        skb_tailroom(skb) < prev_skb->len + data_len + add_data_len - skb->len &&
 				        pskb_expand_head(skb, 0, prev_skb->len + data_len + add_data_len - skb->len, GFP_ATOMIC)) {
-					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": pskb_expand_head failed\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": pskb_expand_head() failed\n", DEBUG_TCP_ARG(iph,l4));
 					consume_skb(prev_skb);
 					consume_skb(skb);
 					return NF_STOLEN;
@@ -3129,7 +3129,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 			memcpy(sni_host, data, data_len);
 			sni_host[data_len] = 0;
 
-			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got tls sni: %s\n", DEBUG_TCP_ARG(iph,l4), sni_host);
+			NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": TLS SNI received: %s\n", DEBUG_TCP_ARG(iph,l4), sni_host);
 			n = sscanf(sni_host, "m-%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
 			if (n != 6) {
 				n = sscanf(sni_host, "x-%02x%02x%02x%02x%02x%02x.", &a, &b, &c, &d, &e, &f);
@@ -3195,7 +3195,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					}
 				}
 				if (pt == NULL) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": No available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
 					            DEBUG_TCP_ARG(iph,l4),
 					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
 					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
@@ -3216,7 +3216,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				//re-check-in-lock
 				if (pt->sip == 0) {
 					spin_unlock_bh(&ue->lock);
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": No available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
 					            DEBUG_TCP_ARG(iph,l4),
 					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
 					            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
@@ -3229,7 +3229,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					goto sni_out;
 				}
 				if (pt->connected == 0 || pt->local_seq == 0 || pt->remote_seq == 0) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": port mapping(%s,local_seq=%u,remote_seq=%u) last_active(%u,%u) not ok\n",
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": port mapping(%s,local_seq=%u,remote_seq=%u) last_active(%u,%u) invalid\n",
 					            DEBUG_TCP_ARG(iph,l4), pt->connected ? "connected" : "disconnected",
 					            pt->local_seq, pt->remote_seq, pt->last_active, (unsigned int)jiffies);
 					spin_unlock_bh(&ue->lock);
@@ -3249,7 +3249,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 				ret = nf_conntrack_in_compat(net, pf, NF_INET_PRE_ROUTING, skb);
 				if (ret != NF_ACCEPT) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: nf_conntrack_in fail=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: nf_conntrack_in() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 					spin_unlock_bh(&ue->lock);
 					nf_ct_put(user);
 					consume_skb(cache_skb);
@@ -3257,7 +3257,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				}
 				ct = nf_ct_get(skb, &ctinfo);
 				if (NULL == ct) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: ct is NULL\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: conntrack lookup failed\n", DEBUG_TCP_ARG(iph,l4));
 					spin_unlock_bh(&ue->lock);
 					nf_ct_put(user);
 					consume_skb(cache_skb);
@@ -3265,7 +3265,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 				}
 				ns = natcap_session_in(ct);
 				if (!ns) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: NATCAP session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": tls sni: NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
 					spin_unlock_bh(&ue->lock);
 					nf_ct_put(user);
 					consume_skb(cache_skb);
@@ -3288,7 +3288,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 					short_set_bit(NS_PEER_TCPUDPENC_BIT, &ns->p.status);
 				}
 				if (!nfct_seqadj(ct) && !nfct_seqadj_ext_add(ct)) {
-					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": seqadj_ext add failed\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": sequence-adjust extension allocation failed\n", DEBUG_TCP_ARG(iph,l4));
 				}
 
 				//clear this pt
@@ -3308,7 +3308,7 @@ static unsigned int natcap_peer_pre_in_hook(void *priv,
 
 				ret = natcap_dnat_setup(ct, server.ip, server.port);
 				if (ret != NF_ACCEPT) {
-					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+					NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": NATCAP DNAT setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 				}
 				xt_mark_natcap_set(XT_MARK_NATCAP_PEER2, &skb->mark);
 #if defined(CONFIG_NF_CONNTRACK_MARK)
@@ -3370,13 +3370,13 @@ sni_out:
 		if (h) {
 			struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
 			if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_REPLY) {
-				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got unexpected pong in, bypass\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": unexpected pong received action=bypass\n", DEBUG_TCP_ARG(iph,l4));
 				nf_ct_put(user);
 				return NF_ACCEPT;
 			}
 
 			if (tcpopt->header.subtype == SUBTYPE_PEER_FSYN || tcpopt->header.subtype == SUBTYPE_PEER_XSYN) {
-				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(ack->syn) FSYN in, pass up\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": received pong(ack->syn) FSYN in, pass up\n", DEBUG_TCP_ARG(iph,l4));
 				TCPH(l4)->ack = 0;
 				if (!TCPH(l4)->syn) {
 					TCPH(l4)->syn = 1;
@@ -3394,7 +3394,7 @@ sni_out:
 				unsigned char client_mac[ETH_ALEN];
 				int auth = !!get_byte2((const void *)&tcpopt->peer.data.map_port);
 				memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
-				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": get SUBTYPE_PEER_AUTHACK, mac=%02x:%02x:%02x:%02x:%02x:%02x auth=%d\n",
+				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": received SUBTYPE_PEER_AUTHACK, mac=%02x:%02x:%02x:%02x:%02x:%02x auth=%d\n",
 				            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], auth);
 				natcap_auth_user_confirm(client_mac, auth);
 				nf_ct_put(user);
@@ -3404,7 +3404,7 @@ sni_out:
 
 			if (tcpopt->header.subtype == SUBTYPE_PEER_FMSG) {
 				//TODO get FMSG
-				NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": get SUBTYPE_PEER_FMSG\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": received SUBTYPE_PEER_FMSG\n", DEBUG_TCP_ARG(iph,l4));
 				nf_ct_put(user);
 				consume_skb(skb);
 				schedule_work(&request_natcapd_restart_work);
@@ -3419,7 +3419,7 @@ sni_out:
 
 				ps = peer_server_node_in(iph->saddr, 0, 0);
 				if (ps == NULL) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer_server_node not found\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer server lookup failed\n", DEBUG_TCP_ARG(iph,l4));
 					nf_ct_put(user);
 					return NF_ACCEPT;
 				}
@@ -3449,12 +3449,12 @@ sni_out:
 					//if any synack+FSYNACK keepalive success, mark as SYN mode
 					if (TCPH(l4)->syn && !(ps->status & PEER_SUBTYPE_SYN)) short_set_bit(PEER_SUBTYPE_SYN_BIT, &ps->status);
 					spin_unlock_bh(&ps->lock);
-					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(ack) SYNACK in. keepalive\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": received pong(ack) SYNACK in. keepalive\n", DEBUG_TCP_ARG(iph,l4));
 				} else {
 					fue->state = FUE_STATE_CONNECTED;
 					fue->remote_seq = ntohl(TCPH(l4)->seq);
 					spin_unlock_bh(&ps->lock);
-					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got pong(synack) SYNACK, sending ping(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": received pong(synack) SYNACK, sending ping(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
 					natcap_peer_ping_send(skb, in, ps, pmi, fue->mss);
 				}
 
@@ -3495,7 +3495,7 @@ sni_out:
 
 					payload_len = ntohs(payload_len);
 
-					NATCAP_DEBUG("(PPI)" DEBUG_TCP_FMT ": got pong(%s) SYNACK in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4),
+					NATCAP_DEBUG("(PPI)" DEBUG_TCP_FMT ": received pong(%s) SYNACK in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4),
 					             TCPH(l4)->syn ? "synack" : "ack", ntohs(id), ntohs(sequence));
 
 					if (tcpopt->header.opsize >= \
@@ -3511,7 +3511,7 @@ sni_out:
 					add_len = offset < 0 ? 0 : offset;
 					offset += skb_tailroom(skb);
 					if (add_len > 0 && pskb_expand_head(skb, 0, add_len, GFP_ATOMIC)) {
-						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": pskb_expand_head failed add_len=%u\n", DEBUG_TCP_ARG(iph,l4), add_len);
+						NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": pskb_expand_head() failed add_len=%u\n", DEBUG_TCP_ARG(iph,l4), add_len);
 						nf_ct_put(user);
 						return NF_DROP;
 					}
@@ -3560,14 +3560,14 @@ sni_out:
 		}
 
 		if (ntohl(TCPH(l4)->seq) == 0) {
-			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, but seq is 0, drop\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": received ping(syn) SYN in, but seq is 0, drop\n", DEBUG_TCP_ARG(iph,l4));
 			goto syn_out;
 		}
 
 		do {
 			__be16 id = get_byte2((const void *)&tcpopt->peer.data.icmp_id);
 			__be16 sequence = get_byte2((const void *)&tcpopt->peer.data.icmp_sequence);
-			NATCAP_DEBUG("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4), ntohs(id), ntohs(sequence));
+			NATCAP_DEBUG("(PPI)" DEBUG_TCP_FMT ": received ping(syn) SYN in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4), ntohs(id), ntohs(sequence));
 		} while (0);
 
 		client_ip = get_byte4((const void *)&tcpopt->peer.data.user.ip);
@@ -3580,7 +3580,7 @@ sni_out:
 			//re-check-in-lock
 			if (pt->sip != iph->saddr || pt->dip != iph->daddr || pt->sport != TCPH(l4)->source || pt->dport != TCPH(l4)->dest) {
 				//The caught duck flew
-				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, but pt[%pI4:%u->%pI4:%u] mismatch\n",
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": received ping(syn) SYN in, but pt[%pI4:%u->%pI4:%u] mismatch\n",
 				            DEBUG_TCP_ARG(iph,l4), &pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport));
 				spin_unlock_bh(&ue->lock);
 				goto syn_out;
@@ -3601,21 +3601,21 @@ sni_out:
 
 			if (!pt->connected) {
 				if (pt->remote_seq == 0) {
-					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, new, sending pong(synack) SYNACK back\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": received ping(syn) SYN in, new, sending pong(synack) SYNACK back\n", DEBUG_TCP_ARG(iph,l4));
 					pt->remote_seq = ntohl(TCPH(l4)->seq);
 					pt->mss = natcap_tcpmss_get(skb, TCPH(l4));
 					pt->last_active = ue->last_active = jiffies;
 					/* initial */
 				} else if (pt->remote_seq == ntohl(TCPH(l4)->seq)) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, dup, re-sending pong(synack) SYNACK back\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": received ping(syn) SYN in, dup, re-sending pong(synack) SYNACK back\n", DEBUG_TCP_ARG(iph,l4));
 				} else {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, pt[disconnected], seq(=%u,remote_seq=%u) mismatch, drop \n",
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": received ping(syn) SYN in, pt[disconnected], seq(=%u,remote_seq=%u) mismatch, drop \n",
 					            DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq);
 					spin_unlock_bh(&ue->lock);
 					goto syn_out;
 				}
 			} else { /* XXX Impossible */
-				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(syn) SYN in, pt[connected], seq(=%u,remote_seq=%u) mismatch, ignore and drop\n",
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": received ping(syn) SYN in, pt[connected], seq(=%u,remote_seq=%u) mismatch, action=drop\n",
 				            DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq);
 				spin_unlock_bh(&ue->lock);
 				goto syn_out;
@@ -3701,22 +3701,22 @@ syn_out:
 					struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
 					if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_ORIGINAL) {
 						ret = 0;
-						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 Authentication failed (step 0)\n",
+						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 authentication failed stage=fakeuser-lookup\n",
 						            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], &client_ip);
 					}
 					nf_ct_put(user);
 				} else {
 					ret = 0;
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 Authentication failed (step 0)\n",
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 authentication failed stage=fakeuser-lookup\n",
 					            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], &client_ip);
 				}
 			}
 
 			if (ret <= 0) {
-				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 auth fail\n",
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 authentication failed\n",
 				            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], &client_ip);
 			} else {
-				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 auth success\n",
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 authentication succeeded\n",
 				            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], &client_ip);
 			}
 
@@ -3759,7 +3759,7 @@ syn_out:
 						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": FACK https sni\n", DEBUG_TCP_ARG(iph,l4));
 						ret = nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
 						if (ret != NF_ACCEPT) {
-							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": FACK https sni, nf_conntrack_in fail=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": FACK https sni, nf_conntrack_in() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 							goto sni_skip;
 						}
 						ct = nf_ct_get(skb, &ctinfo);
@@ -3769,14 +3769,14 @@ syn_out:
 						}
 						ret = nf_conntrack_confirm(skb);
 						if (ret != NF_ACCEPT) {
-							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": FACK https sni, nf_conntrack_confirm fail=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
+							NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": FACK https sni, nf_conntrack_confirm() failed ret=%d\n", DEBUG_TCP_ARG(iph,l4), ret);
 							goto sni_skip;
 						}
 						ct = nf_ct_get(skb, &ctinfo);
 
 						cache_skb = peer_cache_detach(ct);
 						if (cache_skb == NULL) {
-							NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": FACK https sni, peer_cache_detach got NULL\n", DEBUG_TCP_ARG(iph,l4));
+							NATCAP_ERROR("(PPI)" DEBUG_TCP_FMT ": FACK https sni, peer_cache_detach() returned NULL\n", DEBUG_TCP_ARG(iph,l4));
 							goto sni_skip;
 						}
 						nf_ct_seqadj_init(ct, ctinfo, ntohl(TCPH((char *)ip_hdr(cache_skb) + sizeof(struct iphdr))->ack_seq) - 1 - ntohl(TCPH(l4)->seq));
@@ -3788,24 +3788,24 @@ sni_skip:
 						nf_ct_put(user);
 						return NF_STOLEN;
 					}
-					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack->synack) FACK in, pass up\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": received ping(ack->synack) FACK in, pass up\n", DEBUG_TCP_ARG(iph,l4));
 				} else {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack->synack) FACK in, but ct status or dir error\n", DEBUG_TCP_ARG(iph,l4));
+					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": received ping(ack->synack) FACK in, but ct status or dir error\n", DEBUG_TCP_ARG(iph,l4));
 				}
 				nf_ct_put(user);
 			} else {
-				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack->synack) FACK in, but ct not found\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": received ping(ack->synack) FACK in, but ct not found\n", DEBUG_TCP_ARG(iph,l4));
 			}
 			return NF_ACCEPT;
 		}
 
 		if (tcpopt->header.subtype != SUBTYPE_PEER_SYN && tcpopt->header.subtype != SUBTYPE_PEER_SSYN && tcpopt->header.subtype != SUBTYPE_PEER_ACK) {
-			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got unexpected PEER packet in opcode=%u type=%u opsize=%u subtype=%u, ignore pass\n",
+			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": received unexpected PEER packet in opcode=%u type=%u opsize=%u subtype=%u, action=accept\n",
 			            DEBUG_TCP_ARG(iph,l4), tcpopt->header.opcode, tcpopt->header.type, tcpopt->header.opsize, tcpopt->header.subtype);
 			return NF_ACCEPT;
 		}
 		if (ntohl(TCPH(l4)->seq) - 1 == 0) {
-			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, but seq is 1, drop\n", DEBUG_TCP_ARG(iph,l4),
+			NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": received ping(ack) %s in, but seq is 1, drop\n", DEBUG_TCP_ARG(iph,l4),
 			            tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK");
 			goto ack_out;
 		}
@@ -3813,7 +3813,7 @@ sni_skip:
 		do {
 			__be16 id = get_byte2((const void *)&tcpopt->peer.data.icmp_id);
 			__be16 sequence = get_byte2((const void *)&tcpopt->peer.data.icmp_sequence);
-			NATCAP_DEBUG("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4),
+			NATCAP_DEBUG("(PPI)" DEBUG_TCP_FMT ": received ping(ack) %s in, id=%u seq=%u\n", DEBUG_TCP_ARG(iph,l4),
 			             tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK", ntohs(id), ntohs(sequence));
 		} while (0);
 
@@ -3827,7 +3827,7 @@ sni_skip:
 			//re-check-in-lock
 			if (pt->sip != iph->saddr || pt->dip != iph->daddr || pt->sport != TCPH(l4)->source || pt->dport != TCPH(l4)->dest) {
 				//The caught duck flew
-				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) in, but pt[%pI4:%u->%pI4:%u] mismatch\n",
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": received ping(ack) in, but pt[%pI4:%u->%pI4:%u] mismatch\n",
 				            DEBUG_TCP_ARG(iph,l4), &pt->sip, ntohs(pt->sport), &pt->dip, ntohs(pt->dport));
 				spin_unlock_bh(&ue->lock);
 				goto ack_out;
@@ -3885,7 +3885,7 @@ sni_skip:
 					        pt->remote_seq != 0 &&
 					        pt->remote_seq + 1 == ntohl(TCPH(l4)->seq) &&
 					        pt->local_seq + 1 == ntohl(TCPH(l4)->ack_seq)) {
-						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, 3-way handshake complete\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": received ping(ack) SYN in, 3-way handshake complete\n", DEBUG_TCP_ARG(iph,l4));
 						pt->connected = 1;
 						pt->last_active = ue->last_active = jiffies;
 						spin_unlock_bh(&ue->lock);
@@ -3898,7 +3898,7 @@ sni_skip:
 						pt->local_seq = ntohl(TCPH(l4)->ack_seq) - 1;
 						pt->connected = 1;
 						pt->last_active = ue->last_active = jiffies;
-						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) SYN in, assume, sending pong(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
+						NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": received ping(ack) SYN in, assume, sending pong(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
 					} else {
 						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": Received ping(ack) ACK in, seq(=%u,remote_seq=%u) ack_seq(=%u,local_seq=%u) mismatch\n",
 						            DEBUG_TCP_ARG(iph,l4), ntohl(TCPH(l4)->seq), pt->remote_seq, ntohl(TCPH(l4)->ack_seq), pt->local_seq);
@@ -3911,7 +3911,7 @@ sni_skip:
 				}
 			} else if (pt->remote_seq + 1 == ntohl(TCPH(l4)->seq) && pt->local_seq + 1 == ntohl(TCPH(l4)->ack_seq)) {
 				/* XXX: pt->local_seq != 0 && pt->remote_seq */
-				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, keepalive, sending pong(ack) ACK out\n",
+				NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": received ping(ack) %s in, keepalive, sending pong(ack) ACK out\n",
 				            DEBUG_TCP_ARG(iph,l4), tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK");
 				pt->last_active = ue->last_active = jiffies;
 				if (tcpopt->header.subtype == SUBTYPE_PEER_SSYN) {
@@ -3920,7 +3920,7 @@ sni_skip:
 					if ((ue->status & PEER_SUBTYPE_SSYN)) short_clear_bit(PEER_SUBTYPE_SSYN_BIT, &ue->status);
 				}
 			} else {
-				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": got ping(ack) %s in, seq(=%u,remote_seq=%u) ack_seq(=%u,local_seq=%u) mismatch\n",
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": received ping(ack) %s in, seq(=%u,remote_seq=%u) ack_seq(=%u,local_seq=%u) mismatch\n",
 				            DEBUG_TCP_ARG(iph,l4),
 				            tcpopt->header.subtype != SUBTYPE_PEER_ACK ? "SYN" : "ACK",
 				            ntohl(TCPH(l4)->seq), pt->remote_seq, ntohl(TCPH(l4)->ack_seq), pt->local_seq);
@@ -4083,7 +4083,7 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 		}
 
 		if (pt == NULL) {
-			NATCAP_WARN("(IPI): No available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
+			NATCAP_WARN("(IPI): no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
 			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
 			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
 			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
@@ -4099,7 +4099,7 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 		//re-check-in-lock
 		if (pt->sip == 0) {
 			spin_unlock_bh(&ue->lock);
-			NATCAP_WARN("(IPI): No available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
+			NATCAP_WARN("(IPI): no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
 			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
 			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
 			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
@@ -4111,7 +4111,7 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 			return NF_ACCEPT;
 		}
 		if (pt->connected == 0 || pt->local_seq == 0 || pt->remote_seq == 0) {
-			NATCAP_WARN("(IPI): port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x](%s,local_seq=%u,remote_seq=%u) last_active(%u,%u) not ok\n",
+			NATCAP_WARN("(IPI): port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x](%s,local_seq=%u,remote_seq=%u) last_active(%u,%u) invalid\n",
 			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
 			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
 			            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[2],
@@ -4213,7 +4213,7 @@ static unsigned int natcap_icmpv6_pre_in_hook(void *priv,
 		//TODO
 		nf_ct_put(user);
 	} else {
-		NATCAP_WARN("ICMP6: target %02x:%02x:%02x:%02x:%02x:%02x not found\n",
+		NATCAP_WARN("ICMP6: target %02x:%02x:%02x:%02x:%02x:%02x lookup failed\n",
 		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5]);
 	}
 
@@ -4485,7 +4485,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 
 		ns = natcap_session_in(ct);
 		if (!ns) {
-			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": NATCAP session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
 			goto h_out;
 		}
 		ns->p.local_seq = fue->local_seq; //can't be 0
@@ -4495,13 +4495,13 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 
 		ps = peer_server_node_in(iph->saddr, 0, 0);
 		if (ps == NULL) {
-			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": peer_server_node not found, just bypass\n", DEBUG_TCP_ARG(iph,l4));
+			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": peer server lookup failed, action=bypass\n", DEBUG_TCP_ARG(iph,l4));
 			goto h_bypass;
 		}
 
 		spin_lock_bh(&ps->lock);
 		if (ps->port_map[pmi] != user) {
-			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": mismatch pmi user=%p,%p, just bypass\n", DEBUG_TCP_ARG(iph,l4), ps->port_map[pmi], user);
+			NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": mismatch pmi user=%p,%p, action=bypass\n", DEBUG_TCP_ARG(iph,l4), ps->port_map[pmi], user);
 			spin_unlock_bh(&ps->lock);
 			goto h_bypass;
 		}
@@ -4533,7 +4533,7 @@ h_bypass:
 
 		ret = natcap_dnat_setup(ct, server.ip, server.port);
 		if (ret != NF_ACCEPT) {
-			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+			NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": NATCAP DNAT setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 		}
 		xt_mark_natcap_set(XT_MARK_NATCAP_PEER1, &skb->mark);
 #if defined(CONFIG_NF_CONNTRACK_MARK)
@@ -4571,7 +4571,7 @@ knock:
 
 			ns = natcap_session_in(ct);
 			if (!ns) {
-				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": NATCAP session_in failed\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": NATCAP session input processing failed\n", DEBUG_TCP_ARG(iph,l4));
 				put_peer_user(user);
 				return NF_ACCEPT;
 			}
@@ -4584,7 +4584,7 @@ knock:
 			}
 
 			if (pt == NULL) {
-				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": No available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
+				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
 				            DEBUG_TCP_ARG(iph,l4),
 				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
 				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
@@ -4601,7 +4601,7 @@ knock:
 			//re-check-in-lock
 			if (pt->sip == 0) {
 				spin_unlock_bh(&ue->lock);
-				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": No available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
+				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": no available port mapping for user[%02x:%02x:%02x:%02x:%02x:%02x]\n",
 				            DEBUG_TCP_ARG(iph,l4),
 				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[0],
 				            ((unsigned char *)&user->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.u3.ip)[1],
@@ -4614,7 +4614,7 @@ knock:
 				return NF_ACCEPT;
 			}
 			if (pt->connected == 0 || pt->local_seq == 0 || pt->remote_seq == 0) {
-				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": port mapping(%s,local_seq=%u,remote_seq=%u) last_active(%u,%u) not ok\n",
+				NATCAP_WARN("(PD)" DEBUG_TCP_FMT ": port mapping(%s,local_seq=%u,remote_seq=%u) last_active(%u,%u) invalid\n",
 				            DEBUG_TCP_ARG(iph,l4), pt->connected ? "connected" : "disconnected",
 				            pt->local_seq, pt->remote_seq, pt->last_active, (unsigned int)jiffies);
 				spin_unlock_bh(&ue->lock);
@@ -4634,7 +4634,7 @@ knock:
 				short_set_bit(NS_PEER_TCPUDPENC_BIT, &ns->p.status);
 			}
 			if (!nfct_seqadj(ct) && !nfct_seqadj_ext_add(ct)) {
-				NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": seqadj_ext add failed\n", DEBUG_TCP_ARG(iph,l4));
+				NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": sequence-adjust extension allocation failed\n", DEBUG_TCP_ARG(iph,l4));
 			}
 
 			//clear this pt
@@ -4658,7 +4658,7 @@ knock:
 
 			ret = natcap_dnat_setup(ct, server.ip, server.port);
 			if (ret != NF_ACCEPT) {
-				NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": natcap_dnat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+				NATCAP_ERROR("(PD)" DEBUG_TCP_FMT ": NATCAP DNAT setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 			}
 			xt_mark_natcap_set(XT_MARK_NATCAP_PEER3, &skb->mark);
 #if defined(CONFIG_NF_CONNTRACK_MARK)
@@ -4743,7 +4743,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 	}
 	ns = natcap_session_get(ct);
 	if (ns == NULL) {
-		NATCAP_WARN("(PS)" DEBUG_TCP_FMT ": NATCAP session not found\n", DEBUG_TCP_ARG(iph,l4));
+		NATCAP_WARN("(PS)" DEBUG_TCP_FMT ": NATCAP session lookup failed\n", DEBUG_TCP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
 
@@ -4766,7 +4766,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			}
 
 			if (skb_tailroom(skb) < add_len && pskb_expand_head(skb, 0, add_len, GFP_ATOMIC)) {
-				NATCAP_ERROR("(PS)" DEBUG_TCP_FMT ": pskb_expand_head failed add_len=%u\n", DEBUG_TCP_ARG(iph,l4), add_len);
+				NATCAP_ERROR("(PS)" DEBUG_TCP_FMT ": pskb_expand_head() failed add_len=%u\n", DEBUG_TCP_ARG(iph,l4), add_len);
 				return NF_ACCEPT;
 			}
 			iph = ip_hdr(skb);
@@ -4833,7 +4833,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			}
 
 			if (skb_tailroom(skb) < add_len && pskb_expand_head(skb, 0, add_len, GFP_ATOMIC)) {
-				NATCAP_ERROR("(PS)" DEBUG_TCP_FMT ": pskb_expand_head failed add_len=%u\n", DEBUG_TCP_ARG(iph,l4), add_len);
+				NATCAP_ERROR("(PS)" DEBUG_TCP_FMT ": pskb_expand_head() failed add_len=%u\n", DEBUG_TCP_ARG(iph,l4), add_len);
 				return NF_DROP;
 			}
 			iph = ip_hdr(skb);
@@ -4895,7 +4895,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 
 	ret = natcap_snat_setup(ct, server.ip, server.port);
 	if (ret != NF_ACCEPT) {
-		NATCAP_ERROR("(PS)" DEBUG_TCP_FMT ": natcap_snat_setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
+		NATCAP_ERROR("(PS)" DEBUG_TCP_FMT ": NATCAP SNAT setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 	}
 
 	return NF_ACCEPT;
@@ -4965,7 +4965,7 @@ static unsigned int natcap_peer_push_out_hook(void *priv,
 	}
 	ns = natcap_session_get(ct);
 	if (ns == NULL) {
-		NATCAP_WARN("(PS)" DEBUG_TCP_FMT ": NATCAP session not found\n", DEBUG_TCP_ARG(iph,l4));
+		NATCAP_WARN("(PS)" DEBUG_TCP_FMT ": NATCAP session lookup failed\n", DEBUG_TCP_ARG(iph,l4));
 		return NF_ACCEPT;
 	}
 
@@ -5016,7 +5016,7 @@ static unsigned int natcap_peer_push_out_hook(void *priv,
 		if (skb_tailroom(skb) < 8 && pskb_expand_head(skb, 0, 8, GFP_ATOMIC)) {
 			consume_skb(skb);
 			skb = nskb;
-			NATCAP_ERROR("Failed to expand skb head\n");
+			NATCAP_ERROR("skb head expansion failed\n");
 			continue;
 		}
 
