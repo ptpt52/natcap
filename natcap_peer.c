@@ -3663,6 +3663,7 @@ syn_out:
 
 		if (tcpopt->header.subtype == SUBTYPE_PEER_AUTH) {
 			int ret = 1;
+			const char *failure_stage = "unknown";
 
 			client_ip = get_byte4((const void *)&tcpopt->peer.data.user.ip);
 			memcpy(client_mac, tcpopt->peer.data.user.mac_addr, ETH_ALEN);
@@ -3671,14 +3672,21 @@ syn_out:
 				struct sk_buff *uskb = uskb_of_this_cpu();
 				if (!uskb) {
 					ret = 0;
+					failure_stage = "temporary-skb";
 				} else {
 					memcpy(eth_hdr(uskb)->h_source, client_mac, ETH_ALEN);
 					ret = IP_SET_test_src_mac(state, in, out, uskb, "vclist");
+					if (ret <= 0) {
+						failure_stage = "mac-ipset";
+					}
 					if (ret > 0 && (auth_enabled & NATCAP_AUTH_MATCH_IP)) {
 						__be32 old_ip = iph->saddr;
 						iph->saddr = client_ip;
 						ret = IP_SET_test_src_ip(state, in, out, skb, "vciplist");
 						iph->saddr = old_ip;
+						if (ret <= 0) {
+							failure_stage = "ip-ipset";
+						}
 					}
 				}
 			}
@@ -3701,20 +3709,18 @@ syn_out:
 					struct nf_conn *user = nf_ct_tuplehash_to_ctrack(h);
 					if (!(IPS_NATCAP_PEER & user->status) || NF_CT_DIRECTION(h) != IP_CT_DIR_ORIGINAL) {
 						ret = 0;
-						NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 authentication failed stage=fakeuser-lookup\n",
-						            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], &client_ip);
+						failure_stage = "fakeuser-lookup";
 					}
 					nf_ct_put(user);
 				} else {
 					ret = 0;
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 authentication failed stage=fakeuser-lookup\n",
-					            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], &client_ip);
+					failure_stage = "fakeuser-lookup";
 				}
 			}
 
 			if (ret <= 0) {
-				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 authentication failed\n",
-				            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], &client_ip);
+				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 authentication failed stage=%s\n",
+				            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], &client_ip, failure_stage);
 			} else {
 				NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": SUBTYPE_PEER_AUTH, mac=%02x:%02x:%02x:%02x:%02x:%02x ip=%pI4 authentication succeeded\n",
 				            DEBUG_TCP_ARG(iph,l4), client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5], &client_ip);
