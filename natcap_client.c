@@ -4839,12 +4839,13 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 			an_count = ntohs(get_byte2(p + 6));
 			ns_count = ntohs(get_byte2(p + 8));
 			ar_count = ntohs(get_byte2(p + 10));
-			NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, flags=0x%04x, qd=%u, an=%u, ns=%u, ar=%u\n",
+			NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": DNS response header: id=0x%04x flags=0x%04x questions=%u answers=%u authority=%u additional=%u\n",
 			             DEBUG_UDP_ARG(iph,l4),
 			             id, flags, qd_count, an_count, ns_count, ar_count);
 
 			if (!(IPS_NATCAP & ct->status) && (flags & 0xf) != 0) {
-				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x direct DNS ANS flags=%04x, drop\n", DEBUG_UDP_ARG(iph,l4), id, flags);
+				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct id=0x%04x rcode=%u flags=0x%04x action=drop reason=error-response\n",
+				             DEBUG_UDP_ARG(iph,l4), id, flags & 0xf, flags);
 				return NF_DROP;
 			}
 
@@ -4863,7 +4864,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 					if (qname != NULL) {
 						if ((qname_len = get_rdata(p, len, pos, qname, 2047)) >= 0) {
 							qname[qname_len] = 0;
-							NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, qname=%s\n", DEBUG_UDP_ARG(iph,l4), id, qname);
+							NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": DNS question: id=0x%04x name=%s\n", DEBUG_UDP_ARG(iph,l4), id, qname);
 						}
 						kfree(qname);
 					}
@@ -4876,7 +4877,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 						name[name_len - 1] = 0;
 						if (cn_domain_lookup(name)) {
 							is_cn_domain = 1;
-							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, name=%s is_cn_domain\n", DEBUG_UDP_ARG(iph,l4), id, name);
+							NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS classification: id=0x%04x name=%s cn_domain=match\n", DEBUG_UDP_ARG(iph,l4), id, name);
 						}
 					}
 				}
@@ -4903,7 +4904,7 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				qclass = ntohs(get_byte2(p + pos));
 				pos += 2;
 
-				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x, qtype=%d, qclass=%d\n", DEBUG_UDP_ARG(iph,l4), id, qtype, qclass);
+				NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": DNS question: id=0x%04x type=%u class=%u\n", DEBUG_UDP_ARG(iph,l4), id, qtype, qclass);
 			}
 			for(i = 0; i < an_count; i++) {
 				unsigned int ttl;
@@ -4970,77 +4971,81 @@ static unsigned int natcap_client_pre_master_in_hook(void *priv,
 				case 1: //A
 					if (rdlength == 4) {
 						ip = get_byte4(p + pos);
-						NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x type=%d, class=%d, ttl=%d, rdlength=%d, ip=%pI4\n",
+						NATCAP_DEBUG("(CPMI)" DEBUG_UDP_FMT ": DNS A answer: id=0x%04x type=%u class=%u ttl=%u rdlength=%u address=%pI4\n",
 						             DEBUG_UDP_ARG(iph,l4), id, type, class, ttl, rdlength, &ip);
 						do {
 							if ((IPS_NATCAP & ct->status)) {
 								if (dns_proxy_drop == 0 || dns_proxy_drop == 1) {
 									if (NATCAP_DNS_TEST_DST_IP(state, in, out, skb, ip, "cniplist") > 0) {
 										if (dns_proxy_drop == 1) {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]proxy DNS ANS is in cniplist ip = %pI4, drop\n",
-											            DEBUG_UDP_ARG(iph,l4), id, &ip);
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=proxy mode=%d id=0x%04x answer=%pI4 cniplist=match action=drop\n",
+											            DEBUG_UDP_ARG(iph,l4), dns_proxy_drop, id, &ip);
 											return NF_DROP;
 										} else {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]proxy DNS ANS is in cniplist ip = %pI4, accept\n",
-											            DEBUG_UDP_ARG(iph,l4), id, &ip);
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=proxy mode=%d id=0x%04x answer=%pI4 cniplist=match action=continue reason=cn-domain-check-pending\n",
+											            DEBUG_UDP_ARG(iph,l4), dns_proxy_drop, id, &ip);
 										}
 									}
 									if (is_cn_domain && cn_domain) {
-										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]proxy DNS ANS is cn_domain ip = %pI4, drop\n",
-										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=proxy mode=%d id=0x%04x answer=%pI4 cn_domain=match action=drop\n",
+										            DEBUG_UDP_ARG(iph,l4), dns_proxy_drop, id, &ip);
 										return NF_DROP;
 									} else {
-										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]proxy DNS ANS is not cn_domain ip = %pI4, accept\n",
-										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=proxy mode=%d id=0x%04x answer=%pI4 cn_domain=%s action=accept\n",
+										            DEBUG_UDP_ARG(iph,l4), dns_proxy_drop, id, &ip,
+										            cn_domain ? "miss" : "disabled");
 									}
 								} else if (dns_proxy_drop == 2) {
 									if (NATCAP_DNS_TEST_DST_IP(state, in, out, skb, ip, "cniplist") > 0) { //XXX: now cniplist=C_cniplist
 										if ((!is_cn_domain && cn_domain) || !cn_domain) {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]proxy DNS ANS is C_cniplist and not cn_domain ip = %pI4, drop\n",
-											            DEBUG_UDP_ARG(iph,l4), id, &ip);
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=proxy mode=2 id=0x%04x answer=%pI4 C_cniplist=match cn_domain=%s action=drop\n",
+											            DEBUG_UDP_ARG(iph,l4), id, &ip,
+											            cn_domain ? "miss" : "disabled");
 											return NF_DROP;
 										} else {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]proxy DNS ANS is C_cniplist and cn_domain ip = %pI4, accept\n",
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=proxy mode=2 id=0x%04x answer=%pI4 C_cniplist=match cn_domain=match action=accept\n",
 											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 										}
 									} else {
-										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]proxy DNS ANS is cniplist ip = %pI4, accept\n",
-											            DEBUG_UDP_ARG(iph,l4), id, &ip);
-										}
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=proxy mode=2 id=0x%04x answer=%pI4 C_cniplist=miss action=accept\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+									}
 								}
 							} else {
 								if (dns_proxy_drop == 0 || dns_proxy_drop == 1) {
 									if (NATCAP_DNS_TEST_DST_IP(state, in, out, skb, ip, "dnsdroplist") > 0) {
-										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]direct DNS ANS is dnsdroplist ip = %pI4, drop\n",
-										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=%d id=0x%04x answer=%pI4 dnsdroplist=match action=drop\n",
+										            DEBUG_UDP_ARG(iph,l4), dns_proxy_drop, id, &ip);
 										return NF_DROP;
 									} else if (NATCAP_DNS_TEST_DST_IP(state, in, out, skb, ip, "cniplist") <= 0) {
 										if ((!is_cn_domain && cn_domain) || !cn_domain) {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]direct DNS ANS is C_cniplist and not cn_domain ip = %pI4, drop\n",
-											            DEBUG_UDP_ARG(iph,l4), id, &ip);
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=%d id=0x%04x answer=%pI4 cniplist=miss cn_domain=%s action=drop\n",
+											            DEBUG_UDP_ARG(iph,l4), dns_proxy_drop, id, &ip,
+											            cn_domain ? "miss" : "disabled");
 											return NF_DROP;
 										} else {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]direct DNS ANS is C_cniplist and cn_domain ip = %pI4, accept\n",
-											            DEBUG_UDP_ARG(iph,l4), id, &ip);
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=%d id=0x%04x answer=%pI4 cniplist=miss cn_domain=match action=accept\n",
+											            DEBUG_UDP_ARG(iph,l4), dns_proxy_drop, id, &ip);
 										}
 									} else {
-										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [fromCN]direct DNS ANS is cniplist ip = %pI4, accept\n",
-										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=%d id=0x%04x answer=%pI4 cniplist=match action=accept\n",
+										            DEBUG_UDP_ARG(iph,l4), dns_proxy_drop, id, &ip);
 									}
 								} else if (dns_proxy_drop == 2) {
 									if (NATCAP_DNS_TEST_DST_IP(state, in, out, skb, ip, "cniplist") > 0) { //XXX: now cniplist=C_cniplist
 										if ((is_cn_domain && cn_domain)) {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]direct DNS ANS is C_cniplist and cn_domain ip = %pI4, drop\n",
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=2 id=0x%04x answer=%pI4 C_cniplist=match cn_domain=match action=drop\n",
 											            DEBUG_UDP_ARG(iph,l4), id, &ip);
 											return NF_DROP;
 										} else {
-											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]direct DNS ANS is C_cniplist and not cn_domain ip = %pI4, accept\n",
-											            DEBUG_UDP_ARG(iph,l4), id, &ip);
+											NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=2 id=0x%04x answer=%pI4 C_cniplist=match cn_domain=%s action=accept\n",
+											            DEBUG_UDP_ARG(iph,l4), id, &ip,
+											            cn_domain ? "miss" : "disabled");
 										}
 									} else {
-										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": id=0x%04x [toCN]direct DNS ANS is cniplist ip = %pI4, accept\n",
-											            DEBUG_UDP_ARG(iph,l4), id, &ip);
-										}
+										NATCAP_INFO("(CPMI)" DEBUG_UDP_FMT ": DNS policy: path=direct mode=2 id=0x%04x answer=%pI4 C_cniplist=miss action=accept\n",
+										            DEBUG_UDP_ARG(iph,l4), id, &ip);
+									}
 								}
 							}
 						} while (0);

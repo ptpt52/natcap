@@ -145,104 +145,104 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		rcu_read_unlock();
 		scnprintf(natcap_ctl_buffer,
 		          PAGE_SIZE,
-		             "# Version: %s\n"
-		             "# Usage:\n"
-		             "#    disabled=Number -- set disable/enable\n"
-		             "#    debug=<num> -- set debug flags\n"
-		             "#        range: 0..63; combine bits by summing them\n"
-		             "#        1=error, 2=warn, 4=info, 8=debug, 16=fixme, 32=debug_ratelimited\n"
-		             "#    server [ip]:[port]-[e/o] -- add one server\n"
-		             "#    delete [ip]:[port]-[e/o] -- delete one server\n"
-		             "#    clean -- remove all existing server(s)\n"
-		             "#    change_server -- change current server\n"
-		             "#\n"
-		             "# Info:\n"
-		             "#    mode=%s(%u)\n"
-		             "#    current_server0=" TUPLE_FMT "\n"
-		             "#    current_server1=" TUPLE_FMT "\n"
-		             "#    default_mac_addr=%02x:%02x:%02x:%02x:%02x:%02x\n"
-		             "#    u_hash=0x%08x(%u)\n"
-		             "#    u_mask=0x%08x\n"
-		             "#    si_mask=0x%08x\n"
-		             "#    ni_mask=0x%08x\n"
-		             "#    ni_forward=%u\n"
-		             "#    udp_seq_lock=%u\n"
-		             "#    server_flow_stop=%u\n"
-		             "#    protocol=%u\n"
-		             "#    server_seed=%u\n"
-		             "#    auth_enabled=%u\n"
-		             "#    tx_speed_limit=%d B/s\n"
-		             "#    rx_speed_limit=%d B/s\n"
-		             "#    tx_pkts_threshold=%d\n"
-		             "#    rx_pkts_threshold=%d\n"
-		             "#    http_confusion=%u\n"
-		             "#    encode_http_only=%u\n"
-		             "#    sproxy=%u\n"
-		             "#    knock_port=%u-%c-%c-%c\n"
-		             "#    knock_flood=%u\n"
-		             "#    natcap_redirect_port=%u\n"
-		             "#    natcap_client_redirect_port=%u\n"
-		             "#    natcap_max_pmtu=%u\n"
-		             "#    natcap_touch_timeout=%u\n"
-		             "#    flow_total_tx_bytes=%llu\n"
-		             "#    flow_total_rx_bytes=%llu\n"
-		             "#    auth_http_redirect_url=%s\n"
-		             "#    htp_confusion_host=%s\n"
-		             "#    server_persist_lock=%u\n"
-		             "#    dns_proxy_drop=%u\n"
-		             "#    peer_multipath=%u\n"
-		             "#    macfilter=%s(%u)\n"
-		             "#    ipfilter=%s(%u)\n"
-		             "#    dns_proxy_server=" TUPLE_FMT "\n"
-		             "#    server1_use_peer=%u\n"
-		             "#    natmap=%u-%u\n"
-		             "#    peer_sni_cache_used_nodes=%d\n"
-		             "#\n"
-		             "# Reload cmd:\n"
-		             "\n"
-		             "clean\n"
-		             "disabled=%u\n"
-		             "debug=%u\n"
-		             "server_persist_timeout=%u\n"
-		             "cnipwhitelist_mode=%u\n"
-		             "dns_server=%pI4:%u\n"
-		             "\n",
-		             NATCAP_VERSION,
-		             mode_str[mode], mode,
-		             TUPLE_ARG(natcap_server_info_current(SERVER_GROUP_0)),
-		             TUPLE_ARG(natcap_server_info_current(SERVER_GROUP_1)),
-		             default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
-		             ntohl(default_u_hash),
-		             ntohl(default_u_hash),
-		             user_mark_natcap_mask,
-		             server_index_natcap_mask,
-		             natcap_ignore_mask,
-		             natcap_ignore_forward,
-		             natcap_udp_seq_lock,
-		             server_flow_stop,
-		             default_protocol,
-		             server_seed, auth_enabled,
-		             natcap_tx_speed_get(),
-		             natcap_rx_speed_get(),
-		             tx_pkts_threshold,
-		             rx_pkts_threshold,
-		             http_confusion, encode_http_only, sproxy, ntohs(knock_port), knock_encryption ? 'e' : 'o',
-		             knock_tcp_encode == TCP_ENCODE ? 'T' : 'U', knock_udp_encode == UDP_ENCODE ? 'U' : 'T',
-		             knock_flood,
-		             ntohs(natcap_redirect_port), ntohs(natcap_client_redirect_port), natcap_max_pmtu, natcap_touch_timeout,
-		             flow_total_tx_bytes, flow_total_rx_bytes,
-		             auth_http_url,
-		             htp_confusion_host,
-		             server_persist_lock,
-		             dns_proxy_drop,
-		             peer_multipath,
-		             macfilter_acl_str[macfilter], macfilter,
-		             ipfilter_acl_str[ipfilter], ipfilter,
-		             TUPLE_ARG(dns_proxy_server),
-		             natcap_server_use_peer, natmap_start, natmap_end,
-		             peer_sni_cache_used_nodes(),
-		             disabled, debug, server_persist_timeout,
-		             cnipwhitelist_mode, &dns_server, ntohs(dns_port));
+		          "# Version: %s\n"
+		          "# Usage:\n"
+		          "#    disabled=Number -- set disable/enable\n"
+		          "#    debug=<num> -- set debug flags\n"
+		          "#        range: 0..63; combine bits by summing them\n"
+		          "#        1=error, 2=warn, 4=info, 8=debug, 16=fixme, 32=debug_ratelimited\n"
+		          "#    server [ip]:[port]-[e/o] -- add one server\n"
+		          "#    delete [ip]:[port]-[e/o] -- delete one server\n"
+		          "#    clean -- remove all existing server(s)\n"
+		          "#    change_server -- change current server\n"
+		          "#\n"
+		          "# Info:\n"
+		          "#    mode=%s(%u)\n"
+		          "#    current_server0=" TUPLE_FMT "\n"
+		          "#    current_server1=" TUPLE_FMT "\n"
+		          "#    default_mac_addr=%02x:%02x:%02x:%02x:%02x:%02x\n"
+		          "#    u_hash=0x%08x(%u)\n"
+		          "#    u_mask=0x%08x\n"
+		          "#    si_mask=0x%08x\n"
+		          "#    ni_mask=0x%08x\n"
+		          "#    ni_forward=%u\n"
+		          "#    udp_seq_lock=%u\n"
+		          "#    server_flow_stop=%u\n"
+		          "#    protocol=%u\n"
+		          "#    server_seed=%u\n"
+		          "#    auth_enabled=%u\n"
+		          "#    tx_speed_limit=%d B/s\n"
+		          "#    rx_speed_limit=%d B/s\n"
+		          "#    tx_pkts_threshold=%d\n"
+		          "#    rx_pkts_threshold=%d\n"
+		          "#    http_confusion=%u\n"
+		          "#    encode_http_only=%u\n"
+		          "#    sproxy=%u\n"
+		          "#    knock_port=%u-%c-%c-%c\n"
+		          "#    knock_flood=%u\n"
+		          "#    natcap_redirect_port=%u\n"
+		          "#    natcap_client_redirect_port=%u\n"
+		          "#    natcap_max_pmtu=%u\n"
+		          "#    natcap_touch_timeout=%u\n"
+		          "#    flow_total_tx_bytes=%llu\n"
+		          "#    flow_total_rx_bytes=%llu\n"
+		          "#    auth_http_redirect_url=%s\n"
+		          "#    htp_confusion_host=%s\n"
+		          "#    server_persist_lock=%u\n"
+		          "#    dns_proxy_drop=%u\n"
+		          "#    peer_multipath=%u\n"
+		          "#    macfilter=%s(%u)\n"
+		          "#    ipfilter=%s(%u)\n"
+		          "#    dns_proxy_server=" TUPLE_FMT "\n"
+		          "#    server1_use_peer=%u\n"
+		          "#    natmap=%u-%u\n"
+		          "#    peer_sni_cache_used_nodes=%d\n"
+		          "#\n"
+		          "# Reload cmd:\n"
+		          "\n"
+		          "clean\n"
+		          "disabled=%u\n"
+		          "debug=%u\n"
+		          "server_persist_timeout=%u\n"
+		          "cnipwhitelist_mode=%u\n"
+		          "dns_server=%pI4:%u\n"
+		          "\n",
+		          NATCAP_VERSION,
+		          mode_str[mode], mode,
+		          TUPLE_ARG(natcap_server_info_current(SERVER_GROUP_0)),
+		          TUPLE_ARG(natcap_server_info_current(SERVER_GROUP_1)),
+		          default_mac_addr[0], default_mac_addr[1], default_mac_addr[2], default_mac_addr[3], default_mac_addr[4], default_mac_addr[5],
+		          ntohl(default_u_hash),
+		          ntohl(default_u_hash),
+		          user_mark_natcap_mask,
+		          server_index_natcap_mask,
+		          natcap_ignore_mask,
+		          natcap_ignore_forward,
+		          natcap_udp_seq_lock,
+		          server_flow_stop,
+		          default_protocol,
+		          server_seed, auth_enabled,
+		          natcap_tx_speed_get(),
+		          natcap_rx_speed_get(),
+		          tx_pkts_threshold,
+		          rx_pkts_threshold,
+		          http_confusion, encode_http_only, sproxy, ntohs(knock_port), knock_encryption ? 'e' : 'o',
+		          knock_tcp_encode == TCP_ENCODE ? 'T' : 'U', knock_udp_encode == UDP_ENCODE ? 'U' : 'T',
+		          knock_flood,
+		          ntohs(natcap_redirect_port), ntohs(natcap_client_redirect_port), natcap_max_pmtu, natcap_touch_timeout,
+		          flow_total_tx_bytes, flow_total_rx_bytes,
+		          auth_http_url,
+		          htp_confusion_host,
+		          server_persist_lock,
+		          dns_proxy_drop,
+		          peer_multipath,
+		          macfilter_acl_str[macfilter], macfilter,
+		          ipfilter_acl_str[ipfilter], ipfilter,
+		          TUPLE_ARG(dns_proxy_server),
+		          natcap_server_use_peer, natmap_start, natmap_end,
+		          peer_sni_cache_used_nodes(),
+		          disabled, debug, server_persist_timeout,
+		          cnipwhitelist_mode, &dns_server, ntohs(dns_port));
 		return natcap_ctl_buffer;
 	} else if ((*pos) > 0) {
 		struct tuple *dst = NULL;
@@ -256,8 +256,8 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 		if (dst) {
 			scnprintf(natcap_ctl_buffer,
 			          PAGE_SIZE,
-			             "server %d " TUPLE_FMT "\n",
-			             x, TUPLE_ARG(dst));
+			          "server %d " TUPLE_FMT "\n",
+			          x, TUPLE_ARG(dst));
 			return natcap_ctl_buffer;
 		}
 	}
