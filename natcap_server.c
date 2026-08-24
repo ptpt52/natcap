@@ -1188,12 +1188,14 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				return NF_ACCEPT;
 			}
 			if ((tcpopt.header.type & NATCAP_TCPOPT_CONFUSION)) {
+				__be32 offset;
+
 				if (tcpopt.header.opsize < sizeof(struct natcap_TCPOPT_header) + sizeof(__be32)) {
 					NATCAP_WARN("(SPCI)" DEBUG_TCP_FMT ": invalid TCP confusion option size=%u\n", DEBUG_TCP_ARG(iph,l4), tcpopt.header.opsize);
 					set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 					return NF_ACCEPT;
 				}
-				__be32 offset = get_byte4((const void *)&tcpopt + tcpopt.header.opsize - sizeof(__be32));
+				offset = get_byte4((const void *)&tcpopt + tcpopt.header.opsize - sizeof(__be32));
 				ns->n.tcp_seq_offset = ntohl(offset);
 				short_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->n.status);
 			}
@@ -1960,12 +1962,17 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 		l4 = (void *)iph + iph->ihl * 4;
 
 		if ( ntohs(TCPH(l4)->window) == (ntohs(iph->id) ^ (ntohl(TCPH(l4)->seq) & 0xffff) ^ (ntohl(TCPH(l4)->ack_seq) & 0xffff)) ) {
+			int dir;
+			int lock_seq;
+			unsigned int tcphdr_len;
+			unsigned int foreign_seq;
+
 			if (!natcap_tcp_header_valid(skb, iph, TCPH(l4)))
 				return NF_ACCEPT;
-			int dir = CTINFO2DIR(ctinfo);
-			int lock_seq = (TCPH(l4)->syn && TCPH(l4)->urg_ptr == __constant_htons(1)) ? 1 : 0;
-			unsigned int tcphdr_len = TCPH(l4)->doff * 4;
-			unsigned int foreign_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - tcphdr_len + !!TCPH(l4)->syn;
+			dir = CTINFO2DIR(ctinfo);
+			lock_seq = (TCPH(l4)->syn && TCPH(l4)->urg_ptr == __constant_htons(1)) ? 1 : 0;
+			tcphdr_len = TCPH(l4)->doff * 4;
+			foreign_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - tcphdr_len + !!TCPH(l4)->syn;
 
 			if (!inet_is_local(in, iph->daddr)) {
 				set_bit(IPS_NATCAP_PRE_BIT, &master->status);
@@ -2128,11 +2135,15 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 			NATCAP_DEBUG("(SPI)" DEBUG_UDP_FMT ": decode action=complete for UDP-to-TCP packet\n", DEBUG_UDP_ARG(iph,l4));
 			return NF_ACCEPT;
 		} else if ( TCPH(l4)->window == htons(~(ntohs(iph->id) ^ ((ntohl(TCPH(l4)->seq) & 0xffff) | (ntohl(TCPH(l4)->ack_seq) & 0xffff)))) ) {
+			int dir;
+			unsigned int tcphdr_len;
+			unsigned int foreign_seq;
+
 			if (!natcap_tcp_header_valid(skb, iph, TCPH(l4)))
 				return NF_ACCEPT;
-			int dir = CTINFO2DIR(ctinfo);
-			unsigned int tcphdr_len = TCPH(l4)->doff * 4;
-			unsigned int foreign_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - tcphdr_len + !!TCPH(l4)->syn;
+			dir = CTINFO2DIR(ctinfo);
+			tcphdr_len = TCPH(l4)->doff * 4;
+			foreign_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - tcphdr_len + !!TCPH(l4)->syn;
 
 			if (!inet_is_local(in, iph->daddr)) {
 				set_bit(IPS_NATCAP_PRE_BIT, &master->status);
