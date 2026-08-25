@@ -791,6 +791,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 	void *l4;
 	struct natcap_session *ns;
 	struct tuple server;
+	unsigned int force_proxy = 0;
 
 	if (disabled)
 		return NF_ACCEPT;
@@ -863,6 +864,16 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 	}
 
 	if (hooknum != NF_INET_LOCAL_OUT) {
+		if (IP_SET_test_src_ip(state, in, out, skb, "natcap_proxy_iplist") > 0) {
+			force_proxy = 1;
+		}
+	}
+
+	if (force_proxy && IP_SET_test_dst_ip(state, in, out, skb, "localiplist") > 0) {
+		force_proxy = 0;
+	}
+
+	if (hooknum != NF_INET_LOCAL_OUT && !force_proxy) {
 		if (macfilter == NATCAP_ACL_ALLOW && IP_SET_test_src_mac(state, in, out, skb, "natcap_maclist") <= 0) {
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -884,7 +895,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 		}
 	}
 
-	if (IP_SET_test_dst_netport(state, in, out, skb, "app_bypass_list") > 0) {
+	if (!force_proxy && IP_SET_test_dst_netport(state, in, out, skb, "app_bypass_list") > 0) {
 		set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 		set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
 		return NF_ACCEPT;
@@ -924,7 +935,7 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			}
 		}
 
-		if (IP_SET_test_dst_ip(state, in, out, skb, "knocklist") > 0) {
+		if (!force_proxy && IP_SET_test_dst_ip(state, in, out, skb, "knocklist") > 0) {
 			if (ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == peer_knock_local_port ||
 			        ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all == peer_sni_port) {
 				goto bypass_tcp;
@@ -940,9 +951,9 @@ static unsigned int natcap_client_dnat_hook(void *priv,
 			natcap_tuple_to_ns(ns, &server, iph->protocol);
 			ns->n.group_x = SERVER_GROUP_MAX; // no use
 			NATCAP_INFO("(CD)" DEBUG_TCP_FMT ": new connection, knock select target server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
-		} else if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
-		           IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
-		           IP_SET_test_dst_ip(state, in, out, skb, "cone_wan_ip") > 0) {
+		} else if (!force_proxy && (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
+		                            IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
+		                            IP_SET_test_dst_ip(state, in, out, skb, "cone_wan_ip") > 0)) {
 bypass_tcp:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -950,7 +961,9 @@ bypass_tcp:
 		} else {
 			int x = -1;
 
-			if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
+			if (force_proxy) {
+				x = SERVER_GROUP_0;
+			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
 				x = SERVER_GROUP_1;
 			} else if (IP_SET_test_dst_port(state, in, out, skb, "gfw_tcp_port_list1") > 0 ||
 			           IP_SET_test_dst_netport(state, in, out, skb, "app_list1") > 0) {
@@ -1160,7 +1173,7 @@ bypass_tcp:
 			goto dnat_out;
 		}
 
-		if ((cnipwhitelist_mode == 0 || cnipwhitelist_mode == 1) && /* this work for China */
+		if (!force_proxy && (cnipwhitelist_mode == 0 || cnipwhitelist_mode == 1) && /* this work for China */
 		        UDPH(l4)->dest == __constant_htons(53) && !is_natcap_server(iph->daddr)) {
 natcap_dual_out_udp:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
@@ -1208,9 +1221,9 @@ natcap_dual_out_udp:
 			return NF_ACCEPT;
 		}
 
-		if (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
-		        IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
-		        IP_SET_test_dst_ip(state, in, out, skb, "cone_wan_ip") > 0) {
+		if (!force_proxy && (IP_SET_test_dst_ip(state, in, out, skb, "bypasslist") > 0 ||
+		                     IP_SET_test_dst_ip(state, in, out, skb, "cniplist") > 0 ||
+		                     IP_SET_test_dst_ip(state, in, out, skb, "cone_wan_ip") > 0)) {
 bypass_udp:
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			set_bit(IPS_NATCAP_ACK_BIT, &ct->status);
@@ -1218,7 +1231,9 @@ bypass_udp:
 		} else {
 			int x = -1;
 
-			if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
+			if (force_proxy) {
+				x = SERVER_GROUP_0;
+			} else if (IP_SET_test_dst_ip(state, in, out, skb, "gfwlist1") > 0) {
 				x = SERVER_GROUP_1;
 			} else if (IP_SET_test_dst_port(state, in, out, skb, "gfw_udp_port_list1") > 0 ||
 			           IP_SET_test_dst_netport(state, in, out, skb, "app_list1") > 0) {
