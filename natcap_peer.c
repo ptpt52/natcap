@@ -905,7 +905,9 @@ static struct nf_conn *peer_fakeuser_expect_new(__be32 saddr, __be32 daddr, __be
 		return NULL;
 	}
 	user = nf_ct_get(uskb, &ctinfo);
-	if (!user || nf_ct_is_dying(user) || !REFCOUNT_inc_not_zero(&user->ct_general.use)) {
+	if (!user || nf_ct_is_dying(user) || !user->ext ||
+	        !(IPS_NATCAP_PEER & user->status) ||
+	        !REFCOUNT_inc_not_zero(&user->ct_general.use)) {
 		skb_nfct_reset(uskb);
 		return NULL;
 	}
@@ -989,6 +991,10 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 		skb_nfct_reset(uskb);
 		return NULL;
 	}
+	if (nf_ct_is_confirmed(user) && !(IPS_NATCAP_PEER & user->status)) {
+		skb_nfct_reset(uskb);
+		return NULL;
+	}
 	if (!nf_ct_is_confirmed(user) && !(IPS_NATCAP_PEER & user->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &user->status)) {
 		newoff = ALIGN(user->ext->len, __ALIGN_64BITS);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0)
@@ -1038,6 +1044,12 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 		return NULL;
 	}
 	user = nf_ct_get(uskb, &ctinfo);
+	if (!user || nf_ct_is_dying(user) || !user->ext ||
+	        !(IPS_NATCAP_PEER & user->status) ||
+	        !REFCOUNT_inc_not_zero(&user->ct_general.use)) {
+		skb_nfct_reset(uskb);
+		return NULL;
+	}
 
 	ue = peer_user_expect(user);
 
@@ -1128,10 +1140,6 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 		*ppt = pt;
 	}
 
-	if (!user || nf_ct_is_dying(user) || !REFCOUNT_inc_not_zero(&user->ct_general.use)) {
-		skb_nfct_reset(uskb);
-		return NULL;
-	}
 	skb_nfct_reset(uskb);
 
 	return user;
@@ -1324,6 +1332,10 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 		skb_nfct_reset(uskb);
 		return 0;
 	}
+	if (nf_ct_is_confirmed(user) && !(IPS_NATCAP_PEER & user->status)) {
+		skb_nfct_reset(uskb);
+		return 0;
+	}
 	if (!nf_ct_is_confirmed(user) && !(IPS_NATCAP_PEER & user->status) && !test_and_set_bit(IPS_NATCAP_PEER_BIT, &user->status)) {
 		newoff = ALIGN(user->ext->len, __ALIGN_64BITS);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0)
@@ -1372,6 +1384,11 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 		return 0;
 	}
 	user = nf_ct_get(uskb, &ctinfo);
+	if (!user || nf_ct_is_dying(user) || !user->ext ||
+	        !(IPS_NATCAP_PEER & user->status)) {
+		skb_nfct_reset(uskb);
+		return 0;
+	}
 
 	ue = peer_user_expect(user);
 
@@ -1506,6 +1523,11 @@ static inline void natcap_auth_user_confirm(const unsigned char *client_mac, int
 		return;
 	}
 	user = nf_ct_get(uskb, &ctinfo);
+	if (!user || nf_ct_is_dying(user) || !user->ext ||
+	        !(IPS_NATCAP_PEER & user->status)) {
+		skb_nfct_reset(uskb);
+		return;
+	}
 
 	ue = peer_user_expect(user);
 
