@@ -44,9 +44,18 @@
 #include <linux/inetdevice.h>
 #include "natcap.h"
 
+/* Some downstream kernels retain an atomic_t conntrack use count. */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
-#define REFCOUNT_inc_not_zero refcount_inc_not_zero
-#define REFCOUNT_read refcount_read
+#define REFCOUNT_inc_not_zero(r) \
+	__builtin_choose_expr( \
+	    __builtin_types_compatible_p(typeof(*(r)), atomic_t), \
+	    atomic_inc_not_zero((atomic_t *)(r)), \
+	    refcount_inc_not_zero((refcount_t *)(r)))
+#define REFCOUNT_read(r) \
+	__builtin_choose_expr( \
+	    __builtin_types_compatible_p(typeof(*(r)), atomic_t), \
+	    atomic_read((const atomic_t *)(r)), \
+	    refcount_read((const refcount_t *)(r)))
 #else
 #define REFCOUNT_inc_not_zero atomic_inc_not_zero
 #define REFCOUNT_read atomic_read

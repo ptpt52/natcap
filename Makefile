@@ -24,16 +24,16 @@ KMAKE := $(MAKE) -C $(KERNELDIR) M=$(PWD)
 all: modules
 
 modules:
-	$(KMAKE) modules
+	+$(KMAKE) modules
 
 modules_install:
-	$(KMAKE) modules_install
+	+$(KMAKE) modules_install
 
 install: modules_install
 	depmod
 
 modules_clean:
-	$(KMAKE) clean
+	+$(KMAKE) clean
 
 clean: modules_clean
 
