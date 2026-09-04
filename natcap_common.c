@@ -1257,8 +1257,7 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 	struct ip_set *set;
 	struct ip_set_adt_opt opt;
 	struct xt_action_param par;
-	struct net_device *old_dev;
-	unsigned int old_mac_len;
+	bool synthetic_dev_attached = false;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 	struct net *net = state->net;
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
@@ -1297,19 +1296,16 @@ int ip_set_test_src_mac(const struct net_device *in, const struct net_device *ou
 		return 0;
 	}
 
-	old_dev = skb->dev;
-	old_mac_len = skb->mac_len;
 	/* Do not mask malformed headers or replace metadata on a real skb. */
-	if (!skb->dev && skb_mac_header(skb) >= skb->head &&
-	        skb_mac_header(skb) + ETH_HLEN <= skb->data) {
+	if (!skb->dev && skb_mac_header_was_set(skb) &&
+	        skb_mac_header_len(skb) >= ETH_HLEN) {
 		skb->dev = &natcap_ip_set_ether_dev;
-		if (skb->mac_len < ETH_HLEN)
-			skb->mac_len = ETH_HLEN;
+		synthetic_dev_attached = true;
 	}
 	ret = natcap_ip_set_test(set, skb, &par, &opt);
 	/* The per-CPU skb is reused by other synthetic packet paths. */
-	skb->mac_len = old_mac_len;
-	skb->dev = old_dev;
+	if (synthetic_dev_attached)
+		skb->dev = NULL;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 	ip_set_put_byindex(net, id);
