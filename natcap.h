@@ -354,6 +354,7 @@ static inline void tuple_copy(struct tuple *to, const struct tuple *from)
 }
 
 #define XT_MARK_NATCAP 0x99
+#define XT_MARK_NATCAP_MAP 0x95
 #define XT_MARK_NATCAP_PEER1 0x91
 #define XT_MARK_NATCAP_PEER2 0x92
 #define XT_MARK_NATCAP_PEER3 0x93

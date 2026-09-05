@@ -1935,7 +1935,7 @@ static unsigned int natcap_server_pre_in_hook(void *priv,
 					set_bit(IPS_NATCAP_PRE_BIT, &master->status);
 					set_bit(IPS_NATCAP_BYPASS_BIT, &master->status);
 					set_bit(IPS_NATCAP_SERVER_BIT, &master->status);
-					xt_mark_natcap_set(XT_MARK_NATCAP, &skb->mark);
+					xt_mark_natcap_set(XT_MARK_NATCAP_MAP, &skb->mark);
 
 					switch (iph->protocol) {
 					case IPPROTO_TCP:
