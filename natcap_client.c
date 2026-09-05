@@ -1625,6 +1625,11 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 	if (NULL == master) {
 		return NF_ACCEPT;
 	}
+#if defined(CONFIG_NF_CONNTRACK_MARK)
+	if (xt_mark_natcap_get(&master->mark) == XT_MARK_NATCAP_MAP) {
+		xt_mark_natcap_set(XT_MARK_NATCAP_MAP, &skb->mark);
+	}
+#endif
 	if ((IPS_NATCAP & master->status)) {
 		return NF_ACCEPT;
 	}
@@ -1690,6 +1695,9 @@ static unsigned int natcap_client_pre_in_hook(void *priv,
 					set_bit(IPS_NATCAP_BYPASS_BIT, &master->status);
 					set_bit(IPS_NATCAP_SERVER_BIT, &master->status);
 					xt_mark_natcap_set(XT_MARK_NATCAP_MAP, &skb->mark);
+#if defined(CONFIG_NF_CONNTRACK_MARK)
+					xt_mark_natcap_set(XT_MARK_NATCAP_MAP, &master->mark);
+#endif
 
 					switch (iph->protocol) {
 					case IPPROTO_TCP:
