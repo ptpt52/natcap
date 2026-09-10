@@ -3604,6 +3604,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				/* confirm before post out */
 				ret = nf_conntrack_confirm(nskb);
 				if (ret != NF_ACCEPT) {
+					consume_skb(nskb);
 					return ret;
 				}
 
