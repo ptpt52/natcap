@@ -264,7 +264,10 @@ static inline void natcap_udp_reply_cfm(const struct net_device *dev, struct sk_
 		return;
 	}
 	if ((NS_NATCAP_TCPUDPENC & ns->n.status)) {
-		natcap_udp_to_tcp_pack(nskb, ns, 1, NULL);
+		if (natcap_udp_to_tcp_pack(nskb, ns, 1, NULL) < 0) {
+			consume_skb(nskb);
+			return;
+		}
 	}
 
 	skb_push(nskb, (char *)niph - (char *)neth);
@@ -1806,7 +1809,9 @@ static unsigned int natcap_server_post_out_hook(void *priv,
 				return NF_DROP;
 			}
 
-			natcap_udp_to_tcp_pack(skb, ns, 1, NULL);
+			if (natcap_udp_to_tcp_pack(skb, ns, 1, NULL) < 0) {
+				return NF_DROP;
+			}
 		}
 		return NF_ACCEPT;
 	}

@@ -3621,7 +3621,10 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 						return NF_DROP;
 					}
 
-					natcap_udp_to_tcp_pack(nskb, ns, 0, &ping_skb);
+					if (natcap_udp_to_tcp_pack(nskb, ns, 0, &ping_skb) < 0) {
+						consume_skb(nskb);
+						return NF_DROP;
+					}
 					if (ping_skb)
 						NF_OKFN(ping_skb);
 				}
@@ -3696,7 +3699,9 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 				return NF_DROP;
 			}
 
-			natcap_udp_to_tcp_pack(skb, ns, 0, &ping_skb);
+			if (natcap_udp_to_tcp_pack(skb, ns, 0, &ping_skb) < 0) {
+				return NF_DROP;
+			}
 			if (ping_skb)
 				NF_OKFN(ping_skb);
 		}
@@ -4400,7 +4405,11 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 					struct sk_buff *ping_skb = NULL;
 					/* XXX I just confirm it first  */
 					/* master has been confirm */
-					natcap_udp_to_tcp_pack(nskb, master_ns, 0, &ping_skb);
+					if (natcap_udp_to_tcp_pack(nskb, master_ns, 0, &ping_skb) < 0) {
+						consume_skb(nskb);
+						consume_skb(skb);
+						return NF_ACCEPT;
+					}
 					if (ping_skb)
 						NF_OKFN(ping_skb);
 				}
@@ -4463,7 +4472,10 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 			struct sk_buff *ping_skb = NULL;
 			/* XXX I just confirm it first  */
 			/* master has been confirm */
-			natcap_udp_to_tcp_pack(skb, master_ns, 0, &ping_skb);
+			if (natcap_udp_to_tcp_pack(skb, master_ns, 0, &ping_skb) < 0) {
+				consume_skb(skb);
+				return NF_ACCEPT;
+			}
 			if (ping_skb)
 				NF_OKFN(ping_skb);
 		}
