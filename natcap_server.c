@@ -674,7 +674,8 @@ static inline void natcap_auth_http_302(const struct net_device *dev, struct sk_
 	                              "\r\n"
 	                              HTTP_302_BODY_FMT;
 	int n = 0;
-	char location[128];
+	/* The URL is part of a control line bounded by MAX_IOCTL_LEN. */
+	char location[MAX_IOCTL_LEN];
 	const char *url;
 
 	rcu_read_lock();

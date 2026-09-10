@@ -49,6 +49,14 @@ make && make -C natcapd
 sudo ./server.sh
 ```
 
+## Authentication redirect URL
+
+In server or mixing mode, `auth_http_redirect_url=<URL>` sets the HTTP 302
+authentication redirect. The control line is limited to 256 bytes including
+the terminating newline, so the URL can contain at most 232 bytes (without
+whitespace). Accepted URLs are preserved in both the `Location` header and
+the HTML link without truncation.
+
 ## License
 
 ```
