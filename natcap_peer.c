@@ -45,6 +45,7 @@
 #include <net/netfilter/nf_conntrack_acct.h>
 #include "net/netfilter/nf_conntrack_seqadj.h"
 #include "natcap_common.h"
+#include "natcap_control.h"
 #include "natcap_peer.h"
 #include "natcap_client.h"
 #include "natcap_knock.h"
@@ -5654,7 +5655,7 @@ static inline struct peer_server_node *peer_server_node_get(unsigned int idx)
 
 static void *natcap_peer_start(struct seq_file *m, loff_t *pos)
 {
-	char *natcap_peer_ctl_buffer = m->private;
+	char *natcap_peer_ctl_buffer = natcap_ctl_seq_buffer(m);
 
 	if ((*pos) == 0) {
 		scnprintf(natcap_peer_ctl_buffer,
@@ -5827,45 +5828,10 @@ static ssize_t natcap_peer_read(struct file *file, char __user *buf, size_t buf_
 	return seq_read(file, buf, buf_len, offset);
 }
 
-static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size_t buf_len, loff_t *offset)
+static int natcap_peer_apply(char *data)
 {
 	int err = 0;
-	int n, l;
-	int cnt = MAX_IOCTL_LEN;
-	static char data[MAX_IOCTL_LEN];
-	static int data_left = 0;
-
-	cnt -= data_left;
-	if (buf_len < cnt)
-		cnt = buf_len;
-
-	if (copy_from_user(data + data_left, buf, cnt) != 0)
-		return -EACCES;
-
-	n = 0;
-	while(n < cnt && (data[n] == ' ' || data[n] == '\n' || data[n] == '\t')) n++;
-	if (n) {
-		*offset += n;
-		data_left = 0;
-		return n;
-	}
-
-	//make sure line ended with '\n' and line len <= MAX_IOCTL_LEN
-	l = 0;
-	while (l < cnt && data[l + data_left] != '\n') l++;
-	if (l >= cnt) {
-		data_left += l;
-		if (data_left >= MAX_IOCTL_LEN) {
-			NATCAP_println("err: too long a line");
-			data_left = 0;
-			return -EINVAL;
-		}
-		goto done;
-	} else {
-		data[l + data_left] = '\0';
-		data_left = 0;
-		l++;
-	}
+	int n;
 
 	if (strncmp(data, "local_target=", 13) == 0) {
 		unsigned int a, b, c, d, e;
@@ -6011,8 +5977,12 @@ static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size
 	}
 
 done:
-	*offset += l;
-	return l;
+	return 0;
+}
+
+static ssize_t natcap_peer_write(struct file *file, const char __user *buf, size_t buf_len, loff_t *offset)
+{
+	return natcap_ctl_seq_write(file, buf, buf_len, offset, natcap_peer_apply);
 }
 
 static int natcap_peer_open(struct inode *inode, struct file *file)
@@ -6021,7 +5991,7 @@ static int natcap_peer_open(struct inode *inode, struct file *file)
 	//set nonseekable
 	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
 
-	ret = seq_open_private(file, &natcap_peer_seq_ops, PAGE_SIZE);
+	ret = natcap_ctl_seq_open(file, &natcap_peer_seq_ops);
 	if (ret)
 		return ret;
 	return 0;
@@ -6029,7 +5999,7 @@ static int natcap_peer_open(struct inode *inode, struct file *file)
 
 static int natcap_peer_release(struct inode *inode, struct file *file)
 {
-	int ret = seq_release_private(inode, file);
+	int ret = natcap_ctl_seq_release(inode, file);
 	return ret;
 }
 

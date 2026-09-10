@@ -51,6 +51,7 @@
 #include <net/udp.h>
 #include "natcap.h"
 #include "natcap_common.h"
+#include "natcap_control.h"
 #include "natcap_client.h"
 #include "natcap_server.h"
 #include "natcap_knock.h"
@@ -133,7 +134,7 @@ static void *natcap_start(struct seq_file *m, loff_t *pos)
 {
 	char auth_http_url[128];
 	const char *url;
-	char *natcap_ctl_buffer = m->private;
+	char *natcap_ctl_buffer = natcap_ctl_seq_buffer(m);
 
 	if ((*pos) == 0) {
 		auth_http_url[0] = 0;
@@ -296,46 +297,11 @@ static ssize_t natcap_read(struct file *file, char __user *buf, size_t buf_len, 
 	return seq_read(file, buf, buf_len, offset);
 }
 
-static ssize_t natcap_write(struct file *file, const char __user *buf, size_t buf_len, loff_t *offset)
+static int natcap_apply(char *data)
 {
 	int err = 0;
-	int n, l, x;
+	int n, x;
 	struct tuple dst;
-	int cnt = MAX_IOCTL_LEN;
-	static char data[MAX_IOCTL_LEN];
-	static int data_left = 0;
-
-	cnt -= data_left;
-	if (buf_len < cnt)
-		cnt = buf_len;
-
-	if (copy_from_user(data + data_left, buf, cnt) != 0)
-		return -EACCES;
-
-	n = 0;
-	while(n < cnt && (data[n] == ' ' || data[n] == '\n' || data[n] == '\t')) n++;
-	if (n) {
-		*offset += n;
-		data_left = 0;
-		return n;
-	}
-
-	//make sure line ended with '\n' and line len <=256
-	l = 0;
-	while (l < cnt && data[l + data_left] != '\n') l++;
-	if (l >= cnt) {
-		data_left += l;
-		if (data_left >= MAX_IOCTL_LEN) {
-			NATCAP_println("err: too long a line");
-			data_left = 0;
-			return -EINVAL;
-		}
-		goto done;
-	} else {
-		data[l + data_left] = '\0';
-		data_left = 0;
-		l++;
-	}
 
 	if (strncmp(data, "clean", 5) == 0) {
 		if (mode == CLIENT_MODE || mode == MIXING_MODE) {
@@ -931,8 +897,12 @@ static ssize_t natcap_write(struct file *file, const char __user *buf, size_t bu
 	}
 
 done:
-	*offset += l;
-	return l;
+	return 0;
+}
+
+static ssize_t natcap_write(struct file *file, const char __user *buf, size_t buf_len, loff_t *offset)
+{
+	return natcap_ctl_seq_write(file, buf, buf_len, offset, natcap_apply);
 }
 
 static int natcap_open(struct inode *inode, struct file *file)
@@ -941,7 +911,7 @@ static int natcap_open(struct inode *inode, struct file *file)
 	//set nonseekable
 	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
 
-	ret = seq_open_private(file, &natcap_seq_ops, PAGE_SIZE);
+	ret = natcap_ctl_seq_open(file, &natcap_seq_ops);
 	if (ret)
 		return ret;
 
@@ -950,7 +920,7 @@ static int natcap_open(struct inode *inode, struct file *file)
 
 static int natcap_release(struct inode *inode, struct file *file)
 {
-	int ret = seq_release_private(inode, file);
+	int ret = natcap_ctl_seq_release(inode, file);
 	return ret;
 }
 

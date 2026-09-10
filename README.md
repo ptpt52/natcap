@@ -49,6 +49,20 @@ make && make -C natcapd
 sudo ./server.sh
 ```
 
+## Control writes
+
+`/dev/natcap_ctl` and `/dev/natcap_peer_ctl` accept newline-terminated commands
+up to 256 bytes including the newline. Each open file keeps its own incomplete
+line, which is discarded on final close. Finish a split command on the same
+open file; separate opens never share partial input.
+
+Writes through the same open file (including dup/fork) serialize copying,
+parsing and command execution. Reads use a separate buffer. Callers must still
+coordinate split commands on a shared file and multi-command configuration
+sequences; this does not serialize configuration updates across separate opens.
+For a short write, continue from the returned byte count. A command execution
+error discards the assembled line; retry the complete command if appropriate.
+
 ## Authentication redirect URL
 
 In server or mixing mode, `auth_http_redirect_url=<URL>` sets the HTTP 302
