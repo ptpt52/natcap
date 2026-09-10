@@ -2654,7 +2654,7 @@ void natcap_common_exit(void)
 	for_each_possible_cpu(i) {
 		struct sk_buff **ptr = per_cpu_ptr(&peer_user_uskbs, i);
 		if (*ptr) {
-			kfree(*ptr);
+			kfree_skb(*ptr);
 			*ptr = NULL;
 		}
 	}
