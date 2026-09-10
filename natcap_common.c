@@ -1711,11 +1711,16 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 		ns->n.current_seq = ntohl(TCPH(l4)->seq) + ntohs(iph->tot_len) - iph->ihl * 4 - sizeof(struct tcphdr);
 
 	ct = nf_ct_get(skb, &ctinfo);
+	if (!ct) {
+		return -EINVAL;
+	}
+	/* Keep the original connection (and its session) alive across skb resets. */
+	nf_conntrack_get(&ct->ct_general);
 	skb_nfct_reset(skb);
 	nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, skb);
 	ct2 = nf_ct_get(skb, &ctinfo);
-	if (!ct || !ct2) {
-		return -EINVAL;
+	if (!ct2) {
+		goto err_out;
 	}
 	natcap_clone_timeout(ct2, ct);
 	if (!nf_ct_is_confirmed(ct2) && !ct2->master) {
@@ -1725,14 +1730,15 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 	}
 	ret = nf_conntrack_confirm(skb);
 	if (ret != NF_ACCEPT) {
-		return -EINVAL;
+		goto err_out;
 	}
+	ret = 0;
 
 	if (!TCPH(l4)->syn && m == 0 && ping_skb) {
 		if (!(((ns->n.current_seq / 1024) % 8 == 0) ||
 		        (ns->ping.stage == 0 && uintmindiff(ns->ping.jiffies, jiffies) > 3 * HZ) ||
 		        (ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 1 * HZ))) {
-			return 0;
+			goto out;
 		}
 		if ((ns->ping.stage == 1 && uintmindiff(ns->ping.jiffies, jiffies) > 3 * HZ) || ns->ping.lock == 1) {
 			//timeout, ping syn
@@ -1743,7 +1749,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 			*ping_skb = skb_copy_expand(skb, skb_headroom(skb), skb_tailroom(skb) + add_len, GFP_ATOMIC);
 			if (!(*ping_skb)) {
 				NATCAP_ERROR("skb allocation failed\n");
-				return 0;
+				goto out;
 			}
 			(*ping_skb)->tail += offset;
 			(*ping_skb)->len = sizeof(struct iphdr) + sizeof(struct tcphdr) + 16 + TCPOLEN_MSS;
@@ -1803,10 +1809,10 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 			skb_nfct_reset(*ping_skb);
 			nf_conntrack_in_compat(&init_net, PF_INET, NF_INET_PRE_ROUTING, *ping_skb);
 			ct2 = nf_ct_get(*ping_skb, &ctinfo);
-			if (!ct || !ct2) {
+			if (!ct2) {
 				consume_skb(*ping_skb);
 				*ping_skb = NULL;
-				return -EINVAL;
+				goto err_out;
 			}
 			natcap_clone_timeout(ct2, ct);
 			if (!nf_ct_is_confirmed(ct2) && !ct2->master) {
@@ -1818,9 +1824,10 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 			if (ret != NF_ACCEPT) {
 				consume_skb(*ping_skb);
 				*ping_skb = NULL;
-				return -EINVAL;
+				goto err_out;
 			}
-			return 0;
+			ret = 0;
+			goto out;
 		}
 
 		//ping
@@ -1830,7 +1837,7 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 		*ping_skb = skb_copy(skb, GFP_ATOMIC);
 		if ((*ping_skb) == NULL) {
 			NATCAP_ERROR("skb allocation failed\n");
-			return 0;
+			goto out;
 		}
 
 		iph = ip_hdr(*ping_skb);
@@ -1847,7 +1854,12 @@ int natcap_udp_to_tcp_pack(struct sk_buff *skb, struct natcap_session *ns, int m
 
 	}
 
-	return 0;
+out:
+	nf_ct_put(ct);
+	return ret;
+err_out:
+	ret = -EINVAL;
+	goto out;
 }
 
 struct cone_nat_session *cone_nat_array = NULL;
