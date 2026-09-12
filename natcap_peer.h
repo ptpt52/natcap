@@ -47,6 +47,7 @@ struct peer_server_node {
 	unsigned int last_inuse;
 #define MAX_PEER_CONN 8
 	struct nf_conn *port_map[MAX_PEER_CONN];
+	unsigned int port_map_epoch[MAX_PEER_CONN]; /* protected by lock */
 };
 
 struct natcap_route {

@@ -1935,8 +1935,9 @@ static inline void natcap_peer_pong_send(const struct net_device *dev, struct sk
  * send [ack ACK] if connected != 0 and ops != NULL
  * PS: oskb is icmp if ops == NULL, dev is outgoing dev of oskb
  * PS: oskb is tcp if ops != NULL, dev is incomming dev of oskb
+ * ack_user pins an ACK to the caller's referenced, validated connection.
  */
-static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const struct net_device *dev, struct peer_server_node *ops, int opmi, unsigned short omss)
+static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const struct net_device *dev, struct peer_server_node *ops, int opmi, unsigned short omss, struct nf_conn *ack_user)
 {
 	struct fakeuser_expect *fue;
 	struct nf_conn *user;
@@ -1948,6 +1949,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 	int offset, add_len;
 	int header_len;
 	int pmi;
+	unsigned int epoch;
 	int tcpolen_mss = TCPOLEN_MSS;
 	struct peer_server_node *ps = NULL;
 	u8 protocol = IPPROTO_TCP;
@@ -1955,7 +1957,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 	oiph = ip_hdr(oskb);
 	otcph = (void *)oiph + oiph->ihl * 4;
 
-	if (ops != NULL && dev == NULL) {
+	if ((ops != NULL && dev == NULL) || (ack_user != NULL && ops == NULL)) {
 		//invalid input
 		return NULL;
 	}
@@ -1967,6 +1969,7 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 
 	spin_lock_bh(&ps->lock);
 
+	epoch = jiffies / (512 * HZ);
 	pmi = opmi;
 	if (ops == NULL) {
 		if (ps->last_inuse != 0 && before(jiffies, ps->last_inuse + peer_conn_timeout * HZ)) {
@@ -1974,8 +1977,8 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		} else {
 			pmi = ntohs(ICMPH(otcph)->un.echo.sequence) % ps->conn;
 			if (pmi != 0) {
-				/* change connection in every 512s */
-				if ((jiffies / HZ) % 512 == 0 && ps->port_map[0] != NULL) {
+				/* Retire the idle slot once when entering a new 512s period. */
+				if (ps->port_map[0] != NULL && ps->port_map_epoch[0] != epoch) {
 					nf_ct_put(ps->port_map[0]);
 					ps->port_map[0] = NULL;
 				}
@@ -1984,7 +1987,16 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 			}
 		}
 	}
+	if ((unsigned int)pmi >= MAX_PEER_CONN) {
+		spin_unlock_bh(&ps->lock);
+		return NULL;
+	}
 	user = ps->port_map[pmi];
+	/* The slot may have changed since the SYNACK was validated. */
+	if (ack_user != NULL && (user != ack_user || nf_ct_is_dying(user))) {
+		spin_unlock_bh(&ps->lock);
+		return NULL;
+	}
 
 	header_len = ALIGN(sizeof(struct natcap_TCPOPT_header) + sizeof(struct natcap_TCPOPT_peer), sizeof(unsigned int));
 	if (ops == NULL) {
@@ -1997,15 +2009,16 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		nf_ct_put(ps->port_map[pmi]);
 		user = ps->port_map[pmi] = NULL;
 	}
-	/* change connection in every 512s */
-	if ((jiffies / HZ) % 512 == 0 && user != NULL) {
+	/* Only an outgoing probe may rotate a connection, once per period. */
+	if (ops == NULL && user != NULL && ps->port_map_epoch[pmi] != epoch) {
 		nf_ct_put(ps->port_map[pmi]);
 		user = ps->port_map[pmi] = NULL;
 	}
 
 	if (user != NULL) {
 		if (!REFCOUNT_inc_not_zero(&user->ct_general.use)) {
-			user = NULL;
+			spin_unlock_bh(&ps->lock);
+			return NULL;
 		}
 	} else {
 		__be16 sport = htons(get_random_u32() % (65536 - 1024) + 1024);
@@ -2020,13 +2033,14 @@ static inline struct sk_buff *natcap_peer_ping_send(struct sk_buff *oskb, const 
 		user->mark = oskb->mark;
 	}
 	fue = peer_fakeuser_expect(user);
-	if (fue->pmi != pmi) {
+	if (fue->pmi != pmi || (ack_user != NULL && fue->state != FUE_STATE_CONNECTED)) {
 		nf_ct_put(user);
 		spin_unlock_bh(&ps->lock);
 		return NULL;
 	}
 	if (ps->port_map[pmi] == NULL) {
 		if (likely(REFCOUNT_inc_not_zero(&user->ct_general.use))) {
+			ps->port_map_epoch[pmi] = epoch;
 			ps->port_map[pmi] = user;
 		} else {
 			spin_unlock_bh(&ps->lock);
@@ -3449,14 +3463,27 @@ sni_out:
 
 				fue = peer_fakeuser_expect(user);
 				pmi = fue->pmi;
+				if ((unsigned int)pmi >= MAX_PEER_CONN) {
+					NATCAP_WARN_RATELIMITED("(PPI)" DEBUG_TCP_FMT ": invalid peer mapping index=%u action=drop\n",
+					                        DEBUG_TCP_ARG(iph,l4), fue->pmi);
+					nf_ct_put(user);
+					return NF_DROP;
+				}
 
 				spin_lock_bh(&ps->lock);
-				if (ps->port_map[pmi] != user || fue->local_seq + 1 != ntohl(TCPH(l4)->ack_seq)) {
-					NATCAP_WARN("(PPI)" DEBUG_TCP_FMT ": peer_server_node pmi user=%px,%px mismatch\n",
-					            DEBUG_TCP_ARG(iph,l4), ps->port_map[pmi], user);
+				if (ps->port_map[pmi] != user) {
+					NATCAP_DEBUG("(PPI)" DEBUG_TCP_FMT ": stale peer pong pmi=%d current=%px user=%px action=drop\n",
+					             DEBUG_TCP_ARG(iph,l4), pmi, ps->port_map[pmi], user);
 					spin_unlock_bh(&ps->lock);
 					nf_ct_put(user);
-					return NF_ACCEPT;
+					return NF_DROP;
+				}
+				if (fue->local_seq + 1 != ntohl(TCPH(l4)->ack_seq)) {
+					NATCAP_WARN_RATELIMITED("(PPI)" DEBUG_TCP_FMT ": peer pong ACK mismatch pmi=%d expected=%u received=%u action=drop\n",
+					                        DEBUG_TCP_ARG(iph,l4), pmi, fue->local_seq + 1, ntohl(TCPH(l4)->ack_seq));
+					spin_unlock_bh(&ps->lock);
+					nf_ct_put(user);
+					return NF_DROP;
 				}
 
 				map_port = get_byte2((const void *)&tcpopt->peer.data.map_port);
@@ -3478,7 +3505,7 @@ sni_out:
 					fue->remote_seq = ntohl(TCPH(l4)->seq);
 					spin_unlock_bh(&ps->lock);
 					NATCAP_INFO("(PPI)" DEBUG_TCP_FMT ": received pong(synack) SYNACK, sending ping(ack) ACK out\n", DEBUG_TCP_ARG(iph,l4));
-					natcap_peer_ping_send(skb, in, ps, pmi, fue->mss);
+					natcap_peer_ping_send(skb, in, ps, pmi, fue->mss, user);
 				}
 
 				if (tcpopt->header.opcode == TCPOPT_PEER_V2) {
@@ -4343,7 +4370,7 @@ static unsigned int natcap_peer_post_out_hook(void *priv,
 	}
 
 	NATCAP_DEBUG("(PPO)" DEBUG_ICMP_FMT ": ping out\n", DEBUG_ICMP_ARG(iph,l4));
-	nskb = natcap_peer_ping_send(skb, NULL, NULL, 0, 0);
+	nskb = natcap_peer_ping_send(skb, NULL, NULL, 0, 0, NULL);
 	if (nskb != NULL) {
 		iph = ip_hdr(nskb);
 		l4 = (void *)iph + iph->ihl * 4;
@@ -4542,7 +4569,7 @@ static unsigned int natcap_peer_dnat_hook(void *priv,
 
 		//create a new session
 		//it must return NULL
-		natcap_peer_ping_send(skb, in, ps, pmi, mss);
+		natcap_peer_ping_send(skb, in, ps, pmi, mss, NULL);
 
 h_bypass:
 		tcpopt = natcap_peer_decode_header(TCPH(l4));
