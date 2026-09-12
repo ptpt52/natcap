@@ -1146,10 +1146,10 @@ static unsigned int natcap_server_pre_ct_in_hook(void *priv,
 				return NF_DROP;
 			}
 			if (!TCPH(l4)->syn && NATCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION && (NS_NATCAP_CONFUSION & ns->n.status)) {
-				if (nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq + 1)) != 0 - ns->n.tcp_seq_offset) {
+				if (nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq) + 1) != 0 - ns->n.tcp_seq_offset) {
 					nf_ct_seqadj_init(ct, ctinfo, 0 - ns->n.tcp_seq_offset);
 				}
-				if (nf_ct_seq_offset(ct, IP_CT_DIR_REPLY, ntohl(TCPH(l4)->ack + 1)) != ns->n.tcp_ack_offset) {
+				if (nf_ct_seq_offset(ct, IP_CT_DIR_REPLY, ntohl(TCPH(l4)->ack_seq) + 1) != ns->n.tcp_ack_offset) {
 					nf_ct_seqadj_init(ct, IP_CT_ESTABLISHED_REPLY, ns->n.tcp_ack_offset);
 				}
 				natcap_confusion_tcp_reply_ack(in, skb, ct, ns);

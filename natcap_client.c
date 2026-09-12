@@ -1519,7 +1519,7 @@ static unsigned int natcap_client_pre_ct_in_hook(void *priv,
 			//short_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->n.status);
 		}
 		if (NATCAP_TCPOPT_TYPE(tcpopt.header.type) == NATCAP_TCPOPT_TYPE_CONFUSION && (NS_NATCAP_CONFUSION & ns->n.status)) {
-			if (nf_ct_seq_offset(ct, IP_CT_DIR_REPLY, ntohl(TCPH(l4)->seq + 1)) != 0 - ns->n.tcp_ack_offset) {
+			if (nf_ct_seq_offset(ct, IP_CT_DIR_REPLY, ntohl(TCPH(l4)->seq) + 1) != 0 - ns->n.tcp_ack_offset) {
 				nf_ct_seqadj_init(ct, ctinfo, 0 - ns->n.tcp_ack_offset);
 			}
 			consume_skb(skb);
@@ -3208,7 +3208,7 @@ static unsigned int natcap_client_post_out_hook(void *priv,
 		if (ns->n.tcp_seq_offset && TCPH(l4)->ack && !(NS_NATCAP_TCPUDPENC & ns->n.status) &&
 		        (NS_NATCAP_ENC & ns->n.status) && (IPS_SEEN_REPLY & ct->status) &&
 		        !(NS_NATCAP_CONFUSION & ns->n.status) && !short_test_and_set_bit(NS_NATCAP_CONFUSION_BIT, &ns->n.status) &&
-		        nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq + 1)) != ns->n.tcp_seq_offset) {
+		        nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq) + 1) != ns->n.tcp_seq_offset) {
 			struct natcap_TCPOPT *tcpopt;
 			int offset, add_len;
 			int size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
@@ -4201,7 +4201,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		if (master_ns->n.tcp_seq_offset && TCPH(l4)->ack && !(NS_NATCAP_TCPUDPENC & master_ns->n.status) &&
 		        (NS_NATCAP_ENC & master_ns->n.status) && (IPS_SEEN_REPLY & master->status) &&
 		        !(NS_NATCAP_CONFUSION & master_ns->n.status) && !short_test_and_set_bit(NS_NATCAP_CONFUSION_BIT, &master_ns->n.status) &&
-		        nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq + 1)) != master_ns->n.tcp_seq_offset) {
+		        nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq) + 1) != master_ns->n.tcp_seq_offset) {
 			struct natcap_TCPOPT *tcpopt;
 			int offset, add_len;
 			int size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
