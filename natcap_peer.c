@@ -1073,17 +1073,17 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 		}
 	}
 
+	spin_lock_bh(&ue->lock);
 	if (ntohl(saddr) != user->mark) {
 		__be32 old_ip = htonl(user->mark);
 		NATCAP_WARN("fakeuser IP update: mac=[%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] change ip from %pI4(ttl=%u) to %pI4(ttl=%u) P=%u AS=%d\n",
 		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		            &saddr, ntohs(sport), &daddr, ntohs(dport),
-		            &old_ip, (unsigned int)((user->status & 0xff000000) >> 24), &saddr, ttl, ntohs(ue->map_port),
+		            &old_ip, (unsigned int)ue->last_ttl, &saddr, ttl, ntohs(ue->map_port),
 		            ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1));
 		user->mark = ntohl(saddr);
-		user->status &= ~(0xff << 24);
-		user->status |= ((ttl & 0xff) << 24);
 	}
+	ue->last_ttl = ttl;
 	natcap_user_timeout_touch(user, peer_port_map_timeout);
 
 	if (ue->ip != saddr) {
@@ -1095,16 +1095,11 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 		short_clear_bit(PEER_SUBTYPE_PUB_BIT, &ue->status);
 	}
 
+	/* Keep lookup and replacement in one critical section. */
 	for (i = 0; i < MAX_PEER_TUPLE; i++) {
-		if (ue->tuple[i].sip == saddr && ue->tuple[i].dip == daddr && ue->tuple[i].sport == sport && ue->tuple[i].dport) {
-			spin_lock_bh(&ue->lock);
-			//re-check-in-lock
-			if (ue->tuple[i].sip == saddr && ue->tuple[i].dip == daddr && ue->tuple[i].sport == sport && ue->tuple[i].dport) {
-				pt = &ue->tuple[i];
-				spin_unlock_bh(&ue->lock);
-				break;
-			}
-			spin_unlock_bh(&ue->lock);
+		if (ue->tuple[i].sip == saddr && ue->tuple[i].dip == daddr && ue->tuple[i].sport == sport && ue->tuple[i].dport == dport) {
+			pt = &ue->tuple[i];
+			break;
 		}
 	}
 	if (pt == NULL) {
@@ -1120,7 +1115,6 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 			}
 		}
 		if (pt) {
-			spin_lock_bh(&ue->lock);
 			NATCAP_INFO("fakeuser conntrack replacement: mac=[%02x:%02x:%02x:%02x:%02x:%02x] @map_port=%u use new-ct=[%pI4:%u->%pI4:%u] replace old-ct=[%pI4:%u->%pI4:%u] time=%u,%u\n",
 			            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 			            ntohs(ue->map_port), &saddr, ntohs(sport), &daddr, ntohs(dport),
@@ -1134,9 +1128,9 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 			pt->connected = 0;
 			pt->mode = 0;
 			pt->last_active = 0;
-			spin_unlock_bh(&ue->lock);
 		}
 	}
+	spin_unlock_bh(&ue->lock);
 	if (ppt && pt) {
 		*ppt = pt;
 	}

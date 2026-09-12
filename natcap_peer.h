@@ -134,6 +134,7 @@ struct user_expect {
 
 	unsigned int rt_out_magic;
 	struct natcap_route rt_out;
+	unsigned char last_ttl; /* protected by lock */
 };
 
 static inline struct user_expect *peer_user_expect(struct nf_conn *ct)
