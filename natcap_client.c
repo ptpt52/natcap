@@ -397,10 +397,15 @@ void natcap_server_info_cleanup(enum server_group_t x)
 
 int natcap_server_info_add(enum server_group_t x, const struct tuple *dst)
 {
-	struct natcap_server_info *nsi = &server_group[x];
-	unsigned int m = nsi->active_index;
-	unsigned int n = (m + 1) % 2;
+	struct natcap_server_info *nsi;
+	unsigned int m, n;
 	unsigned int i, j;
+
+	if ((unsigned int)x >= SERVER_GROUP_MAX)
+		return -EINVAL;
+	nsi = &server_group[x];
+	m = nsi->active_index;
+	n = (m + 1) % 2;
 
 	if (nsi->server_count[m] == MAX_NATCAP_SERVER)
 		return -ENOSPC;
@@ -429,10 +434,15 @@ int natcap_server_info_add(enum server_group_t x, const struct tuple *dst)
 
 int natcap_server_info_delete(enum server_group_t x, const struct tuple *dst)
 {
-	struct natcap_server_info *nsi = &server_group[x];
-	unsigned int m = nsi->active_index;
-	unsigned int n = (m + 1) % 2;
+	struct natcap_server_info *nsi;
+	unsigned int m, n;
 	unsigned int i, j;
+
+	if ((unsigned int)x >= SERVER_GROUP_MAX)
+		return -EINVAL;
+	nsi = &server_group[x];
+	m = nsi->active_index;
+	n = (m + 1) % 2;
 
 	j = 0;
 	for (i = 0; i < nsi->server_count[m]; i++) {
@@ -4201,7 +4211,7 @@ static unsigned int natcap_client_post_master_out_hook(void *priv,
 		if (master_ns->n.tcp_seq_offset && TCPH(l4)->ack && !(NS_NATCAP_TCPUDPENC & master_ns->n.status) &&
 		        (NS_NATCAP_ENC & master_ns->n.status) && (IPS_SEEN_REPLY & master->status) &&
 		        !(NS_NATCAP_CONFUSION & master_ns->n.status) && !short_test_and_set_bit(NS_NATCAP_CONFUSION_BIT, &master_ns->n.status) &&
-		        nf_ct_seq_offset(ct, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq) + 1) != master_ns->n.tcp_seq_offset) {
+		        nf_ct_seq_offset(master, IP_CT_DIR_ORIGINAL, ntohl(TCPH(l4)->seq) + 1) != master_ns->n.tcp_seq_offset) {
 			struct natcap_TCPOPT *tcpopt;
 			int offset, add_len;
 			int size = ALIGN(sizeof(struct natcap_TCPOPT_header), sizeof(unsigned int));
@@ -5193,7 +5203,7 @@ int domain_cmp(const char *dst, const char *src)
 		i--;
 	}
 
-	if (len == 0 && (i == -1 || (i > 0 && dst[i] == 0))) {
+	if (len == 0 && (i == -1 || (i >= 0 && dst[i] == 0))) {
 		return 0;
 	}
 	if (i == -1 && len > 0) {
@@ -5271,7 +5281,7 @@ int domain_match(const char *dst, const char *src)
 		i--;
 	}
 
-	if (len == 0 && (i == -1 || (i > 0 && dst[i] == 0))) {
+	if (len == 0 && (i == -1 || (i >= 0 && dst[i] == 0))) {
 		return 0;
 	}
 	if (i == -1 && len > 0) {
@@ -5342,6 +5352,7 @@ int cn_domain_load_from_path(const char *path)
 	while ((bytes = kernel_read(filp, buf + r_idx, 4096 - r_idx, &pos)) > 0) {
 #else
 	while ((bytes = kernel_read(filp, pos, buf + r_idx, 4096 - r_idx)) > 0) {
+		pos += bytes;
 #endif
 		r_cnt = r_idx + bytes;
 		s = 0;
@@ -5366,10 +5377,26 @@ int cn_domain_load_from_path(const char *path)
 		}
 		memmove(buf, buf + s, i - s);
 		r_idx = i - s;
+		if (r_idx == 4096) {
+			NATCAP_ERROR("cn_domain source line too long: path=%s\n", path);
+			ret = -E2BIG;
+			goto out;
+		}
 	}
 	if (bytes < 0) {
 		ret = bytes;
 		goto out;
+	}
+
+	if (r_idx > 0) {
+		buf[r_idx] = 0;
+		err = cn_domain_insert(buf);
+		if (err) {
+			ret = err;
+			goto out;
+		}
+		if (strlen(buf) > CN_DOMAIN_SIZE) NATCAP_WARN("cn_domain_insert %d(%s)\n", count, buf);
+		count++;
 	}
 
 	if (ret == 0) {
@@ -5412,6 +5439,7 @@ int cn_domain_load_from_raw(const char *path)
 	while ((bytes = kernel_read(filp, buf, 4096, &pos)) > 0) {
 #else
 	while ((bytes = kernel_read(filp, pos, buf, 4096)) > 0) {
+		pos += bytes;
 #endif
 		if (cn_domain_tmp == NULL || nbytes + bytes > cn_domain_tmp_size * CN_DOMAIN_SIZE) {
 			char *tmp;

@@ -4841,7 +4841,7 @@ static unsigned int natcap_peer_snat_hook(void *priv,
 			if (ns->p.tcp_seq_offset == 0) {
 				ns->p.tcp_seq_offset = ns->p.local_seq - ntohl(TCPH(l4)->seq);
 			}
-			if (nf_ct_seq_offset(ct, dir, ntohl(TCPH(l4)->seq + 1)) != ns->p.tcp_seq_offset) {
+			if (nf_ct_seq_offset(ct, dir, ntohl(TCPH(l4)->seq) + 1) != ns->p.tcp_seq_offset) {
 				nf_ct_seqadj_init(ct, ctinfo, ns->p.tcp_seq_offset);
 			}
 

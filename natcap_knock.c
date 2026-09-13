@@ -167,6 +167,11 @@ static unsigned int natcap_knock_dnat_hook(void *priv,
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
 			return NF_ACCEPT;
 		}
+		if (natcap_session_in(ct) == NULL) {
+			NATCAP_WARN("(KD)" DEBUG_TCP_FMT ": NATCAP session acquisition failed\n", DEBUG_TCP_ARG(iph,l4));
+			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);
+			return NF_DROP;
+		}
 		if (natcap_dnat_setup(ct, server.ip, server.port) != NF_ACCEPT) {
 			NATCAP_ERROR("(KD)" DEBUG_TCP_FMT ": NATCAP DNAT setup failed, server=" TUPLE_FMT "\n", DEBUG_TCP_ARG(iph,l4), TUPLE_ARG(&server));
 			set_bit(IPS_NATCAP_BYPASS_BIT, &ct->status);

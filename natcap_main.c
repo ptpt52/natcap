@@ -300,7 +300,8 @@ static ssize_t natcap_read(struct file *file, char __user *buf, size_t buf_len, 
 static int natcap_apply(char *data)
 {
 	int err = 0;
-	int n, x;
+	int n;
+	unsigned int x;
 	struct tuple dst;
 
 	if (strncmp(data, "clean", 5) == 0) {
