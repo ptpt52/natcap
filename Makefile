@@ -68,9 +68,9 @@ apnic.txt:
 china_ip_list.txt:
 	wget -4 https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt -O china_ip_list.txt
 
-cniplist.orig.set: cnip2cidr.lua ipops.lua ip.merge.txt apnic.txt china_ip_list.txt geoip.txt.out.cn geoip.txt.out.cn1
+cniplist.orig.set: cnip2cidr.lua apnic.lua ipops.lua ip.merge.txt apnic.txt china_ip_list.txt geoip.txt.out.cn geoip.txt.out.cn1
 	lua cnip2cidr.lua >cniplist.orig.set.1
-	awk -F\| '$$2=="CN" && $$3=="ipv4" {print $$4"|"$$5}' apnic.txt >cniplist.txt.tmp
+	awk -F '[|]' '$$2=="CN" && $$3=="ipv4" {print $$4"|"$$5; n++} END {if (!n) {print "apnic.txt: no CN IPv4 records" > "/dev/stderr"; exit 1}}' apnic.txt >cniplist.txt.tmp
 	lua apnic.lua cniplist.txt.tmp >cniplist.orig.set.2
 	@rm -f cniplist.txt.tmp
 	cat cniplist.orig.set.1 cniplist.orig.set.2 china_ip_list.txt | sort -n >cniplist.orig.set.tmp
@@ -82,14 +82,14 @@ cniplist.orig.set: cnip2cidr.lua ipops.lua ip.merge.txt apnic.txt china_ip_list.
 	@mv cniplist.orig.set.tmp cniplist.orig.set
 	@rm -f cniplist.orig.set.1 cniplist.orig.set.2 cniplist.orig.set.cn2
 
-hkiplist.orig.set: apnic.txt ipops.lua
-	awk -F\| '$$2=="HK" && $$3=="ipv4" {print $$4"|"$$5}' apnic.txt >hkiplist.txt.tmp
+hkiplist.orig.set: apnic.txt apnic.lua ipops.lua
+	awk -F '[|]' '$$2=="HK" && $$3=="ipv4" {print $$4"|"$$5; n++} END {if (!n) {print "apnic.txt: no HK IPv4 records" > "/dev/stderr"; exit 1}}' apnic.txt >hkiplist.txt.tmp
 	lua apnic.lua hkiplist.txt.tmp >hkiplist.orig.set.tmp
 	@rm -f hkiplist.txt.tmp
 	@mv hkiplist.orig.set.tmp hkiplist.orig.set
 
 cniplist6.orig.set: apnic.txt
-	awk -F\| '$$2=="CN" && $$3=="ipv6" {print $$4"/"$$5}' apnic.txt >cniplist6.orig.set.tmp
+	awk -F '[|]' '$$2=="CN" && $$3=="ipv6" {print $$4"/"$$5; n++} END {if (!n) {print "apnic.txt: no CN IPv6 records" > "/dev/stderr"; exit 1}}' apnic.txt >cniplist6.orig.set.tmp
 	@mv cniplist6.orig.set.tmp cniplist6.orig.set
 
 cniplist6.set: cniplist6.orig.set local6.set
