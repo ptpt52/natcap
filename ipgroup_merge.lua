@@ -1,5 +1,5 @@
 local args = {...}
-local ipops = require("ipops")
+local ipops = require("ipset_ops")
 
 local netStringSet = {}
 

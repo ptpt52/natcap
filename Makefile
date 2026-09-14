@@ -37,14 +37,13 @@ modules_clean:
 
 clean: modules_clean
 
-cniplist.set: cniplist.orig.set local.set sub.set ipops.lua qq.com.set
-	lua ipgroup_merge.lua cniplist.orig.set local.set >cniplist.set.tmp
+cniplist.set: cniplist.orig.set local.set sub.set ipops.lua ipset_ops.lua ipgroup_merge.lua ipgroup_sub.lua qq.com.set
 	sed 's/\(.*\)/\1\/32/' qq.com.set >qq.com.set.overlay
-	lua ipgroup_merge.lua cniplist.set.tmp qq.com.set.overlay >cniplist.set.tmp.1
-	lua ipgroup_sub.lua cniplist.set.tmp.1 sub.set >cniplist.set
-	@rm -f cniplist.set.tmp cniplist.set.tmp.1 qq.com.set.overlay
+	lua ipgroup_merge.lua cniplist.orig.set local.set qq.com.set.overlay >cniplist.set.tmp
+	lua ipgroup_sub.lua cniplist.set.tmp sub.set >cniplist.set
+	@rm -f cniplist.set.tmp qq.com.set.overlay
 
-C_cniplist.set: cniplist.set local.set sub.set ipops.lua
+C_cniplist.set: cniplist.set local.set sub.set ipops.lua ipset_ops.lua ipgroup_invert.lua ipgroup_merge.lua ipgroup_sub.lua
 	lua ipgroup_invert.lua cniplist.set >C_cniplist.orig.set.tmp
 	lua ipgroup_merge.lua C_cniplist.orig.set.tmp local.set >C_cniplist.set.tmp
 	lua ipgroup_sub.lua C_cniplist.set.tmp sub.set >C_cniplist.set
@@ -68,21 +67,20 @@ apnic.txt:
 china_ip_list.txt:
 	wget -4 https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt -O china_ip_list.txt
 
-cniplist.orig.set: cnip2cidr.lua apnic.lua ipops.lua ip.merge.txt apnic.txt china_ip_list.txt geoip.txt.out.cn geoip.txt.out.cn1
+cniplist.orig.set: cnip2cidr.lua hkip2cidr.lua apnic.lua ipops.lua ipset_ops.lua ipgroup_merge.lua ipgroup_sub.lua ip.merge.txt apnic.txt china_ip_list.txt geoip.txt.out.cn geoip.txt.out.cn1
 	lua cnip2cidr.lua >cniplist.orig.set.1
 	awk -F '[|]' '$$2=="CN" && $$3=="ipv4" {print $$4"|"$$5; n++} END {if (!n) {print "apnic.txt: no CN IPv4 records" > "/dev/stderr"; exit 1}}' apnic.txt >cniplist.txt.tmp
 	lua apnic.lua cniplist.txt.tmp >cniplist.orig.set.2
 	@rm -f cniplist.txt.tmp
-	cat cniplist.orig.set.1 cniplist.orig.set.2 china_ip_list.txt | sort -n >cniplist.orig.set.tmp
-	awk -F= '{print $$1}' geoip.txt.out.cn | sort -n >>cniplist.orig.set.tmp
-	awk -F= '{print $$1}' geoip.txt.out.cn1 | sort -n >>cniplist.orig.set.tmp
+	cat cniplist.orig.set.1 cniplist.orig.set.2 china_ip_list.txt >cniplist.orig.set.tmp
+	awk -F= '{print $$1}' geoip.txt.out.cn geoip.txt.out.cn1 >>cniplist.orig.set.tmp
 	lua ipgroup_merge.lua cniplist.orig.set.tmp >cniplist.orig.set
 	lua hkip2cidr.lua >cniplist.orig.set.cn2
 	lua ipgroup_sub.lua cniplist.orig.set cniplist.orig.set.cn2 >cniplist.orig.set.tmp
 	@mv cniplist.orig.set.tmp cniplist.orig.set
 	@rm -f cniplist.orig.set.1 cniplist.orig.set.2 cniplist.orig.set.cn2
 
-hkiplist.orig.set: apnic.txt apnic.lua ipops.lua
+hkiplist.orig.set: apnic.txt apnic.lua ipops.lua ipset_ops.lua
 	awk -F '[|]' '$$2=="HK" && $$3=="ipv4" {print $$4"|"$$5; n++} END {if (!n) {print "apnic.txt: no HK IPv4 records" > "/dev/stderr"; exit 1}}' apnic.txt >hkiplist.txt.tmp
 	lua apnic.lua hkiplist.txt.tmp >hkiplist.orig.set.tmp
 	@rm -f hkiplist.txt.tmp

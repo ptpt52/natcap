@@ -1,5 +1,5 @@
 local args = {...}
-local ipops = require("ipops")
+local ipops = require("ipset_ops")
 
 local group = {}
 local rangeSet = {}
@@ -18,12 +18,12 @@ for _, arg in ipairs(args) do
 		if #ip == 5 then
 			local ips = (((ip[1] * 256 + ip[2]) * 256 + ip[3]) * 256 + ip[4])
 			local ipe = ips + ip[5] - 1
-			rangeSet = ipops.rangeSet_add_range(rangeSet, {ips, ipe})
+			rangeSet[#rangeSet + 1] = {ips, ipe}
 		end
 	end
 end
 
-local ipcidrSet = ipops.rangeSet2ipcidrSet(rangeSet)
+local ipcidrSet = ipops.rangeSet2ipcidrSet(ipops.rangeSet_normalize(rangeSet))
 for _, ipcidr in ipairs(ipcidrSet) do
 	print(ipcidr)
 end
