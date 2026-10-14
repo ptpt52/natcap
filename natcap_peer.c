@@ -1076,11 +1076,12 @@ static struct nf_conn *peer_user_expect_in(int ttl, __be32 saddr, __be32 daddr, 
 	spin_lock_bh(&ue->lock);
 	if (ntohl(saddr) != user->mark) {
 		__be32 old_ip = htonl(user->mark);
-		NATCAP_WARN("fakeuser IP update: mac=[%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] change ip from %pI4(ttl=%u) to %pI4(ttl=%u) P=%u AS=%d\n",
+		NATCAP_WARN("fakeuser IP update: mac=[%02x:%02x:%02x:%02x:%02x:%02x] ct[%pI4:%u->%pI4:%u] change ip from %pI4(ttl=%u) to %pI4(ttl=%u) P=%u AS=%d auth=%d\n",
 		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		            &saddr, ntohs(sport), &daddr, ntohs(dport),
 		            &old_ip, (unsigned int)ue->last_ttl, &saddr, ttl, ntohs(ue->map_port),
-		            ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1));
+		            ue->last_active != 0 ? (uintmindiff(ue->last_active, jiffies) + HZ / 2) / HZ : (-1),
+		            !!(ue->status & PEER_SUBTYPE_AUTH));
 		user->mark = ntohl(saddr);
 	}
 	ue->last_ttl = ttl;
@@ -1407,10 +1408,11 @@ int natcap_auth_request(const unsigned char *client_mac, __be32 client_ip)
 
 	if (ntohl(client_ip) != user->mark) {
 		__be32 old_ip = htonl(user->mark);
-		NATCAP_WARN("authentication user IP update: mac=[%02x:%02x:%02x:%02x:%02x:%02x] change ip from %pI4 to %pI4 P=%u AS=%d\n",
+		NATCAP_WARN("authentication user IP update: mac=[%02x:%02x:%02x:%02x:%02x:%02x] change ip from %pI4 to %pI4 P=%u AS=%d auth=%d\n",
 		            client_mac[0], client_mac[1], client_mac[2], client_mac[3], client_mac[4], client_mac[5],
 		            &old_ip, &client_ip, ntohs(ue->map_port),
-		            ue->last_active_auth != 0 ? (uintmindiff(ue->last_active_auth, jiffies) + HZ / 2) / HZ : (-1));
+		            ue->last_active_auth != 0 ? (uintmindiff(ue->last_active_auth, jiffies) + HZ / 2) / HZ : (-1),
+		            !!(ue->status & PEER_SUBTYPE_AUTH));
 		user->mark = ntohl(client_ip);
 	}
 
