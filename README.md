@@ -49,6 +49,13 @@ make && make -C natcapd
 sudo ./server.sh
 ```
 
+## macOS client prototype
+
+See [macos/README.md](macos/README.md) for the administrator CLI prototype
+using utun and the existing TCP-over-UDP / UDP-over-UDP wire formats.
+This is a userspace client, not a kernel extension. macOS builds and live
+interoperability with a Linux natcap server still need validation.
+
 ## Control writes
 
 `/dev/natcap_ctl` and `/dev/natcap_peer_ctl` accept newline-terminated commands
