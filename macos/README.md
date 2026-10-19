@@ -17,7 +17,7 @@ Linux natcap 服务端通信，再将回包恢复为原始目标的 IP/TCP/UDP �
 | IPv4 UDP 透明接管 | 已实现，使用 UDP-over-UDP，对应 `udp_encode=U` |
 | 认证元数据 | TCP ALL option；UDP 协议 1 携带 `user_hash` 和 MAC |
 | 载荷编码 | 仓库相同的 256 字节替换表和 seed，包括逆向还原 |
-| TCP option 空间不足 | 发送携带完整认证元数据和 MSS 的前导 SYN，再发送原 SYN |
+| TCP option 空间不足 | 压缩 NOP/EOL 填充，在同一个 SYN 中携带完整认证信息和原有选项 |
 | UDP 确认 | 消费 `NATCAP_E_MAGIC_A`，确认后停止附加初始化头 |
 | 端口选择 | 固定端口、原始目标端口、每会话随机端口 |
 | `sproxy` | 可选 TCP 标记，要求服务端配套运行 natcapd-server |
@@ -27,6 +27,11 @@ Linux natcap 服务端通信，再将回包恢复为原始目标的 IP/TCP/UDP �
 当前会话上限为 512，实际可用数量还受进程文件描述符限制。UDP 空闲 20 秒回收；
 TCP 空闲 2 小时回收，见到 FIN 后保留最多 120 秒，RST 后最多 10 秒。
 新连接在表满时丢包，不驱逐其他仍有效的连接。
+
+TCP SYN 中的完整认证 option 占 20 字节，留给原有 TCP 选项的空间为 20 字节。
+常见 macOS 的 24 字节选项去除 NOP/EOL 填充后可放入这个空间，保留 MSS、窗口缩放、
+时间戳和 SACK 的值。若去除填充后仍超过 20 字节，客户端会明确报错并丢弃该 SYN；
+不会静默删除协商选项，也不会发送前导 SYN。
 
 尚未实现：原生 TCP 出口及 UDP-over-TCP、HTTP confusion、peer/multipath、
 多服务端分组和故障切换、ipset/CN 地址库及域名自动学习、自动 DNS 策略、
@@ -109,6 +114,9 @@ Ctrl-C 退出时清理本次添加的路由并关闭 `utun`。锁文件保留，
 - `../natcap.h`：魔数、TCP option 布局、UDP type/ENC 标志。
 - `../natcap_common.c:natcap_tcpopt_setup()` / `natcap_tcp_encode()`：
   NATCAP option 放在原 TCP options 前；认证 hash 按网络字节序传输。
+- `../natcap_common.c:natcap_tcp_decode()`：`NATCAP_TCPOPT_SYN` 标记会将序号改为
+  特殊标记值。Mac 客户端不使用这个前导包机制，以免现有服务端在 TCP-over-UDP
+  路径提前转发前导 SYN、使目标确认错误的 TCP 序号。
 - `../natcap_common.c:natcap_data_encode()` / `natcap_data_decode()`：替换表及 seed。
 - `../natcap_client.c:natcap_client_post_out_hook()`：TCP-over-UDP 将 TCP 前 4 字节
   端口移入外层 UDP 头；UDP payload 为 `ffff0099 + TCP[4:]`，不是一个完整 IP 包。
@@ -126,7 +134,7 @@ make -C macos sanitize
 ```
 
 `test` 包括固定协议向量、认证字段字节序、256 种 seed 的全字节载荷、
-回包 IP/TCP/UDP 校验和、前导 SYN、边界长度、畸形报文和命令行参数测试。
+回包 IP/TCP/UDP 校验和、macOS SYN 选项压缩、边界长度、畸形报文和命令行参数测试。
 `sanitize` 使用 ASan/UBSan 检查协议解析器。
 
 事件循环集成测试用 datagram socketpair 代替 `utun`、回环 UDP socket 代替服务端，
@@ -138,16 +146,46 @@ namespace 的 Linux 可在独立网络命名空间运行：
 make -C macos test-runtime-isolated
 ```
 
+此目标还运行真实 Linux TCP 栈测试：将完成编码和解码的 macOS 风格 SYN 注入
+独立命名空间的回环 TCP 监听端，核对 SYN-ACK 确认序号与时间戳回显。
+这能检查 TCP 协商与校验和，但不等同于加载 natcap 服务端模块后的实机互通。
+
 测试不会加载/卸载宿主机模块，也不改宿主机路由、防火墙或服务端配置。
 
 这些检查不证明 macOS SDK 编译成功或与真实 Linux 服务端互通。下一步的必需验收是：
 
 1. 在目标 macOS/CPU 上编译并通过本目录测试，确认 `utun` 创建、IPv4 配置和正常退出回收。
 2. 用一个目标 `/32` 和真实 Linux natcap 服务端完成 TCP 握手、HTTPS 下载/上传、UDP DNS 查询。
-3. 抓取 Mac `utunN`、物理出口和服务端包，核对普通 SYN、空间不足的前导 SYN、重传、
+3. 抓取 Mac `utunN`、物理出口和服务端包，核对带认证信息和原有选项的单个 SYN、重传、
    UDP 初始化/确认、载荷编码和 FIN/RST。
 4. 验证服务端要求的 MAC/hash/seed 和可选 sproxy；用丢包、乱序和不同 MTU 检查大包路径。
 5. 验证失败启动、Ctrl-C、TERM、已有路由冲突和遗留路由处置，再扩大接管范围。
+
+## TCP 握手故障排查
+
+初版 `63f6ca9` 会在 macOS SYN 的选项空间不足时发送前导 SYN。抓包已确认某些
+现有服务端将其转发后，SYN-ACK 确认的是特殊标记序号，而不是客户端真实初始序号，
+随后客户端发送 RST。该问题已通过在单个 SYN 中压缩填充并携带完整元数据修复，
+不需要修改服务端或更改客户端启动参数。
+
+排查时先使用一个固定服务端端口。下面以 UDP/6553 和目标 `203.0.113.20` 为例，
+在服务器上以 root 抓取外层 UDP 和解封装后的目标流量：
+
+```sh
+tcpdump -i any -nn -s 0 -U -w /tmp/natcap-macos.pcap \
+    'udp port 6553 or host 203.0.113.20 or icmp'
+```
+
+在 Mac 上启动客户端后，另开终端测试目标的 HTTP 服务；目标和端口按实际服务替换：
+
+```sh
+curl -4 -v --noproxy '*' --connect-timeout 10 --max-time 20 http://203.0.113.20/
+```
+
+停止抓包后用 `tcpdump -nn -vvv -X -r /tmp/natcap-macos.pcap` 查看。
+外层 TCP-over-UDP 载荷以 `ff ff 00 99` 开头，其中后续 4 字节是真实 TCP 序号，
+再后面 4 字节是确认序号。首次 SYN-ACK 应确认客户端 SYN 的初始序号加 1。
+抓到 UDP 回包但紧接客户端 RST 时，应先检查这个关系。
 
 ## 与 Netfilter 的区别
 

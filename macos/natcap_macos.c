@@ -403,11 +403,16 @@ static int event_loop(int tun, const struct nc_config *config,
                 if (index < 0) { drops++; continue; }
                 ret = nc_encode(config, &connections[index].flow, input + 4,
                                 (size_t)count - 4, &output);
-                if (ret) { drops++; continue; }
+                if (ret) {
+                    if (ret == NC_OPTIONS) {
+                        fprintf(stderr, "TCP SYN options exceed the 20-byte budget after removing padding; connection unsupported.\n");
+                        close_connection((size_t)index);
+                    }
+                    drops++;
+                    continue;
+                }
                 connections[index].touched = now;
                 observe_close(&connections[index], packet.tcp_flags, now);
-                if (output.pioneer_len && send_datagram(connections[index].fd,
-                    output.pioneer, output.pioneer_len)) continue;
                 send_datagram(connections[index].fd, output.data, output.len);
             }
         }

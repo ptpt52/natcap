@@ -14,7 +14,7 @@
 #define NC_UDP_CFM UINT32_C(0xfffe009a)
 
 enum { NC_OK = 0, NC_CONTROL = 1, NC_INVALID = -1, NC_SPACE = -2,
-       NC_UNSUPPORTED = -3, NC_FLOW = -4 };
+       NC_UNSUPPORTED = -3, NC_FLOW = -4, NC_OPTIONS = -5 };
 
 /* IP addresses are network-order bytes; integer fields are host order. */
 struct nc_config {
@@ -46,9 +46,6 @@ struct nc_flow {
 struct nc_output {
     uint8_t data[NC_PACKET_MAX];
     size_t len;
-    /* Option-space fallback: send this control SYN BEFORE data. */
-    uint8_t pioneer[64];
-    size_t pioneer_len;
 };
 
 int nc_parse(const uint8_t *packet, size_t len, struct nc_packet *parsed);

@@ -85,7 +85,7 @@ static void tcp_golden(void)
         1,0xbb, 203,0,113,9
     };
     assert(nc_encode(&config, &flow, packet, n, &output) == NC_OK);
-    assert(!output.pioneer_len && output.len == sizeof(expected));
+    assert(output.len == sizeof(expected));
     assert(!memcmp(output.data, expected, sizeof(expected)));
     /* Handcrafted server SYN+ACK: magic replaces ports, no NATCAP option. */
     const uint8_t response[] = {
@@ -147,7 +147,41 @@ static void payload_encoding(void)
     assert(!memcmp(output.data + 24, "\230\227\152", 3));
 }
 
-static void options_and_fallback(void)
+static void macos_syn_options(void)
+{
+    /* Layout from the failing capture: MSS, NOP, WS, two NOPs, TS, SACK, EOL.
+     * Retaining all option values only needs 19 bytes plus one EOL pad byte.
+     */
+    static const uint8_t original[] = {
+        2,4,4,0x88, 1,3,3,6, 1,1,8,10, 0x1c,0x2d,0xb7,0xaf,
+        0,0,0,0, 4,2,0,0
+    };
+    static const uint8_t compact[] = {
+        2,4,4,0x88, 3,3,6, 8,10,0x1c,0x2d,0xb7,0xaf,
+        0,0,0,0, 4,2,0
+    };
+    struct nc_flow flow;
+    struct nc_config enc = config;
+    size_t n = make_packet(6, sizeof(original), 256, 0xc2, &flow), reply;
+    enc.encryption = 1;
+    memcpy(packet + 40, original, sizeof(original));
+    memcpy(packet + 24, "\xb6\x50\xba\x3d", 4);
+    packet[34] = packet[35] = 255;
+    assert(nc_encode(&enc, &flow, packet, n, &output) == NC_OK);
+    /* One actual SYN, containing ALL metadata; no 0x80 pioneer marker. */
+    assert(output.len == 60 + 256 && output.data[12] == 0xf0);
+    assert(output.data[13] == 0xc2 && output.data[22] == 1 && output.data[23] == 1);
+    assert(!memcmp(output.data + 4, packet + 24, 8));
+    assert(!memcmp(output.data + 14, packet + 34, 2));
+    assert(!memcmp(output.data + 40, compact, sizeof(compact)));
+    assert(nc_decode(&enc, &flow, output.data, output.len, result, sizeof(result), &reply) == NC_OK);
+    verify_reply(reply, 6, 40, 256);
+    assert(!memcmp(result + 40, compact, sizeof(compact)));
+    assert(!memcmp(result + 24, "\xb6\x50\xba\x3d", 4));
+    assert(!memcmp(packet + 40, original, sizeof(original)));
+}
+
+static void options_and_compaction(void)
 {
     struct nc_flow flow;
     struct nc_config proxy = config;
@@ -158,28 +192,34 @@ static void options_and_fallback(void)
         n = make_packet(6, opt, 7, 2, &flow);
         assert(nc_encode(&proxy, &flow, packet, n, &output) == NC_OK);
         if (opt <= 20) {
-            assert(!output.pioneer_len && output.data[22] == 0x21);
+            assert(output.data[22] == 0x21);
             assert(nc_decode(&proxy, &flow, output.data, output.len, result, sizeof(result), &reply) == NC_OK);
             verify_reply(reply, 6, 20 + opt, 7);
             assert(!memcmp(result + 40, packet + 40, opt + 7));
         } else {
-            assert(output.pioneer_len == 44);
-            assert(output.pioneer[22] == 0xa1);
-            assert(output.pioneer[40] == 2 && output.pioneer[41] == 4);
-            assert(get16(output.pioneer + 42) == 536);
-            assert(output.len == n - 20);
-            assert(!memcmp(output.data + 20, packet + 40, opt + 7));
+            assert(output.len == 40 + 7 && output.data[22] == 0x21);
+            assert(nc_decode(&proxy, &flow, output.data, output.len, result, sizeof(result), &reply) == NC_OK);
+            verify_reply(reply, 6, 20, 7);
         }
     }
-    /* Preserve original MSS in the metadata SYN. */
+    /* Preserve MSS when padding removal changes the TCP header size. */
     n = make_packet(6, 40, 0, 2, &flow);
     packet[40] = 2; packet[41] = 4; put16(packet + 42, 1160);
     assert(nc_encode(&config, &flow, packet, n, &output) == NC_OK);
-    assert(get16(output.pioneer + 42) == 1160);
+    assert(output.len == 44 && get16(output.data + 42) == 1160);
     /* Server-side v1 marker can be received without enabling multipath. */
     memcpy(wire, output.data, output.len);
     wire[1] = 0xf7;
     assert(nc_decode(&config, &flow, wire, output.len, result, sizeof(result), &reply) == NC_OK);
+    verify_reply(reply, 6, 24, 0);
+    /* Do not discard semantic options or use an unsafe pioneer if ALL cannot
+     * fit even after padding removal. The runtime reports NC_OPTIONS.
+     */
+    n = make_packet(6, 24, 0, 2, &flow);
+    packet[40] = 253; packet[41] = 24;
+    memset(packet + 42, 0xa5, 22);
+    assert(nc_encode(&config, &flow, packet, n, &output) == NC_OPTIONS);
+    assert(!output.len);
 }
 
 static void boundaries(void)
@@ -247,9 +287,10 @@ int main(void)
     tcp_golden();
     udp_golden();
     payload_encoding();
-    options_and_fallback();
+    macos_syn_options();
+    options_and_compaction();
     boundaries();
     malformed_inputs();
-    puts("codec: golden wire vectors, 256 seeds, checksums, option fallback, limits and 30000 malformed inputs passed");
+    puts("codec: golden wire vectors, 256 seeds, checksums, macOS SYN compaction, limits and 30000 malformed inputs passed");
     return 0;
 }

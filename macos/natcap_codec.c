@@ -142,12 +142,12 @@ static void decode_bytes(uint8_t *p, size_t len, uint8_t seed)
 }
 
 static void all_option(uint8_t *out, const struct nc_config *config,
-                       const struct nc_key *key, unsigned pioneer)
+                       const struct nc_key *key)
 {
     memset(out, 0, 20);
     out[0] = 0x99;
     out[1] = 20;
-    out[2] = (uint8_t)(1 | (pioneer ? 0x80 : 0) | (config->sproxy ? 0x20 : 0));
+    out[2] = (uint8_t)(1 | (config->sproxy ? 0x20 : 0));
     out[3] = !!config->encryption;
     write32(out + 4, config->user_hash);
     memcpy(out + 8, config->mac, 6);
@@ -155,19 +155,41 @@ static void all_option(uint8_t *out, const struct nc_config *config,
     memcpy(out + 16, key->dst, 4);
 }
 
+/* Keep every semantic option in order, omitting NOPs and bytes after EOL.
+ * A typical macOS SYN has 24 option bytes but only 19 non-padding bytes;
+ * packing them into 20 leaves room for the complete 20-byte ALL option.
+ * The original packet has already passed valid_tcp().
+ */
+static size_t compact_options(const uint8_t *tcp, size_t header, uint8_t out[40])
+{
+    size_t at = 20, used = 0;
+    memset(out, 0, 40);
+    while (at < header && tcp[at]) {
+        size_t size;
+        if (tcp[at] == 1) { at++; continue; }
+        size = tcp[at + 1];
+        memcpy(out + used, tcp + at, size);
+        used += size;
+        at += size;
+    }
+    return (used + 3) & ~(size_t)3;
+}
+
 int nc_encode(const struct nc_config *config, const struct nc_flow *flow,
               const uint8_t *packet, size_t len, struct nc_output *output)
 {
     struct nc_packet parsed;
     const uint8_t *p;
-    size_t header, add = 0, payload, at;
+    uint8_t options[40];
+    size_t header, add = 0, payload, option_len;
     int ret;
-    output->len = output->pioneer_len = 0;
+    output->len = 0;
     ret = nc_parse(packet, len, &parsed);
     if (ret) return ret;
     if (!nc_key_equal(&parsed.key, &flow->key)) return NC_FLOW;
     p = packet + parsed.ip_len;
     header = parsed.header_len;
+    option_len = header - (parsed.key.protocol == 6 ? 20 : 8);
     payload = parsed.transport_len - header;
     if (parsed.key.protocol == 17) {
         if (!flow->udp_confirmed) add = config->udp_auth ? 24 : 12;
@@ -193,42 +215,30 @@ int nc_encode(const struct nc_config *config, const struct nc_flow *flow,
      * The Linux receiver reconstructs and checksums the TCP segment.
      */
     if ((parsed.tcp_flags & 0x12) == 0x02) {
-        if (header <= 40) {
-            add = 20;
-        } else {
-            uint8_t *ctrl = output->pioneer;
-            unsigned mss = 536;
-            for (at = 20; at < header;) {
-                if (!p[at]) break;
-                if (p[at] == 1) { at++; continue; }
-                if (p[at] == 2) mss = read16(p + at + 2);
-                at += p[at + 1];
-            }
-            memset(ctrl, 0, 44);
-            write32(ctrl, NC_TCP_MAGIC);
-            memcpy(ctrl + 4, p + 4, 16);
-            ctrl[12] = (uint8_t)((11 << 4) | (p[12] & 15));
-            ctrl[16] = ctrl[17] = 0;
-            all_option(ctrl + 20, config, &flow->key, 1);
-            ctrl[40] = 2;
-            ctrl[41] = 4;
-            write16(ctrl + 42, mss);
-            output->pioneer_len = 44;
+        add = 20;
+        if (header > 40) {
+            option_len = compact_options(p, header, options);
+            /* Never send a NATCAP_TCPOPT_SYN pioneer: the server rewrites its
+             * sequence to the marker, and the TCP-over-UDP post-out path can
+             * forward it to the target before the pioneer is consumed.
+             * Reject options that cannot fit rather than start a different
+             * TCP sequence space or silently remove negotiation features.
+             */
+            if (option_len > 20) return NC_OPTIONS;
         }
     }
-    if (parsed.transport_len + add > NC_DATAGRAM_MAX) {
-        output->pioneer_len = 0;
-        return NC_SPACE;
-    }
+    if (20 + add + option_len + payload > NC_DATAGRAM_MAX) return NC_SPACE;
     write32(output->data, NC_TCP_MAGIC);
     memcpy(output->data + 4, p + 4, 16);
-    if (add) all_option(output->data + 20, config, &flow->key, 0);
-    memcpy(output->data + 20 + add, p + 20, parsed.transport_len - 20);
-    output->data[12] = (uint8_t)(((header + add) / 4 << 4) | (p[12] & 15));
+    if (add) all_option(output->data + 20, config, &flow->key);
+    memcpy(output->data + 20 + add, add && header > 40 ? options : p + 20, option_len);
+    memcpy(output->data + 20 + add + option_len, p + header, payload);
+    header = 20 + add + option_len;
+    output->data[12] = (uint8_t)((header / 4 << 4) | (p[12] & 15));
     output->data[16] = output->data[17] = 0;
     if (config->encryption)
-        encode_bytes(output->data + header + add, payload, config->seed);
-    output->len = parsed.transport_len + add;
+        encode_bytes(output->data + header, payload, config->seed);
+    output->len = header + payload;
     return NC_OK;
 }
 

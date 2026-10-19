@@ -18,14 +18,18 @@ build/test-codec: tests/test_codec.c natcap_codec.c natcap_codec.h | build
 build/test-runtime: tests/test_runtime.c natcap_macos.c natcap_codec.c natcap_codec.h | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARNINGS) -I. tests/test_runtime.c natcap_codec.c -o $@
 
+build/test-tcp-kernel: tests/test_tcp_kernel.c natcap_codec.c natcap_codec.h | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARNINGS) -I. tests/test_tcp_kernel.c natcap_codec.c -o $@
+
 test: build/test-codec build/test-runtime build/natcap-macos
 	./build/test-codec
 	./build/test-runtime
 	python3 tests/test_cli.py ./build/natcap-macos
 
 # Optional Linux integration test; touches only a new private network namespace.
-test-runtime-isolated: build/test-runtime
+test-runtime-isolated: build/test-runtime build/test-tcp-kernel
 	unshare -Urn sh -c 'ip link set lo up && NATCAP_TEST_ISOLATED=1 exec ./build/test-runtime'
+	unshare -Urn sh -c 'ip link set lo up && NATCAP_TEST_ISOLATED=1 exec ./build/test-tcp-kernel'
 
 sanitize: | build
 	$(CC) $(CPPFLAGS) -O1 -g $(WARNINGS) -fsanitize=address,undefined -fno-omit-frame-pointer -I. tests/test_codec.c natcap_codec.c -o build/test-codec-sanitize
